@@ -4,16 +4,16 @@
  * Plugin Name: Stripe Payment Gateway for WooCommerce
  * Plugin URI: https://www.funnelkit.com/
  * Description: Effortlessly accepts payments via Stripe on your WooCommerce Store.
- * Version: 1.8.2
+ * Version: 1.9.0
  * Author: FunnelKit
  * Author URI: https://funnelkit.com/
  * License: GPLv2 or later
  * Text Domain: funnelkit-stripe-woo-payment-gateway
  * WC requires at least: 3.0
- * WC tested up to: 8.8.0
+ * WC tested up to: 9.4.0
  *
  * Requires at least: 5.4.0
- * Tested up to: 6.5.2
+ * Tested up to: 6.6.2
  * Requires PHP: 7.4
  *
  * Stripe Payment Gateway for WooCommerce is free software.
@@ -58,7 +58,7 @@ class FKWCS_Gateway_Stripe {
 		define( 'FKWCS_DIR', __DIR__ );
 		define( 'FKWCS_NAME', 'Stripe Payment Gateway for WooCommerce' );
 		define( 'FKWCS_TEXTDOMAIN', 'funnelkit-stripe-woo-payment-gateway' );
-		( defined( 'FKWCS_IS_DEV' ) && true === FKWCS_IS_DEV ) ? define( 'FKWCS_VERSION', time() ) : define( 'FKWCS_VERSION', '1.8.2' );
+		( defined( 'FKWCS_IS_DEV' ) && true === FKWCS_IS_DEV ) ? define( 'FKWCS_VERSION', time() ) : define( 'FKWCS_VERSION', '1.9.0' );
 		add_action( 'plugins_loaded', array( $this, 'load_wp_dependent_properties' ), 1 );
 	}
 
@@ -78,6 +78,7 @@ class FKWCS_Gateway_Stripe {
 	 * @return void
 	 */
 	public function load_core() {
+		do_action('fkwcs_load_core');
 		require_once __DIR__ . '/plugin.php';
 	}
 }

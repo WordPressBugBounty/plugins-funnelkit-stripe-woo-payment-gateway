@@ -2,9 +2,9 @@
 Contributors: amans2k, xlplugins, teamwoofunnels
 Tags: stripe, woocommerce, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
-Tested up to: 6.5.2
+Tested up to: 6.6.2
 Requires PHP: 7.0
-Stable tag: 1.8.2
+Stable tag: 1.9.0
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -147,9 +147,13 @@ Przelewy24, commonly known as P24, is a popular bank redirect payment method in 
 
 The FunnelKit Team is committed to bringing more payment gateways to enhance your WooCommerce store experience.
 
-== About Us ==
+== ABOUT FUNNELKIT ==
 
-Stripe Payment Gateway for WooCommerce is part of FunnelKit’s ever-growing plugin ecosystem and is used on hundreds of thousands of websites.
+## WE ARE AN OFFICIAL STRIPE PARTNER ##
+
+FunnelKit is proud to be an official Stripe partner!
+
+Stripe Payment Gateway for WooCommerce is part of FunnelKit's ever-growing plugin ecosystem used on thousands of websites.
 
 === Here are some of our plugins:
 
@@ -161,6 +165,7 @@ Stripe Payment Gateway for WooCommerce is part of FunnelKit’s ever-growing plu
 
 **[FunnelKit Automations](https://wordpress.org/plugins/wp-marketing-automations/)** - Engage with your customers with automated WooCommerce email marketing and SMS campaigns. Automate your abandoned cart recovery sequence, post-purchase follow-up emails, winback campaigns, and more.
 
+**[FunnelKit Cart](https://wordpress.org/plugins/cart-for-woocommerce/)** - Adds a beautiful sliding cart to your WooCommerce store. Let the buyers add items, edit quantity and add upsells (Pro) on the side cart. Skip traditional cart page and reach checkout faster.
 
 == Frequently Asked Questions ==
 
@@ -211,6 +216,41 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+
+
+= 1.9.0 =
+* Added: Affirm, Klarna, AfterPay & P24 gateways support for upsell payments with Funnel Builder. (#488)
+* Added: Google Pay direct integration using Merchant ID, allowing the Google Pay button to display on every browser. (#387)
+* Added: Google Pay and Apple Pay as separate gateways. (#387)
+* Added: New gateway mode added as 'Test Mode Admin only', Now you can put gateway in test mode for admin without disrupting live transactions. (#532)
+* Added: New admin settings to save Stripe fees in the order currency. (#498)
+* Added: Support for SCA (Strong Customer Authentication) for express buttons. (#497)
+* Added: Stripe gateway settings support for WPML (WordPress Multilingual Plugin). (#517)
+* Added: Correct locale values passed to Stripe elements for non-English stores. (#518)
+* Added: Admin settings notice when webhook URL mismatches. (#555)
+* Added: Admin notice to prompt store owners when the gateway is in test mode. (#429)
+* Fixed: Confirm email checkout field validation handling for express buttons. (#559)
+* Fixed: Duplicate token insertion when `payment.succeeded` webhook triggers while payment is executing. (#557)
+* Improved: Handling of disputes for SEPA payments. (#477)
+* Improved: Email sending when creating a new payment method from the "my-account" page to avoid errors with SEPA. (#544)
+* Improved: Setup of Stripe payment elements with a minimum amount permitted to avoid further errors. (#509)
+* Improved: Added `data-cookieconsent="ignore"` attribute to the Stripe JS SDK file to prevent core script blocking due to cookie consent. (#505)
+* Improved: Prevention of local card expiry checks during renewals. (#544)
+* Improved: Listening for the `payment_intent.succeeded` webhook event for Klarna payments. (#545)
+* Improved: Server-side error logging for failed payment methods from JS. (#429)
+* Improved: Handling of currencies with three decimal places. (#553)
+* Fixed: Re-verify button for Apple Pay domain verification not working correctly. (#429)
+* Fixed: Payment descriptor settings not being emptied after disconnection. (#460)
+* Fixed: Adding a new payment method for SEPA payments not working. (#489)
+* Fixed: Multiple handling issues across different parts of the codebase. (#553)
+* Fixed: Conversion of primary order status to paid logic for failed orders. (#548)
+* Fixed: Unrequired billing address line, state, and city for express checkout payments. (#547)
+* Fixed: Webhook data not resetting in Stripe admin settings after disconnection. (#539)
+* Fixed: Total not updating correctly for express buttons in FunnelKit slide cart in some scenarios. (#535)
+* Fixed: Input credit card details being unset when applying coupons. (#528)
+* Fixed: Handling of out-of-stock variants with express checkout buttons. (#541)
+* Fixed: PHP 8.2 dynamic allocation issue with `datediff` object. (#429)
+
 = 1.8.2 =
 * Improvements for card validation for those using Inline Card credit method
 * Fixed: In admin setting standard payment form option was checked in case of inline credit card. (#452)

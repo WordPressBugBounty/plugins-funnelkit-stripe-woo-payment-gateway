@@ -27,6 +27,15 @@ if ( ! class_exists( 'FKWCS_Compat_FK_Checkout' ) ) {
 				'name'   => __( 'Stripe Payment Request', 'funnelkit-stripe-woo-payment-gateway' ),
 			];
 
+			$instance = FKWCS\Gateway\Stripe\GooglePay::get_instance();
+			if ( $instance->is_available() && 'yes' === $instance->display_as_express ) {
+				$buttons['fkwcs_google_pay'] = [
+					'iframe' => true,
+					'name'   => __( 'Google Pay', 'funnelkit-stripe-woo-payment-gateway' ),
+				];
+			}
+
+
 			return $buttons;
 
 		}
@@ -40,14 +49,14 @@ if ( ! class_exists( 'FKWCS_Compat_FK_Checkout' ) ) {
 		}
 
 		public function remove_phone_process() {
-			if ( ! isset( $_POST['payment_request_type'] ) ) {
+			if ( ! isset( $_POST['payment_request_type'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification
 				return;
 			}
-			$intance = wfacp_template();
-			if ( is_null( $intance ) ) {
+			$instance = wfacp_template();
+			if ( is_null( $instance ) ) {
 				return;
 			}
-			remove_action( 'woocommerce_checkout_process', [ $intance, 'process_phone_field' ] );
+			remove_action( 'woocommerce_checkout_process', [ $instance, 'process_phone_field' ] );
 		}
 
 		public function enable_smart_button_optimizations( $page_settings ) {

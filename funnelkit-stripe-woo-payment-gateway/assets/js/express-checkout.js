@@ -10,8 +10,10 @@
                 this.is_product_page = false;
                 this.style_value = fkwcs_data.style;
                 this.request_data = {};
-                this.fkCartRequestData = {};
-                this.fkCartExistingRequestData = {};
+                this.product_request_data = {};
+                this.cart_request_data = {};
+                this.add_to_cart_end_point = 'fkwcs_add_to_cart';
+                this.is_google_ready_to_pay = false;//This variable is used to determine if native Google Pay integration is available.;
                 /**
                  * Setup data for the product page
                  */
@@ -29,7 +31,7 @@
                     return;
                 }
                 try {
-                    this.stripe = Stripe(fkwcs_data.pub_key);
+                    this.stripe = Stripe(fkwcs_data.pub_key, {locale: fkwcs_data.locale});
                     this.init();
                 } catch (e) {
                     if ('yes' === fkwcs_data.debug_log) {
@@ -46,7 +48,6 @@
                     this.request_data = Object.assign(this.dataCommon, {
                         total: fkwcs_data.single_product.total, requestShipping: ('yes' === fkwcs_data.single_product.requestShipping), displayItems: fkwcs_data.single_product.displayItems,
                     });
-
                 } else if ('yes' === fkwcs_data.is_cart) {
                     this.request_data = Object.assign(this.dataCommon, {
                         total: fkwcs_data.cart_data.order_data.total, requestShipping: ('yes' === fkwcs_data.shipping_required), displayItems: fkwcs_data.cart_data.displayItems,
@@ -72,6 +73,7 @@
                 if (!data.hasOwnProperty('order_data')) {
                     return;
                 }
+
                 this.request_data = Object.assign(this.dataCommon, {
                     total: data.order_data.total,
                     currency: data.order_data.currency,
@@ -93,9 +95,7 @@
                 }
 
                 try {
-                    console.log('reqData', reqData);
                     let payment_request = this.stripe.paymentRequest(reqData);
-                    this.createButton(payment_request);
                     this.productEvents(payment_request);
                     /**
                      * Bind core events
@@ -109,6 +109,8 @@
                 } catch (exc) {
                     console.log(exc);
                 }
+
+
             }
 
             productEvents(payment_request) {
@@ -118,34 +120,46 @@
                     payment_request.show();
                     e.preventDefault();
                 });
-                $('.fkwcs_smart_checkout_button').off('click').on('click', function (e) {
+                $('body').off('click', '.fkwcs_smart_checkout_button').on('click', '.fkwcs_smart_checkout_button', function (e) {
                     payment_request.show();
                     e.preventDefault();
+
                 });
 
-                let single_add_to_cart_button = $('.fkwcs_smart_product_button');
+
+                let single_add_to_cart_button = $('button.fkwcs_smart_product_button');
 
                 single_add_to_cart_button.off('click').on('click', function (e) {
 
+                    let addToCartBtn = $('form.cart button.single_add_to_cart_button');
                     /**
                      * prevent process if button disabled on single product page
                      */
                     if ($(this).hasClass('fkwcs_disabled_btn')) {
-                        alert('Please Select Options');
+                        if (addToCartBtn.is('.wc-variation-is-unavailable')) {
+                            window.alert(wc_add_to_cart_variation_params.i18n_unavailable_text);
+                        } else if (addToCartBtn.is('.wc-variation-selection-needed')) {
+                            window.alert(wc_add_to_cart_variation_params.i18n_make_a_selection_text);
+                        }
                         return;
                     }
 
 
                     payment_request.show();
                     e.preventDefault();
-                    let response = $.when(self.addToCartProduct());
+                    return $.when(self.addToCartProduct());
 
                 });
-                $(document.body).off('show_variation').on('show_variation', function () {
-                    /**
-                     * Enable button after variation selection
-                     */
-                    single_add_to_cart_button.removeClass('fkwcs_disabled_btn');
+                $(document.body).off('show_variation').on('show_variation', function (event, variation, purchasable) {
+
+                    if (purchasable) {
+                        single_add_to_cart_button.removeClass('fkwcs_disabled_btn');
+
+                    } else {
+                        single_add_to_cart_button.addClass('fkwcs_disabled_btn');
+
+                    }
+
                 });
 
                 $(document.body).off('hide_variation').on('hide_variation', function () {
@@ -191,17 +205,14 @@
              * @param payment_request
              */
             createButton(payment_request) {
-                let elements = this.stripe.elements();
-                this.stripe_button = elements.create('paymentRequestButton', {
-                    paymentRequest: payment_request
-                });
+
 
             }
 
             makePayment(result) {
                 let smart_buttons = $('.fkwcs_smart_buttons');
-                console.log(result);
-                //alert(JSON.stringify(result));
+
+
                 if (!result) {
                     if ('yes' === fkwcs_data.debug_log) {
                         /**
@@ -210,6 +221,7 @@
                         console.log(fkwcs_data.debug_msg);
                         smart_buttons.hide();
                     }
+                    $(document.body).trigger('fkwcs_smart_buttons_not_available');
                     return;
                 }
 
@@ -224,6 +236,11 @@
                 let smart_request_separator = $('#fkwcs-payment-request-separator');
 
                 let iconUrl = '';
+                if (true === this.is_google_ready_to_pay && 'yes' === fkwcs_data.google_pay_as_express && (false === result.applePay || null === result.applePay)) {
+                    result.googlePay = false;
+                    result.link = false;
+                    return;
+                }
                 if (result.applePay) {
                     this.express_request_type = 'apple_pay';
                     this.express_button_wrapper = 'fkwcs_ec_applepay_button';
@@ -235,7 +252,9 @@
                     iconUrl = 'dark' === fkwcs_data.style.theme ? fkwcs_data.icons.gpay_light : fkwcs_data.icons.gpay_gray;
 
                 } else {
+
                     if (this.linkEnabled()) {
+
                         this.express_request_type = 'payment_request_api';
                         this.express_button_wrapper = 'fkwcs_ec_link_button';
                         iconUrl = fkwcs_data.icons.link;
@@ -280,7 +299,7 @@
 
                 if (smart_button_wrapper.length) {
                     smart_button_wrapper.css("display", "block");
-                    $(document.body).trigger('fkwcs_smart_buttons_showed', ['stripe']);
+                    $(document.body).trigger('fkwcs_smart_buttons_showed', ['stripe', result]);
                 }
 
                 if ('inline' === fkwcs_data.style.button_position && smart_button_wrapper.hasClass('fkwcs-product')) {
@@ -320,7 +339,7 @@
                     productId = single_var.find('input[name="product_id"]').val();
                 }
 
-                var qtyProduct = $('.quantity .qty').val();
+                let qtyProduct = $('.quantity .qty').val();
                 const productData = {
                     fkwcs_nonce: fkwcs_data.fkwcs_nonce,
                     action: 'add_to_cart',
@@ -346,13 +365,11 @@
                         } else {
                             productData[field.name] = field.value;
                         }
-                    } else if (/^fkwcs_plan_/.test(field.name)) {
-                        productData[field.name] = field.value;
                     }
                 });
                 return $.ajax({
-                    type: 'POST', data: productData, url: this.ajaxEndpoint('fkwcs_add_to_cart'),
-                    'success': function (response) {
+                    type: 'POST', data: productData, url: this.ajaxEndpoint(this.add_to_cart_end_point),
+                    'success': (response) => {
                         $(document.body).trigger('added_to_cart', [response.fragments, response.cart_hash, $('.single_add_to_cart_button')]);
                     }
                 });
@@ -434,7 +451,6 @@
                 const billing = billingDetails.address;
                 const name = billingDetails.name;
                 const shipping = event.shippingAddress;
-                console.log('event', event);
                 /**
                  * Prepare Data
                  * @type {{billing_last_name: (*|string), billing_phone: (*|string|string), payment_request_type: null, billing_country: (*|string), billing_city: (*|string), fkwcs_nonce: *, billing_company: string, billing_state: (*|string), terms: number, billing_address_1: (*|string), shipping_method: *[], order_comments: string, billing_email: (*|string), billing_address_2: (*|string), billing_postcode: (*|string), fkwcs_source, billing_first_name: (*|string), payment_method: string}}
@@ -453,11 +469,25 @@
                     payment_request_type: this.express_request_type,
                 };
 
+
+                if ($('input[name="billing_email"]').length > 0 && $('input[name="billing_email"]').val() !== '') {
+                    data.billing_email = $('input[name="billing_email"]').val();
+                }
+
+                /**
+                 * Handling a case where the payment method is Apple Pay and the payment method Apple Pay is showing on the checkout page
+                 * In this case we need to set the payment method to Apple Pay & do not process using CC method
+                 */
+                if (this.express_request_type === 'apple_pay' && $('li.payment_method_fkwcs_stripe_apple_pay').length > 0) {
+                    data.payment_method = 'fkwcs_stripe_apple_pay';
+                }
+
                 /**
                  * Prepare billing address
                  * @type {*}
                  */
                 data = this.prepareBillingAddress(data, billing);
+
                 /**
                  * Prepare Shipping address
                  * @type {*}
@@ -467,7 +497,7 @@
                 /**
                  * If its a checkout page from where the request is getting formed, then loop over form data to combine data
                  */
-                if (fkwcs_data.is_checkout) {
+                if (fkwcs_data.is_checkout === 'yes') {
 
 
                     /**
@@ -509,12 +539,17 @@
              * @returns {*}
              */
             prepareBillingAddress(address_data, billing) {
-                address_data.billing_country = null !== billing ? billing.country : '';
+                if (null === billing) {
+                    return address_data;
+                }
+
+
                 address_data.billing_address_1 = null !== billing ? billing.line1 : '';
                 address_data.billing_address_2 = null !== billing ? billing.line2 : '';
                 address_data.billing_city = null !== billing ? billing.city : '';
                 address_data.billing_state = null !== billing ? billing.state : '';
                 address_data.billing_postcode = null !== billing ? billing.postal_code : '';
+                address_data.billing_country = null !== billing ? billing.country : '';
 
                 return address_data;
             }
@@ -571,11 +606,12 @@
 
 
                 let cardPayment = null;
-                if (intent_type == 'si') {
-                    cardPayment = this.stripe.handleCardSetup(clientSecret, {});
+                if (intent_type === 'si') {
+                    cardPayment = this.stripe.handleCardSetup(clientSecret, {payment_method: event.paymentMethod.id}, {handleActions: false});
                 } else {
-                    cardPayment = this.stripe.confirmCardPayment(clientSecret, {});
+                    cardPayment = this.stripe.confirmCardPayment(clientSecret, {payment_method: event.paymentMethod.id}, {handleActions: false});
                 }
+                let FormEl = $('form.woocommerce-checkout');
                 cardPayment.then((result) => {
                     if (result.error) {
                         /**
@@ -583,24 +619,56 @@
                          */
                         this.logError(result.error);
                         $('.woocommerce-error').remove();
-                        $('form.woocommerce-checkout').unblock();
+                        FormEl.unblock();
                         $('.woocommerce-notices-wrapper:first-child').html('<div class="woocommerce-error fkwcs-errors">' + result.error.message + '</div>').show();
+                        event.complete('fail');
+                    } else {
+                        event.complete('success');
+                        let intent = result[('si' === intent_type) ? 'setupIntent' : 'paymentIntent'];
+                        if (intent.status === "requires_action" || intent.status === "requires_source_action") {
 
-                        return;
-                    }
+                            let instance = this;
+                            let cardPaymentRetry = null;
+                            // Let Stripe.js handle the rest of the payment flow.
+                            if (intent_type === 'si') {
+                                cardPaymentRetry = this.stripe.handleCardSetup(clientSecret);
 
-                    let intent = result[('si' === intent_type) ? 'setupIntent' : 'paymentIntent'];
-                    if ('requires_capture' !== intent.status && 'succeeded' !== intent.status) {
-                        return;
-                    }
-                    event.complete('success');
-                    $('form.woocommerce-checkout').addClass('processing');
-                    $('form.woocommerce-checkout').block({
-                        message: null, overlayCSS: {
-                            background: '#fff', opacity: 0.6
+                            } else {
+                                cardPaymentRetry = this.stripe.confirmCardPayment(clientSecret);
+
+                            }
+                            cardPaymentRetry.then((result) => {
+                                if (result.error) {
+                                    instance.logError(result.error);
+                                    $('.woocommerce-error').remove();
+                                    FormEl.unblock();
+                                    $('.woocommerce-notices-wrapper:first-child').html('<div class="woocommerce-error fkwcs-errors">' + result.error.message + '</div>').show();
+                                } else {
+                                    FormEl.addClass('processing');
+                                    FormEl.block({
+                                        message: null, overlayCSS: {
+                                            background: '#fff', opacity: 0.6
+                                        }
+                                    });
+                                    window.location = redirectURL;
+                                }
+
+                            });
+
+                        } else {
+                            FormEl.addClass('processing');
+                            FormEl.block({
+                                message: null, overlayCSS: {
+                                    background: '#fff', opacity: 0.6
+                                }
+                            });
+                            window.location = redirectURL;
                         }
-                    });
-                    window.location = redirectURL;
+
+
+                    }
+
+
                 });
             }
 
@@ -681,7 +749,6 @@
              */
             makePaymentCatch(error) {
                 console.log('error', error);
-                console.log(error);
             }
 
             cancelPayment() {
@@ -709,7 +776,7 @@
             }
 
             getCartDetails() {
-                var data = {
+                let data = {
                     fkwcs_nonce: fkwcs_data.fkwcs_nonce,
                 };
                 let current = this;
@@ -753,21 +820,25 @@
                 });
 
 
-                $(document.body).on('wc_fragments_refreshed added_to_cart removed_from_cart wc_fragments_loaded', function (e, v) {
+                $(document.body).on('wc_fragments_refreshed added_to_cart removed_from_cart wc_fragments_loaded', (e, v) => {
                     setTimeout(() => {
                         if (typeof wc_cart_fragments_params === 'undefined') {
                             return false;
                         }
                         if (typeof (Storage) !== "undefined") {
+                            let json = sessionStorage.getItem(wc_cart_fragments_params.fragment_name);
+                            json = JSON.parse(json);
+                            if (typeof json !== "object") {
+                                return;
+                            }
+                            this.cart_request_data = json.fkwcs_cart_details;
                             if ('yes' === fkwcs_data.is_product) {
                                 return;
                             }
-                            let json = sessionStorage.getItem(wc_cart_fragments_params.fragment_name);
-                            json = JSON.parse(json);
-                            if (typeof json == "object") {
-                                self.setRequestData(json.fkwcs_cart_details);
-                                self.setupPaymentRequest();
-                            }
+
+                            self.setRequestData(json.fkwcs_cart_details);
+                            self.setupPaymentRequest();
+
                         }
                     }, 300);
                 });
@@ -777,30 +848,20 @@
                  * FK Cart events added here to handle buttons and their data
                  */
                 $(document.body).on('fkwcs_express_button_init', () => {
+                    const fkcartSliderModal = $('#fkcart-modal');
+
+                    if ('yes' === fkwcs_data.is_product && !fkcartSliderModal.hasClass('fkcart-show')) {
+
+                        return;
+                    }
+
+                    if (Object.keys(this.cart_request_data).length > 0) {
+                        this.setRequestData(this.cart_request_data);
+                    }
                     this.setupPaymentRequest();
                 });
 
-                if ('yes' === fkwcs_data.is_product) {
-                    $(document.body).on('fkcart-open', () => {
 
-                        this.fkCartExistingRequestData = JSON.stringify(this.getRequestData());
-                        this.setRequestData(this.fkCartRequestData);
-                        this.setupPaymentRequest();
-
-
-                    });
-
-                    $(document.body).on('fkcart-close', () => {
-                        let data = JSON.parse(this.fkCartExistingRequestData);
-                        if (!data.hasOwnProperty('total')) {
-                            return;
-                        }
-                        this.request_data = data;
-                        this.setupPaymentRequest();
-
-
-                    });
-                }
                 $(document.body).on('fkwcs_express_button_update_cart_details', (e, v) => {
                     //return if cart details not found
                     if (!v.hasOwnProperty('fkwcs_cart_details')) {
@@ -811,24 +872,34 @@
                 });
 
                 $(document.body).on('fkcart_fragments_refreshed', (e, v) => {
-
                     const fkcartSliderModal = $('#fkcart-modal');
                     //return if cart details not found
                     if (typeof v === "undefined" || !v.hasOwnProperty('fkwcs_cart_details')) {
                         return;
                     }
-
+                    this.cart_request_data = v.fkwcs_cart_details;
                     if (fkcartSliderModal.hasClass('fkcart-show')) {
-
-                        this.setRequestData(v.fkwcs_cart_details);
+                        this.setRequestData(this.cart_request_data);
                         this.setupPaymentRequest();
-                    } else {
-
-                        this.fkCartRequestData = v.fkwcs_cart_details;
-
                     }
 
+                });
+                $(document.body).on('fkwcs_google_ready_pay', function () {
+                    self.is_google_ready_to_pay = true;
+                });
 
+                $(document.body).on('fkcart_cart_closed', () => {
+                    if ('yes' !== fkwcs_data.is_product) {
+                        return;
+                    }
+                    let qtyField = $('form.cart').find('.qty');
+                    if (qtyField.length) {
+                        qtyField.val(1);
+                    }
+                    this.request_data = Object.assign(this.dataCommon, {
+                        total: fkwcs_data.single_product.total, requestShipping: ('yes' === fkwcs_data.single_product.requestShipping), displayItems: fkwcs_data.single_product.displayItems,
+                    });
+                    this.setupPaymentRequest();
                 });
 
             }
@@ -931,7 +1002,7 @@
             }
 
             buttonOnCartPage() {
-                if (fkwcs_data.is_cart != "yes" || $('.wc-proceed-to-checkout .checkout-button').length == 0) {
+                if (fkwcs_data.is_cart !== "yes" || $('.wc-proceed-to-checkout .checkout-button').length === 0) {
                     return;
                 }
                 const BtnCart = $('.wc-proceed-to-checkout .checkout-button');
@@ -947,7 +1018,7 @@
 
             buttonOnCheckoutPage() {
                 let billing_fields = $('.woocommerce-billing-fields');
-                if (fkwcs_data.is_checkout != "yes" || billing_fields.length == 0) {
+                if (fkwcs_data.is_checkout !== "yes" || billing_fields.length === 0) {
                     return;
                 }
                 this.setCss('#fkwcs_stripe_smart_button_wrapper', 'max-width', billing_fields.outerWidth(true));
@@ -978,7 +1049,7 @@
                 let addToCartButtonHeight = '';
                 let availableWidth = '';
                 let wrapper = $('#fkwcs_stripe_smart_button_wrapper');
-                if (wrapper.length == 0) {
+                if (wrapper.length === 0) {
                     return;
                 }
                 if (wrapper.hasClass('inline')) {
@@ -1022,13 +1093,697 @@
 
 
             linkEnabled() {
-                return 'yes' === fkwcs_data.link_button_enabled;
+                return 'yes' === fkwcs_data.link_button_enabled && 'yes' === fkwcs_data.express_pay_enabled;
             }
 
 
         }
 
+        class FKWCS_Google_pay extends FKWCS_Smart_Buttons {
+            constructor() {
+                super();
+            }
+
+            init() {
+
+                if (!fkwcs_data.hasOwnProperty('google_pay_as_express') || 'yes' !== fkwcs_data.google_pay_as_express) {
+                    return;
+                }
+
+                this.google_pay_client = null;
+                this.shipping_options = [];
+                this.request_data = {};
+                this.google_is_ready = null;
+                this.add_to_cart_end_point = 'fkwcs_gpay_add_to_cart';
+                this.gateway_id = 'fkwcs_stripe_google_pay';
+                this.createPaymentClient();
+            }
+
+            googlePayVersion() {
+                return {
+                    "apiVersion": 2,
+                    "apiVersionMinor": 0
+                };
+            }
+
+
+            getBaseCardBrand() {
+                return {
+                    type: 'CARD',
+                    parameters: {
+                        allowedAuthMethods: ["PAN_ONLY"],
+                        allowedCardNetworks: ["AMEX", "DISCOVER", "INTERAC", "JCB", "MASTERCARD", "VISA"],
+                        assuranceDetailsRequired: true
+                    },
+                    tokenizationSpecification: {
+                        type: "PAYMENT_GATEWAY",
+                        parameters: {
+                            gateway: 'stripe',
+                            "stripe:version": "2018-10-31",
+                            "stripe:publishableKey": fkwcs_data.pub_key
+                        }
+                    }
+                };
+            }
+
+            getMerchantData() {
+                let data = {
+                    environment: ('test' === fkwcs_data.mode ? 'TEST' : 'PRODUCTION'),
+                    merchantId: fkwcs_data.google_pay.merchant_id,
+                    merchantName: fkwcs_data.google_pay.merchant_name,
+                    paymentDataCallbacks: {
+                        onPaymentAuthorized: function onPaymentAuthorized() {
+                            return new Promise(function (resolve) {
+                                resolve({
+                                    transactionState: "SUCCESS"
+                                });
+                            }.bind(this));
+                        },
+                    }
+                };
+                if ('test' === fkwcs_data.mode) {
+                    delete data.merchantId;
+                }
+                if (this.shippingAddressRequired()) {
+                    data.paymentDataCallbacks.onPaymentDataChanged = this.paymentDataChanged.bind(this);
+                }
+                return data;
+
+            }
+
+            /**
+             * Create GooGle Pay Button with custom wrapper
+             * @param callback
+             */
+            createGooglePayButton(callback, identifier = '') {
+                return $(`<div class='fkwcs_google_pay_wrapper fkwcs_smart_product_button ${identifier}'></div>`).html(this.google_pay_client.createButton(callback));
+            }
+
+            createPaymentClient() {
+                try {
+                    this.google_pay_client = new google.payments.api.PaymentsClient(this.getMerchantData());
+                    let request_data = this.googlePayVersion();
+                    request_data.allowedPaymentMethods = [this.getBaseCardBrand()];
+                    this.google_pay_client.isReadyToPay(request_data).then(() => {
+                        this.google_is_ready = true;
+                        $(document.body).trigger('fkwcs_google_ready_pay', [this.google_pay_client]);
+                        this.createCheckoutExpressBtn();
+                    }).catch((err) => {
+                        console.log('error', err);
+                    });
+
+
+                } catch (e) {
+                    console.log(e);
+                }
+            }
+
+
+            buttonOnProductPage() {
+
+                /**
+                 * bail out if not the product page
+                 */
+                if (fkwcs_data.is_product_page != 1 || $('form.cart button.single_add_to_cart_button').length === 0) {
+                    return;
+                }
+
+                let ADCbutton = $('form.cart button.single_add_to_cart_button:visible');
+                let Expressbtn = $('.fkwcs_smart_buttons');
+                let width = this.style_value.button_length > 10 ? 'min-width' : 'width';
+                let addToCartMinWidthType = 'px';
+
+                if (false === Expressbtn.hasClass('fkwcs_smart_product_button')) {
+
+                    return;
+                }
+                if ('above' === this.style_value.button_position) {
+                    this.setCss('#fkwcs_stripe_smart_button_wrapper', 'width', '100%');
+                    this.setCss('#fkwcs-payment-request-separator', 'width', '200px');
+                    this.setCss('form.cart button.single_add_to_cart_button', width, '200px');
+                    this.setCss('form.cart button.single_add_to_cart_button', 'float', 'left');
+                    this.setCss('form.cart', 'display', 'inline-block');
+                    this.setCss('.fkwcs_smart_buttons', width, '200px');
+                } else {
+                    let addToCartMinWidth = ADCbutton.outerWidth();
+
+                    if ($('form.cart .quantity').length > 0) {
+                        addToCartMinWidth = addToCartMinWidth + $('form.cart .quantity').width() + parseInt($('form.cart .quantity').css('marginRight').replace('px', ''));
+                    }
+
+                    if ('inline' === this.style_value.button_position) {
+                        addToCartMinWidth = ADCbutton.outerWidth();
+                        addToCartMinWidth = addToCartMinWidth < 120 ? 150 : addToCartMinWidth;
+
+                        if ($('form.cart').width() < 500) {
+                            this.makeButtonVisibleInline();
+                        }
+                        this.setCss('form.cart button.single_add_to_cart_button', width, addToCartMinWidth + 'px');
+                        this.setCss('#fkwcs_stripe_smart_button_wrapper.fkwcs-product', 'display', 'inline-block');
+                    } else {
+                        this.setCss('form.grouped_form button.single_add_to_cart_button', width, addToCartMinWidth + 'px');
+
+                        /**
+                         * Compatibility with Theme Kadence button
+                         * @type {*|jQuery|HTMLElement}
+                         */
+                        let KDButton = $('.theme-kadence button.single_add_to_cart_button');
+                        if (KDButton.length > 0) {
+                            addToCartMinWidth = 100;
+                            addToCartMinWidthType = '%';
+                            this.setCss('.theme-kadence button.single_add_to_cart_button', width, addToCartMinWidth + addToCartMinWidthType);
+                            this.setCss('.theme-kadence button.single_add_to_cart_button', 'margin-top', '20px');
+                        }
+                    }
+
+                    this.setCss('#fkwcs_stripe_smart_button_wrapper', width, addToCartMinWidth + addToCartMinWidthType);
+                    this.setCss('form.cart .fkwcs_smart_buttons', width, addToCartMinWidth + addToCartMinWidthType);
+
+                    setTimeout((addToCartMinWidth) => {
+                        this.setCss('#fkwcs_stripe_smart_button_wrapper .gpay-card-info-container', width, addToCartMinWidth + 'px');
+                        this.setCss('#fkwcs_stripe_smart_button_wrapper .gpay-card-info-container', 'min-width', addToCartMinWidth + 'px');
+                        this.setCss('#fkwcs_stripe_smart_button_wrapper .gpay-card-info-iframe', 'width', addToCartMinWidth + 'px');
+                        this.applyCss();
+                    }, 300, addToCartMinWidth);
+
+                    if ('below' === this.style_value.button_position) {
+                        this.setCss('.theme-twentytwentytwo .fkwcs_smart_buttons', width, ADCbutton.outerWidth() + 'px');
+                        this.setCss('.theme-twentytwentytwo #fkwcs-payment-request-separator', width, ADCbutton.outerWidth() + 'px');
+                    }
+                }
+                this.applyCss();
+                this.expressBtnStyle(Expressbtn, ADCbutton);
+
+            }
+
+            createCheckoutExpressBtn() {
+
+                let single_wrapper = $("#fkwcs_stripe_smart_button_wrapper");
+                single_wrapper.css("display", "block");
+                let smart_button_wrapper = $('#fkwcs_custom_express_button');
+                if (smart_button_wrapper.length > 0) {
+                    if ('1' === fkwcs_data.is_product_page || 'yes' === fkwcs_data.is_product_page) {
+                        smart_button_wrapper.after(this.createGooglePayButton(this.getSingleProductExpressOptions(), 'fkwcs-single-product'));
+                        this.buttonOnProductPage();
+                        let gpay_wrapper = $('form.cart .fkwcs_google_pay_wrapper');
+                        $(document.body).off('show_variation').on('show_variation', function () {
+                            gpay_wrapper.removeClass('fkwcs_disabled_btn');
+                        });
+                        $(document.body).off('hide_variation').on('hide_variation', function () {
+                            gpay_wrapper.addClass('fkwcs_disabled_btn');
+                        });
+
+                    } else if ('1' === fkwcs_data.is_cart || 'yes' === fkwcs_data.is_cart) {
+                        smart_button_wrapper.after(this.createGooglePayButton(this.getCartExpressOptions(), 'fkwcs-woocommerce-cart'));
+                        $(document.body).on('wc_fragments_refreshed', (e, v) => {
+
+                            setTimeout(() => {
+                                if (!('sessionStorage' in window && window.sessionStorage !== null)) {
+                                    return;
+                                }
+                                let session_data = sessionStorage.getItem(wc_cart_fragments_params.fragment_name);
+                                if (null == session_data) {
+                                    return;
+                                }
+                                session_data = JSON.parse(session_data);
+                                if (typeof session_data !== "object" || !session_data.hasOwnProperty('fkwcs_google_pay_data')) {
+                                    return;
+                                }
+                                fkwcs_data.gpay_cart_data = session_data.fkwcs_google_pay_data;
+                                $("#fkwcs_stripe_smart_button_wrapper").css("display", "block");
+                                $('.fkwcs-woocommerce-cart').remove();
+                                $('#fkwcs_custom_express_button').after(this.createGooglePayButton(this.getCartExpressOptions(), 'fkwcs-woocommerce-cart'));
+                            }, 1000);
+                        });
+
+
+                    }
+                }
+
+                $(document.body).on('added_to_cart fkcart_fragments_refreshed', (e, v) => {
+                    //return if cart details not found
+                    if (typeof v === "undefined" || !v.hasOwnProperty('fkwcs_google_pay_data')) {
+                        return;
+                    }
+                    fkwcs_data.gpay_cart_data = v.fkwcs_google_pay_data;
+                });
+
+                $(document.body).on('fkwcs_generate_fkcart_mini_button', () => {
+                    $('.fkwcs_fkcart_gpay_wrapper').html(this.createGooglePayButton(this.getCartExpressOptions(), 'mini-cart'));
+                    let mini_cart_btn = $('#fkcart-modal .fkcart-checkout-wrap #fkcart-checkout-button');
+                    let property = ['font-size', 'font-weight', 'border-radius', 'line-height'];
+                    for (let i = 0; i < property.length; i++) {
+                        $('.fkcart-checkout-wrap.fkcart-panel.fkwcs_fkcart_gpay_wrapper button').css(property[i], mini_cart_btn.css(property[i]));
+                    }
+                });
+
+            }
+
+
+            /**
+             * Single Product Button creations
+             * @returns {{onClick: any, buttonType: *, buttonColor: *}}
+             */
+            getSingleProductExpressOptions() {
+                return {
+                    buttonColor: fkwcs_data.google_pay_btn_color,
+                    buttonType: fkwcs_data.google_pay_btn_theme,
+                    buttonSizeMode: "fill",
+                    onClick: this.startSingleProductCheckout.bind(this),
+                };
+            }
+
+            /**
+             * Funnelkit Cart/Mini Cart Product Button creations
+             * @returns {{onClick: any, buttonType: *, buttonColor: *}}
+             */
+            getCartExpressOptions() {
+                return {
+                    buttonColor: fkwcs_data.google_pay_btn_color,
+                    buttonType: fkwcs_data.google_pay_btn_theme,
+                    buttonSizeMode: "fill",
+                    onClick: this.startExpressCartGpayPayment.bind(this),
+                };
+            }
+
+            startExpressCartGpayPayment() {
+                this.update_transaction_data(fkwcs_data.gpay_cart_data);
+                this.startSingleProductGpayPayment();
+            }
+
+
+            startSingleProductCheckout() {
+                try {
+                    let is_Added = $.when(this.addToCartProduct());
+                    is_Added.then((response) => {
+                        this.update_transaction_data(response?.fragments?.fkwcs_google_pay_data);
+                        this.startSingleProductGpayPayment();
+                    });
+                } catch (e) {
+
+                }
+            }
+
+            /**
+             * Start Gpay payment for single OR Cart Page
+             */
+            startSingleProductGpayPayment() {
+                this.google_pay_client.loadPaymentData(this.buildGpayPaymentData()).then(this.productSingleProductGpayData.bind(this)).catch((error) => {
+                    console.log('error', error);
+                    if (error.statusCode === "CANCELED") {
+                        return;
+                    }
+                    if (error.statusMessage && error.statusMessage.indexOf("paymentDataRequest.callbackIntent") > -1) {
+                        this.showError({"message": "DEVELOPER_ERROR_WHITELIST"});
+                    } else {
+                        this.showError({"message": error.statusMessage});
+                    }
+                });
+
+            }
+
+            buildGpayPaymentData() {
+                let request = $.extend({}, this.googlePayVersion(), {
+                    emailRequired: true,
+                    environment: ('test' === fkwcs_data.mode ? 'TEST' : 'PRODUCTION'),
+                    merchantInfo: {
+                        merchantName: fkwcs_data.google_pay.merchant_name,
+                        merchantId: fkwcs_data.google_pay.merchant_id,
+                    },
+                    allowedPaymentMethods: [this.getBaseCardBrand()],
+                });
+
+
+                request.shippingAddressRequired = this.shippingAddressRequired();
+                request.callbackIntents = ["PAYMENT_AUTHORIZATION"];
+                request.allowedPaymentMethods[0].parameters.billingAddressRequired = true;
+                if (request.allowedPaymentMethods[0].parameters.billingAddressRequired) {
+                    request.allowedPaymentMethods[0].parameters.billingAddressParameters = {
+                        format: "FULL",
+                        phoneNumberRequired: true
+                    };
+                }
+
+                request = $.extend(request, this.request_data);
+                if (request.shippingAddressRequired) {
+                    request.shippingAddressParameters = {};
+                    request.shippingOptionRequired = true;
+                    request.shippingOptionParameters = {
+                        shippingOptions: this.shipping_options
+                    };
+                    request.callbackIntents = ["SHIPPING_ADDRESS", "SHIPPING_OPTION", "PAYMENT_AUTHORIZATION"];
+
+                }
+                return request;
+            }
+
+            paymentDataChanged(data) {
+                return new Promise((resolve) => {
+                    let response = this.update_payment_data(data);
+                    response.then((response) => {
+                        resolve(response.paymentRequestUpdate);
+                    });
+                    response.catch((data) => {
+                        resolve(data);
+                    });
+                });
+            }
+
+            update_transaction_data(fkwcs_google_pay_data) {
+                let disaplay_items = fkwcs_google_pay_data.order_data.displayItems;
+                this.request_data = {
+                    transactionInfo: {
+                        countryCode: fkwcs_google_pay_data.order_data.country_code.toUpperCase(),
+                        currencyCode: fkwcs_google_pay_data.order_data.currency.toUpperCase(),
+                        totalPriceStatus: "ESTIMATED",
+                        totalPrice: fkwcs_google_pay_data.order_data.total.amount.toString(),
+                        displayItems: disaplay_items,
+                        totalPriceLabel: fkwcs_google_pay_data.order_data.total.label
+                    }
+                };
+                if (fkwcs_google_pay_data?.shipping_options) {
+                    this.shipping_options = fkwcs_google_pay_data?.shipping_options;
+                }
+            }
+
+            /**
+             * Update checkout field with address details and also return in json data.
+             * @param type
+             * @param addressData
+             * @returns {{}}
+             */
+            mapAddress(type, addressData) {
+                let json = {};
+                if (addressData.hasOwnProperty('address1')) {
+                    json[`line_1`] = addressData?.address1;
+                }
+                if (addressData.hasOwnProperty('address2')) {
+                    json[`line_2`] = addressData?.address2 + addressData?.address3;
+                }
+                if (addressData.hasOwnProperty('locality')) {
+                    json[`city`] = addressData?.locality;
+                }
+                if (addressData.hasOwnProperty('postalCode')) {
+                    json[`postal_code`] = addressData?.postalCode;
+                }
+                if (addressData.hasOwnProperty('administrativeArea')) {
+                    json[`state`] = addressData?.administrativeArea;
+                }
+                if (addressData.hasOwnProperty('countryCode')) {
+                    json[`country`] = addressData?.countryCode;
+                }
+                if (addressData.hasOwnProperty('name')) {
+                    json[`name`] = addressData.name;
+                }
+                return json;
+            }
+
+            /**
+             * Update User details in checkout field also Return in json
+             * @param paymentData
+             * @returns {{}}
+             */
+            updateAddress(paymentData) {
+                let user_details = {};
+
+                let shipping_address = paymentData.hasOwnProperty('shippingAddress') ? paymentData.shippingAddress : null;
+                if (null !== shipping_address) {
+                    user_details.shipping = this.mapAddress('shipping', shipping_address);
+                    user_details.shipping.shipping_method = paymentData?.shippingOptionData;
+                }
+                let billing_address = (paymentData.hasOwnProperty('paymentMethodData') && paymentData.paymentMethodData.hasOwnProperty('info') && paymentData.paymentMethodData.info.hasOwnProperty('billingAddress')) ? paymentData.paymentMethodData.info.billingAddress : null;
+                if (null !== billing_address) {
+                    user_details.billing = this.mapAddress('billing', billing_address);
+                }
+                if (null == billing_address && null !== shipping_address) {
+                    user_details.billing = this.mapAddress('billing', shipping_address);
+                }
+                if (null !== billing_address && billing_address.hasOwnProperty('phoneNumber')) {
+                    user_details.phone = billing_address?.phoneNumber;
+                }
+
+                if (paymentData?.email) {
+                    user_details.email = paymentData?.email;
+                }
+                if (paymentData?.phone) {
+                    user_details.phone = paymentData?.phone;
+                }
+
+                return user_details;
+            }
+
+            map_google_pay_address(shippingAddress) {
+                return {'country': shippingAddress.countryCode, 'postcode': shippingAddress.postalCode, 'city': shippingAddress.locality, 'state': shippingAddress.administrativeArea};
+            }
+
+            update_payment_data(data, extraData) {
+                return new Promise((resolve) => {
+                    let shipping_method = data.shippingOptionData.id === 'default' ? null : data.shippingOptionData.id;
+                    $.ajax({
+                        url: fkwcs_data.wc_endpoints.fkwcs_gpay_update_shipping_address,
+                        dataType: 'json',
+                        method: 'POST',
+                        data: $.extend({'fkwcs_nonce': fkwcs_data.fkwcs_nonce}, {
+                            shipping_address: this.map_google_pay_address(data.shippingAddress),
+                            shipping_method: [shipping_method]
+                        }, extraData),
+                        success: (response) => {
+                            resolve(response);
+                        }
+                    });
+                });
+            }
+
+
+            productSingleProductGpayData(paymentData) {
+                let data = JSON.parse(paymentData.paymentMethodData.tokenizationData.token);
+
+                let user_details = this.updateAddress(paymentData);
+                let billing_address = {
+                    name: user_details.billing.name,
+                    email: user_details.email,
+                    phone: user_details?.phone,
+                    address: {
+                        country: user_details.billing?.country,
+                        city: user_details.billing?.city,
+                        postal_code: user_details.billing?.postal_code,
+                        state: user_details.billing?.state,
+                        line1: user_details.billing?.line1,
+                        line2: user_details.billing?.line2,
+                    },
+                };
+                $('body').block({
+                    message: null, overlayCSS: {
+                        background: '#fff', opacity: 0.6
+                    }
+                });
+                // convert token to payment method
+                this.stripe.createPaymentMethod({
+                    type: 'card',
+                    card: {token: data.id},
+                    billing_details: billing_address
+                }).then((result) => {
+                    if (result.error) {
+                        return this.showError(result.error);
+                    }
+                    user_details.paymentMethod = result.paymentMethod.id;
+
+                    $.ajax({
+                        type: 'POST',
+                        data: this.prepareCheckoutData(user_details),
+                        dataType: 'json',
+                        url: this.ajaxEndpoint('fkwcs_gpay_button_payment_request'),
+                        success: (response) => {
+                            if ('success' === response.result) {
+                                this.confirmPaymentIntent(result, response.redirect);
+                            } else {
+
+                                $('body').unblock();
+                                window.location.reload();
+                            }
+                        }
+                    });
+                }).catch(() => {
+                    $('body').unblock();
+                });
+            }
+
+            prepareCheckoutData(user_details) {
+
+                /**
+                 * Gather Data from the chosen method
+                 */
+                const paymentMethod = user_details.paymentMethod;
+                const email = user_details.email;
+                const phone = user_details?.phone;
+                const billing = user_details.billing;
+                const name = user_details.billing.name;
+                const shipping = user_details.shipping;
+                /**
+                 * Prepare Data
+                 * @type {{billing_last_name: (*|string), billing_phone: (*|string|string), payment_request_type: null, billing_country: (*|string), billing_city: (*|string), fkwcs_nonce: *, billing_company: string, billing_state: (*|string), terms: number, billing_address_1: (*|string), shipping_method: *[], order_comments: string, billing_email: (*|string), billing_address_2: (*|string), billing_postcode: (*|string), fkwcs_source, billing_first_name: (*|string), payment_method: string}}
+                 */
+                let data = {
+                    fkwcs_nonce: fkwcs_data.fkwcs_nonce,
+                    billing_first_name: null !== name ? name.split(' ').slice(0, 1).join(' ') : 'test',
+                    billing_last_name: null !== name ? name.split(' ').slice(1).join(' ') : 'test',
+                    billing_company: '',
+                    billing_email: ($('input[name="billing_email"]').length > 0 && $('input[name="billing_email"]').val() !== '') ? $('input[name="billing_email"]').val() : email,
+                    billing_phone: phone ? phone.replace('/[() -]/g', '') : '',
+                    order_comments: '',
+                    payment_method: this.gateway_id,
+                    terms: 1,
+                    fkwcs_source: paymentMethod,
+                    payment_request_type: this.gateway_id,
+                };
+
+                /**
+                 * Prepare billing address
+                 * @type {*}
+                 */
+                data = this.prepareBillingAddress(data, billing);
+                /**
+                 * Prepare Shipping address
+                 * @type {*}
+                 */
+                data = this.prepareShippingAddress(data, shipping);
+
+                if (fkwcs_data.is_product === 'yes') {
+                    data.page_from = 'product';
+                } else {
+                    data.page_from = 'cart';
+                }
+
+                data = JSON.parse(JSON.stringify(data));
+                return data;
+            }
+
+
+            shippingAddressRequired() {
+                return ('yes' === fkwcs_data.shipping_required);
+            }
+
+            prepareBillingAddress(address_data, billing) {
+                console.trace();
+                address_data = super.prepareBillingAddress(address_data, billing);
+                address_data.billing_address_1 = null !== billing ? billing.line_1 : '';
+                address_data.billing_address_2 = null !== billing ? billing.line_2 : '';
+                return address_data;
+            }
+
+            prepareShippingAddress(address_data, shipping_data) {
+                if (shipping_data) {
+                    address_data.shipping_first_name = shipping_data.name.split(' ').slice(0, 1).join(' ');
+                    address_data.shipping_last_name = shipping_data.name.split(' ').slice(1).join(' ');
+                    address_data.shipping_country = shipping_data.country;
+                    address_data.shipping_address_1 = shipping_data.line_1;
+                    address_data.shipping_address_2 = shipping_data.line_2;
+                    address_data.shipping_city = shipping_data.city;
+                    address_data.shipping_state = shipping_data.state;
+
+                    if (shipping_data.hasOwnProperty('shipping_method')) {
+                        address_data.shipping_method = Object.values(shipping_data.shipping_method);
+                    }
+                    if (address_data.hasOwnProperty('billing_phone')) {
+                        address_data.shipping_phone = address_data.billing_phone;
+                    }
+                    address_data.shipping_postcode = shipping_data.postal_code;
+                    address_data.ship_to_different_address = 1;
+                }
+                return address_data;
+            }
+
+            /**
+             * Cb to handle response from the AJAX request on payment method
+             * @param hash
+             */
+            confirmPaymentIntent(event, hash) {
+                let hashpartials = hash.match(/^#?fkwcs-confirm-(pi|si)-([^:]+):(.+):(.+):(.+):(.+)$/);
+                if (!hashpartials || 5 > hashpartials.length) {
+                    $('body').unblock();
+                    return false;
+                }
+                let type = hashpartials[1];
+                let intentClientSec = hashpartials[2];
+                let redirectURI = decodeURIComponent(hashpartials[3]);
+                this.confirmPayment(event, intentClientSec, redirectURI, type);
+            }
+
+            /**
+             * Attempt to confirm the payment intent using Stripe methods
+             * @param clientSecret
+             * @param redirectURL
+             * @param intent_type
+             */
+            confirmPayment(event, clientSecret, redirectURL, intent_type) {
+
+                let cardPayment = null;
+                if (intent_type == 'si') {
+                    cardPayment = this.stripe.handleCardSetup(clientSecret, {payment_method: event.paymentMethod.id}, {handleActions: false});
+                } else {
+                    cardPayment = this.stripe.confirmCardPayment(clientSecret, {payment_method: event.paymentMethod.id}, {handleActions: false});
+                }
+                cardPayment.then((result) => {
+                    if (result.error) {
+                        /**
+                         * Insert logs to the server and show error messages
+                         */
+                        this.logError(result.error);
+                        $('body').unblock();
+                        return;
+                    }
+
+                    let intent = result[('si' === intent_type) ? 'setupIntent' : 'paymentIntent'];
+                    if (intent.status === "requires_action" || intent.status === "requires_source_action") {
+
+                        let cardPaymentRetry = null;
+                        // Let Stripe.js handle the rest of the payment flow.
+                        if (intent_type == 'si') {
+                            cardPaymentRetry = this.stripe.handleCardSetup(clientSecret);
+                        } else {
+                            cardPaymentRetry = this.stripe.confirmCardPayment(clientSecret);
+
+                        }
+                        cardPaymentRetry.then((result) => {
+                            if (result.error) {
+                                /**
+                                 * Insert logs to the server and show error messages
+                                 */
+                                this.logError(result.error);
+                                $('body').unblock();
+                                return;
+                            }
+                            window.location = redirectURL;
+                        });
+
+                        return;
+                    } else {
+                        $('body').unblock();
+                    }
+                    window.location = redirectURL;
+                });
+            }
+
+            setupPaymentRequest() {
+
+            }
+
+            setRequestData() {
+
+            }
+
+        }
+
         new FKWCS_Smart_Buttons();
+        try {
+
+            if (typeof fkwcs_data.google_pay !== 'undefined' && !('live' === fkwcs_data.mode && '' === fkwcs_data.google_pay.merchant_id)) {
+                new FKWCS_Google_pay();
+            }
+
+        } catch (e) {
+            console.log('Error Captured During Gpay initialization', e);
+        }
     }
 
 )(jQuery);

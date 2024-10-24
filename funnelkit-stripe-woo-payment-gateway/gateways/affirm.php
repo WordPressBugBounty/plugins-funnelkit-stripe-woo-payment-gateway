@@ -15,6 +15,20 @@ class Affirm extends LocalGateway {
 
 	protected $min_amount = 5000;
 	public $max_amount = 300000;
+	private static $instance = null;
+
+	/**
+	 * @return self;
+	 */
+	public static function get_instance() {
+
+		if ( is_null( self::$instance ) ) {
+			self::$instance = new self();
+		}
+
+		return self::$instance;
+
+	}
 
 	/**
 	 * Setup general properties and settings
@@ -70,7 +84,7 @@ class Affirm extends LocalGateway {
 			],
 			'paylater_section' => [
 				'title'       => __( 'Affirm Message Location', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => [  'cart' ],
+				'default'     => [ 'cart' ],
 				'type'        => 'multiselect',
 				'class'       => 'wc-enhanced-select',
 				'css'         => 'min-width: 350px;',
@@ -84,7 +98,15 @@ class Affirm extends LocalGateway {
 				),
 			],
 		];
+		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', [] );
 
+		$admin_country = ! empty( $stripe_account_settings ) ? strtoupper( $stripe_account_settings['country'] ) : wc_format_country_state_string( get_option( 'woocommerce_default_country', '' ) )['country'];
+
+		if ( in_array( $admin_country, $this->specific_country, true ) ) {
+			$this->specific_country = [ $admin_country ];
+		} else {
+			$this->specific_country = [];
+		}
 
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
 		if (isset($countries_fields['allowed_countries']['options']['all'])) {

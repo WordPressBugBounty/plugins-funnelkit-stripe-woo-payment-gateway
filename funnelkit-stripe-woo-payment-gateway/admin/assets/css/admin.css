@@ -845,61 +845,88 @@ th > label[for='woocommerce_fkwcs_stripe_standard_payment_form'], th > label[for
 }
 
 
-.fkwcs-cards-wrap{
+.fkwcs-cards-wrap {
     display: flex;
     gap: 16px;
 
 }
 
-.fkwcs-card{
+.fkwcs-card {
     display: flex;
-    flex-direction:column;
-    border:1px solid #dddddd;
-    padding:12px;
+    flex-direction: column;
+    border: 1px solid #dddddd;
+    padding: 12px;
     min-width: 300px;
     box-sizing: border-box;
     background: #fff;
 }
 
-.fkwcs-card-header{
+.fkwcs-card-header {
     display: flex;
     align-items: center;
-    gap:4px;
-    margin-bottom:12px;
+    gap: 4px;
+    margin-bottom: 12px;
 }
 
-.fkwcs-card-subheading{
+.fkwcs-card-subheading {
     font-size: 15px;
     font-weight: 600;
     text-transform: uppercase;
 }
 
 
-.fkwcs-card-transactions-header, .fkwcs-card-transactions-data{
+.fkwcs-card-transactions-header, .fkwcs-card-transactions-data {
     display: grid;
-    gap:8px;
+    gap: 8px;
     padding: 8px 0;
     grid-template-columns: 1fr 100px;
 }
 
-.fkwcs-card-transactions-data{
-    border-top:1px solid #ddd;
+.fkwcs-card-transactions-data {
+    border-top: 1px solid #ddd;
     padding-bottom: 0;
 }
 
-.fkwcs-card-transaction, .fkwcs-card-amount{
+.fkwcs-card-transaction, .fkwcs-card-amount {
     color: #777;
     font-size: 13px;
 }
-.fkwcs-transaction-id{
+
+.fkwcs-transaction-id {
     color: #1488C2;
     text-decoration: none;
     font-size: 13px;
     font-weight: 500;
 }
 
-.fkwcs-amount-figure{
+.fkwcs-amount-figure {
     color: #777;
     font-size: 13px;
     font-weight: 600;
+}
+
+#woocommerce_fkwcs_stripe_google_pay_button_dummy_button {
+    display: none;
+}
+
+div#woocommerce_fkwcs_stripe_google_pay_button_dummy_button {
+    display: block;
+}
+
+#woocommerce_fkwcs_stripe_google_pay_button_dummy_button .gpay-card-info-container.black {
+    outline: none;
+}
+
+.fkwcs_inline_message_error {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-left-width: 4px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .04);
+    padding: 1px 12px;
+    border-left-color: #d63638;
+    margin: 5px 0 15px;
+}
+.fkwcs_inline_message_error p {
+     font-size: 13px;
+     padding-bottom: 4px;
 }

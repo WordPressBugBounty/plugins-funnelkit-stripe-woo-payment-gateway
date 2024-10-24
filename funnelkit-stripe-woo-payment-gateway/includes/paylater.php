@@ -75,7 +75,8 @@ class PayLater_Helper {
 
 	public function enqueue_stripe_js() {
 
-		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], FKWCS_VERSION, true );
+		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], false, true );
+
 		wp_enqueue_script( 'fkwcs-stripe-paylater', FKWCS_URL . 'assets/js/paylater.js', [ 'fkwcs-stripe-external' ] );
 		wp_localize_script( 'fkwcs-stripe-paylater', 'fkwcs_paylater', $this->update_localize_data() );
 
@@ -88,7 +89,13 @@ class PayLater_Helper {
 		$data['paylater_messaging'] = $this->paylater_gateways;
 		$data['pub_key']            = 'test' === $test_mode ? get_option( 'fkwcs_test_pub_key', '' ) : get_option( 'fkwcs_pub_key', '' );
 		$data['currency']           = strtolower( get_woocommerce_currency() );
-		$data['country_code']       = substr( get_option( 'woocommerce_default_country' ), 0, 2 );
+		$data['locale']             = \FKWCS\Gateway\Stripe\Abstract_Payment_Gateway::convert_wc_locale_to_stripe_locale( get_locale() );
+		if ( ! is_null( WC()->customer ) ) {
+			$country = WC()->customer->get_billing_country();
+		} else {
+			$country = substr( get_option( 'woocommerce_default_country' ), 0, 2 );
+		}
+		$data['country_code'] = $country;
 
 		return $data;
 	}

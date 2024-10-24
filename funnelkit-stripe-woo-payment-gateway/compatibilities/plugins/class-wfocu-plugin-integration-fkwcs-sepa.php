@@ -81,7 +81,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 		 */
 		public function has_token( $order ) {
 
-			$this->token = Helper::get_meta( $order,'_fkwcs_source_id' );
+			$this->token = Helper::get_meta( $order, '_fkwcs_source_id' );
 
 			if ( ! empty( $this->token ) ) {
 				return true;
@@ -99,7 +99,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 		 * @return boolean on success false otherwise
 		 */
 		public function get_token( $order ) {
-			$this->token = Helper::get_meta( $order,'_fkwcs_source_id' );
+			$this->token = Helper::get_meta( $order, '_fkwcs_source_id' );
 
 			if ( ! empty( $this->token ) ) {
 				return $this->token;
@@ -110,8 +110,8 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 		}
 
 		/**
-		 * This function is placed here as a fallback function when JS client side integration fails mysteriosly
-		 * It creates intent and then try to confirm that intent, if successfull then mark success, otherwise failure
+		 * This function is placed here as a fallback function when JS client side integration fails mysteriously
+		 * It creates intent and then try to confirm that intent, if successful then mark success, otherwise failure
 		 *
 		 * @param WC_Order $order
 		 *
@@ -217,10 +217,10 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 
 			if ( $source->source ) {
 
-				$post_data['source']  = $source->source;
+				$post_data['source'] = $source->source;
 			}
 
-			return apply_filters( 'fkwcs_upsell_stripe_generate_payment_request', $post_data,$get_package, $order, $source );
+			return apply_filters( 'fkwcs_upsell_stripe_generate_payment_request', $post_data, $get_package, $order, $source );
 		}
 
 		protected function create_intent( $order, $prepared_source ) {
@@ -294,7 +294,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 		}
 
 		public function update_stripe_fees( $order, $balance_transaction_id ) {
-			$stripe              = new Sepa();
+			$stripe              = $this->get_wc_gateway();
 			$stripe_api          = $stripe->get_client();
 			$response            = $stripe_api->balance_transactions( 'retrieve', [ $balance_transaction_id ] );
 			$balance_transaction = $response['success'] ? $response['data'] : false;
@@ -306,28 +306,43 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			if ( isset( $balance_transaction ) && isset( $balance_transaction->fee ) ) {
 
 
-				$fee      = ! empty( $balance_transaction->fee ) ? Helper::format_amount( $order, $balance_transaction->fee ) : 0;
-				$net      = ! empty( $balance_transaction->net ) ? Helper::format_amount( $order, $balance_transaction->net ) : 0;
-				$currency = ! empty( $balance_transaction->currency ) ? strtoupper( $balance_transaction->currency ) : null;
+				$fee = ! empty( $balance_transaction->fee ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->fee ) : 0;
+				$net = ! empty( $balance_transaction->net ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->net ) : 0;
 
 				/**
 				 * Handling for Stripe Fees
 				 */
 				$order_behavior = WFOCU_Core()->funnels->get_funnel_option( 'order_behavior' );
 				$is_batching_on = ( 'batching' === $order_behavior ) ? true : false;
-				if ( true === $is_batching_on ) {
-					$fee  = $fee + Helper::get_stripe_fee( $order );
-					$net  = $net + Helper::get_stripe_net( $order );
-					$data = [
-						'fee'      => $fee,
-						'net'      => $net,
-						'currency' => $currency,
-					];
-					Helper::update_stripe_transaction_data( $order, $data );
+
+				$data = [];
+				if ( ( 'yes' === get_option( 'fkwcs_currency_fee', 'no' ) && ! empty( $balance_transaction->exchange_rate ) ) ) {
+					$data['currency'] = $order->get_currency();
+					$fee              = $fee / $balance_transaction->exchange_rate;
+					$net              = $net / $balance_transaction->exchange_rate;
+
+				} else {
+					$data['currency'] = ! empty( $balance_transaction->currency ) ? strtoupper( $balance_transaction->currency ) : null;
+
 				}
-				WFOCU_Core()->data->set( 'wfocu_stripe_fee', $fee );
-				WFOCU_Core()->data->set( 'wfocu_stripe_net', $net );
-				WFOCU_Core()->data->set( 'wfocu_stripe_currency', $currency );
+				$data['fee'] = $fee;
+				$data['net'] = $net;
+				if ( true === $is_batching_on ) {
+					$fee = $fee + Helper::get_stripe_fee( $order );
+					$net = $net + Helper::get_stripe_net( $order );
+
+					$data['fee'] = $fee;
+					$data['net'] = $net;
+					Helper::update_stripe_transaction_data( $order, $data );
+
+				} else {
+					WFOCU_Core()->data->set( 'wfocu_stripe_fee', $fee );
+					WFOCU_Core()->data->set( 'wfocu_stripe_net', $net );
+					WFOCU_Core()->data->set( 'wfocu_stripe_currency', $data['currency'] );
+					WFOCU_Core()->data->set( 'wfocu_stripe_exchange', $data['exchange'] );
+				}
+
+
 			}
 		}
 
@@ -343,7 +358,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			}
 
 			?>
-            <script src="https://js.stripe.com/v3/?ver=3.0"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript ?>
+            <script src="https://js.stripe.com/v3/?ver=3.0" data-cookieconsent="ignore"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript ?>
 
             <script>
 
@@ -660,7 +675,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 					if ( 'requires_action' === $intent->status ) {
 
 						/**
-						 * return intent_secret as the data to the client so that necesary next operations could taken care.
+						 * return intent_secret as the data to the client so that necessary next operations could have taken care.
 						 */
 						wp_send_json( array(
 							'result'        => 'success',
@@ -707,11 +722,11 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			return false;
 		}
 
-		public function maybe_modify_3ds_prams( $threds_data, $order ) {
-			$order->update_meta_data( '_wfocu_stripe_source_id', $threds_data['three_d_secure']['card'] );
+		public function maybe_modify_3ds_prams( $threads_data, $order ) {
+			$order->update_meta_data( '_wfocu_stripe_source_id', $threads_data['three_d_secure']['card'] );
 			$order->save();
 
-			return $threds_data;
+			return $threads_data;
 		}
 
 		/**
@@ -750,6 +765,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			$data['net'] = WFOCU_Core()->data->get( 'wfocu_stripe_net' );
 
 			$data['currency'] = WFOCU_Core()->data->get( 'wfocu_stripe_currency' );
+			$data['exchange'] = WFOCU_Core()->data->get( 'wfocu_stripe_exchange' );
 			Helper::update_stripe_transaction_data( $order, $data );
 			$order->save_meta_data();
 		}

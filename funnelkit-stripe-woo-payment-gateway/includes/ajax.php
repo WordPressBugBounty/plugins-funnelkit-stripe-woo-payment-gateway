@@ -16,9 +16,14 @@ class AJAX {
 		add_action( 'wc_ajax_fkwcs_stripe_bancontact_verify_payment_intent', [ $this, 'verify_intent_bancontact' ] );
 		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_payments', [ $this, 'ajax_for_upsells' ] );
 		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_sepa_payments', [ $this, 'ajax_for_upsells_sepa' ] );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_affirm_localgateway_payment', [ $this, 'ajax_for_upsells_affirm' ] );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_afterpay_localgateway_payment', [ $this, 'ajax_for_upsells_afterpay' ] );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_bancontact_localgateway_payment', [ $this, 'ajax_for_upsells_bancontact' ] );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_klarna_localgateway_payment', [ $this, 'ajax_for_upsells_klarna' ] );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_p24_localgateway_payment', [ $this, 'ajax_for_upsells_p24' ] );
 		add_action( 'wp_ajax_fkwcs_js_errors', [ $this, 'log_frontend_error' ] );
 		add_action( 'wp_ajax_nopriv_fkwcs_js_errors', [ $this, 'log_frontend_error' ] );
-		add_action( 'woocommerce_payment_token_class', [ $this, 'modify_token_class' ], 15, 2 );
+
 
 		add_action( 'set_logged_in_cookie', [ $this, 'set_cookie_on_request' ] );
 
@@ -71,22 +76,6 @@ class AJAX {
 
 
 
-	/**
-	 * Added token class
-	 *
-	 * @param string $class token class name.
-	 * @param string $type gateway name.
-	 *
-	 * @return string
-	 *
-	 */
-	public function modify_token_class( $class, $type ) {
-		if ( 'fkwcs_stripe_sepa' === $type ) {
-			return 'FKWCS\Inc\Token';
-		}
-
-		return $class;
-	}
 
 	public function ajax_for_upsells() {
 		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe' )->process_client_payment();
@@ -94,6 +83,26 @@ class AJAX {
 
 	public function ajax_for_upsells_sepa() {
 		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_sepa' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_affirm() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_affirm' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_afterpay() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_afterpay' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_bancontact() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_bancontact' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_klarna() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_klarna' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_p24() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_p24' )->process_client_payment();
 	}
 
 	/**
@@ -115,7 +124,7 @@ class AJAX {
 		if ( isset( $_POST['order_id'] ) && ! empty( $_POST['order_id'] ) ) {
 			$order_id = wc_clean( $_POST['order_id'] );
 			$order    = wc_get_order( $order_id );
-			if ( $order instanceof \WC_Order ) {
+			if ( $order instanceof \WC_Order && false === $order->is_paid() && !$order->has_status('wfocu-pri-order')  ) {
 				$error_message = '';
 				if ( isset( $_POST['error']['payment_intent']['id'] ) ) {
 					$error_message .= __( 'Intent ID', 'funnelkit-stripe-woo-payment-gateway' ) . ":" . wc_clean( $_POST['error']['payment_intent']['id'] );

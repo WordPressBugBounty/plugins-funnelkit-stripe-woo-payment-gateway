@@ -12,6 +12,7 @@ class AfterPay extends LocalGateway {
 	public $id = 'fkwcs_stripe_afterpay';
 	public $payment_method_types = 'afterpay_clearpay';
 	protected $payment_element = true;
+	protected $shipping_address_required = true;
 
 	/**
 	 * Setup general properties and settings
@@ -30,8 +31,8 @@ class AfterPay extends LocalGateway {
 	}
 
 	protected function override_defaults() {
-		$this->supported_currency          = [ 'USD','CAD','GBP','AUD','NZD' ];
-		$this->specific_country            = [ 'US','CA','AU','NZ','GB' ];
+		$this->supported_currency          = [ 'USD', 'CAD', 'GBP', 'AUD', 'NZD' ];
+		$this->specific_country            = [ 'US', 'CA', 'AU', 'NZ', 'GB' ];
 		$this->except_country              = [];
 		$this->setting_enable_label        = __( 'Enable AfterPay Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = __( 'AfterPay - Pay Over Time', 'funnelkit-stripe-woo-payment-gateway' );
@@ -40,7 +41,7 @@ class AfterPay extends LocalGateway {
 
 	public function init_form_fields() {
 
-		$settings = [
+		$settings                = [
 			'enabled'          => [
 				'label'   => ' ',
 				'type'    => 'checkbox',
@@ -64,7 +65,7 @@ class AfterPay extends LocalGateway {
 			],
 			'paylater_section' => [
 				'title'       => __( 'Afterpay Message Location', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => [  'cart' ],
+				'default'     => [ 'cart' ],
 				'type'        => 'multiselect',
 				'class'       => 'wc-enhanced-select',
 				'css'         => 'min-width: 350px;',
@@ -78,15 +79,22 @@ class AfterPay extends LocalGateway {
 				),
 			],
 		];
+		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', [] );
 
+		$admin_country = ! empty( $stripe_account_settings ) ? strtoupper( $stripe_account_settings['country'] ) : wc_format_country_state_string( get_option( 'woocommerce_default_country', '' ) )['country'];
 
+		if ( in_array( $admin_country, $this->specific_country, true ) ) {
+			$this->specific_country = [ $admin_country ];
+		} else {
+			$this->specific_country = [];
+		}
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
-		if (isset($countries_fields['allowed_countries']['options']['all'])) {
-			unset($countries_fields['allowed_countries']['options']['all']);
+		if ( isset( $countries_fields['allowed_countries']['options']['all'] ) ) {
+			unset( $countries_fields['allowed_countries']['options']['all'] );
 		}
 
-		if (isset($countries_fields['allowed_countries']['options']['all_except'])) {
-			unset($countries_fields['allowed_countries']['options']['all_except']);
+		if ( isset( $countries_fields['allowed_countries']['options']['all_except'] ) ) {
+			unset( $countries_fields['allowed_countries']['options']['all_except'] );
 		}
 
 		if ( isset( $countries_fields['except_countries'] ) ) {

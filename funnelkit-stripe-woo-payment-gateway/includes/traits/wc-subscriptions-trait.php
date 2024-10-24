@@ -282,15 +282,6 @@ trait WC_Subscriptions_Trait {
 				throw new \Exception( 'Failed to process renewal for order ' . $renewal_order->get_id() . '. Stripe customer id is missing in the order', 200 );
 			}
 
-			/**
-			 * Check if the card has expired, then we could directly throw an exception without firing an API call.
-			 */
-			if ( isset( $prepared_source->source_object ) && isset( $prepared_source->source_object->card ) && isset( $prepared_source->source_object->card->exp_month ) && isset( $prepared_source->source_object->card->exp_year ) && ! empty( $prepared_source->source_object->card->exp_month ) && ! empty( $prepared_source->source_object->card->exp_year ) ) {
-				if ( Helper::is_cc_expired( $prepared_source->source_object->card->exp_month, $prepared_source->source_object->card->exp_year ) ) {
-					throw new \Exception( 'The card has expired. Check the expiration date or use a different card.', 200 );
-				}
-			}
-
 
 			if ( ( $this->is_no_such_source_error( $prepared_source->source_object ) || $this->is_no_linked_source_error( $prepared_source->source_object ) ) && apply_filters( 'fkwcs_stripe_use_default_customer_source', true ) ) {
 
@@ -358,7 +349,7 @@ trait WC_Subscriptions_Trait {
 				$attempt_date      = wp_date( get_option( 'date_format', 'F j, Y' ), $charge_attempt_at, wp_timezone() );
 				$attempt_time      = wp_date( get_option( 'time_format', 'g:i a' ), $charge_attempt_at, wp_timezone() );
 
-				$message = sprintf( /* translators: 1) a date in the format yyyy-mm-dd, e.g. 2021-09-21; 2) time in the 24-hour format HH:mm, e.g. 23:04 */ __( 'The customer must authorize this payment via the pre-debit notification sent to them by their card issuing bank, before %1$s at %2$s, when the charge will be attempted.', 'woocommerce-gateway-stripe' ), $attempt_date, $attempt_time );
+				$message = sprintf( /* translators: 1) a date in the format yyyy-mm-dd, e.g. 2021-09-21; 2) time in the 24-hour format HH:mm, e.g. 23:04 */ __( 'The customer must authorize this payment via the pre-debit notification sent to them by their card issuing bank, before %1$s at %2$s, when the charge will be attempted.', 'funnelkit-stripe-woo-payment-gateway' ), $attempt_date, $attempt_time );
 				$renewal_order->add_order_note( $message );
 				$renewal_order->update_status( 'pending' );
 				$renewal_order->update_meta_data( '_fkwcs_maybe_check_for_auth', 'yes' );
@@ -370,6 +361,8 @@ trait WC_Subscriptions_Trait {
 
 				$response = $response->data;
 				if ( 'pending' === $response->status || 'processing' === $response->status ) {
+					$this->save_intent_to_order( $renewal_order, $response );
+
 					$order_stock_reduced = Helper::get_meta( $renewal_order, '_order_stock_reduced' );
 
 					if ( ! $order_stock_reduced ) {

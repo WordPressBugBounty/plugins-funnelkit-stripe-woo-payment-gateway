@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wpml-config>
+    <admin-texts>
+        <key name="woocommerce_fkwcs_stripe_settings">
+            <key name="title"/>
+            <key name="description"/>
+            <key name="express_checkout_button_text"/>
+            <key name="express_checkout_title"/>
+            <key name="express_checkout_separator_product"/>
+            <key name="express_checkout_separator_cart"/>
+            <key name="express_checkout_separator_checkout"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_affirm_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_afterpay_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_bancontact_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+
+        <key name="woocommerce_fkwcs_stripe_ideal_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+
+        <key name="woocommerce_fkwcs_stripe_klarna_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+
+        <key name="woocommerce_fkwcs_stripe_p24_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+
+        <key name="woocommerce_fkwcs_stripe_sepa_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+
+    </admin-texts>
+</wpml-config>

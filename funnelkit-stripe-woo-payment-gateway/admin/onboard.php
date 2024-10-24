@@ -67,6 +67,8 @@ class Onboard {
             <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
             <title><?php esc_html_e( 'Stripe Payment Gateway for WooCommerce - Onboarding', 'funnelkit-stripe-woo-payment-gateway' ); ?></title>
 			<?php
+			wp_enqueue_emoji_styles();
+			wp_enqueue_admin_bar_header_styles();
 			// Print admin scripts
 			do_action( 'admin_print_styles' );
 			?>
@@ -282,7 +284,7 @@ class Onboard {
 
 		foreach ( $installed_payment_methods as $method ) {
 			$gateway_id = $method->id;
-			if ( 0 === strpos( $gateway_id, 'fkwcs_' ) && ( 'fkwcs_stripe' === $gateway_id || ( method_exists( $method, 'get_supported_currency' ) && in_array( $currency, $method->get_supported_currency(), true ) ) ) ) {
+			if ( 0 === strpos( $gateway_id, 'fkwcs_' ) && ( 'fkwcs_stripe' === $gateway_id || ( method_exists( $method, 'get_supported_currency' ) && ( $method->get_supported_currency() === true || in_array( $currency, $method->get_supported_currency(), true ) ) ) ) ) {
 				$icon                      = str_replace( 'fkwcs_stripe_', '', $gateway_id );
 				$gateway                   = [];
 				$gateway['id']             = $gateway_id;
@@ -400,6 +402,8 @@ class Onboard {
 					} else {
 						update_option( 'fkwcs_' . $k . '_webhook_secret', $response[ $k ]['secret'] );
 						update_option( 'fkwcs_' . $k . '_created_webhook', array( 'secret' => $response[ $k ]['secret'], 'id' => $response[ $k ]['id'] ) );
+						update_option('fkwcs_live_webhook_url',Helper::get_webhook_url() );
+
 						$resp['status'] = true;
 						$resp['msg']    = __( 'Webhook Created Successfully', 'funnelkit-stripe-woo-payment-gateway' );
 					}

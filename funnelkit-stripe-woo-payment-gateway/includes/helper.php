@@ -63,15 +63,18 @@ abstract class Helper {
 	 *
 	 * @return float|int
 	 */
-	public static function get_stripe_amount( $total, $currency = '' ) {
+	public static function get_stripe_amount( $total, $currency = '', $multiplier = 100 ) {
 		if ( ! $currency ) {
 			$currency = get_woocommerce_currency();
 		}
 
+		$multiplier = absint( $multiplier );
 		if ( in_array( strtolower( $currency ), self::no_decimal_currencies(), true ) ) {
 			return absint( $total );
+		} elseif ( in_array( strtolower( $currency ), self::get_1000_multiplier_currencies(), true ) ) {
+			return absint( wc_format_decimal( ( (float) $total * 1000 ), wc_get_price_decimals() ) ); // In cents.
 		} else {
-			return absint( wc_format_decimal( ( (float) $total * 100 ), wc_get_price_decimals() ) ); // In cents.
+			return absint( wc_format_decimal( ( (float) $total * $multiplier ), wc_get_price_decimals() ) ); // In cents.
 		}
 	}
 
@@ -115,6 +118,11 @@ abstract class Helper {
 			'xof', // West African Cfa Franc
 			'xpf', // Cfp Franc
 		];
+	}
+
+
+	public static function get_1000_multiplier_currencies() {
+		return [ 'bhd', 'jod', 'kwd', 'omr', 'tnd' ];
 	}
 
 	/**
@@ -178,15 +186,15 @@ abstract class Helper {
 		if ( ! $currency ) {
 			$currency = get_woocommerce_currency();
 		}
-
+		if ( empty( $decimals ) ) {
+			$decimals = wc_get_price_decimals();
+		}
 		if ( in_array( strtolower( $currency ), self::no_decimal_currencies(), true ) ) {
 			// Zero decimal currencies accepted by stripe.
 			return absint( $total );
+		} elseif ( in_array( strtolower( $currency ), self::get_1000_multiplier_currencies(), true ) ) {
+			return (float) wc_format_decimal( ( (float) $total / 1000 ), $decimals ); // In
 		} else {
-			if ( empty( $decimals ) ) {
-				$decimals = wc_get_price_decimals();
-			}
-
 			return (float) wc_format_decimal( ( (float) $total / 100 ), $decimals ); // In cents.
 		}
 	}
@@ -226,8 +234,8 @@ abstract class Helper {
 	}
 
 	public static function update_stripe_transaction_data( $order, $data ) {
-		( ! empty( $data['fee'] ) ) ? $order->update_meta_data( self::FKWCS_STRIPE_FEE, $data['fee'] ) : $order->update_meta_data( self::FKWCS_STRIPE_CURRENCY, 0 );
-		( ! empty( $data['net'] ) ) ? $order->update_meta_data( self::FKWCS_STRIPE_NET, $data['net'] ) : $order->update_meta_data( self::FKWCS_STRIPE_NET, 0 );
+		( ! empty( $data['fee'] ) ) ? $order->update_meta_data( self::FKWCS_STRIPE_FEE, number_format( $data['fee'], 2, '.', '' ) ) : $order->update_meta_data( self::FKWCS_STRIPE_FEE, 0 );
+		( ! empty( $data['net'] ) ) ? $order->update_meta_data( self::FKWCS_STRIPE_NET, number_format( $data['net'], 2, '.', '' ) ) : $order->update_meta_data( self::FKWCS_STRIPE_NET, 0 );
 		( ! empty( $data['currency'] ) ) ? $order->update_meta_data( self::FKWCS_STRIPE_CURRENCY, $data['currency'] ) : $order->update_meta_data( self::FKWCS_STRIPE_CURRENCY, '' );
 	}
 
@@ -241,7 +249,7 @@ abstract class Helper {
 	public static function add_payment_intent_to_order( $payment_intent, $order ) {
 
 
-		$order->add_order_note( sprintf( /* translators: $1%s payment intent ID */ __( 'Stripe payment intent created (Payment Intent ID: %1$s)', 'funnelkit-stripe-woo-payment-gateway' ), $payment_intent->id ) );
+		$order->add_order_note( sprintf( /* translators: %1$s payment intent ID */ __( 'The customer has initiated and payment intent created with ID %1$s. The customer had not completed the payment yet.', 'funnelkit-stripe-woo-payment-gateway' ), $payment_intent->id ) );
 		$order->update_meta_data( '_fkwcs_intent_id', [
 			'id'            => $payment_intent->id,
 			'client_secret' => $payment_intent->client_secret,
@@ -301,9 +309,9 @@ abstract class Helper {
 			'call_issuer'                      => __( 'The card has been declined for an unknown reason.', 'funnelkit-stripe-woo-payment-gateway' ),
 			'card_velocity_exceeded'           => __( 'The customer has exceeded the balance or credit limit available on their card.', 'funnelkit-stripe-woo-payment-gateway' ),
 			'currency_not_supported'           => __( 'The card does not support the specified currency.', 'funnelkit-stripe-woo-payment-gateway' ),
-			'do_not_honor'                     => __( 'The card has been declined. Reason: Do not honor.', 'funnelkit-stripe-woo-payment-gateway' ),
+			'do_not_honor'                     => __( 'The bank returned the decline code do_not_honor, and did not provide any other information. We recommend that your customer contact their card issuer for more information. <a href="https://docs.stripe.com/declines">Learn more about declines</a> ', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fraudulent'                       => __( 'The payment has been declined as Stripe suspects it is fraudulent.', 'funnelkit-stripe-woo-payment-gateway' ),
-			'generic_decline'                  => __( 'The card has been declined for an unknown reason.', 'funnelkit-stripe-woo-payment-gateway' ),
+			'generic_decline'                  => __( 'The bank returned the decline code generic_decline, and did not provide any other information. We recommend that your customer contact their card issuer for more information. <a href="https://docs.stripe.com/declines">Learn more about declines</a> ', 'funnelkit-stripe-woo-payment-gateway' ),
 			'incorrect_pin'                    => __( 'The PIN entered is incorrect. ', 'funnelkit-stripe-woo-payment-gateway' ),
 			'insufficient_funds'               => __( 'The card has insufficient funds to complete the purchase.', 'funnelkit-stripe-woo-payment-gateway' ),
 			'empty_element'                    => __( 'Please select a payment method before proceeding.', 'funnelkit-stripe-woo-payment-gateway' ),
@@ -380,19 +388,27 @@ abstract class Helper {
 		$net = ! empty( $balance->net ) ? self::format_amount( $order, $balance->net ) : 0;
 
 
-		if ( $is_refund_transaction === true ) {
-			$fee = (float) self::get_stripe_fee( $order ) + (float) $fee;
-			$net = (float) self::get_stripe_net( $order ) + (float) $net;
+		$data = [
+			'fee' => $fee,
+			'net' => $net,
+		];
+		/**
+		 * Check if we have an option enabled to convert the currency fee to the order currency
+		 */
+		if ( ( 'yes' === get_option( 'fkwcs_currency_fee', 'no' ) && ! empty( $balance->exchange_rate ) ) ) {
+			$data['currency'] = $order->get_currency();
+			$data['fee']      = $data['fee'] / $balance->exchange_rate;
+			$data['net']      = $data['net'] / $balance->exchange_rate;
+		} else {
+			$data['currency'] = ! empty( $balance->currency ) ? strtoupper( $balance->currency ) : null;
+
 		}
 
-		$currency = ! empty( $balance->currency ) ? strtoupper( $balance->currency ) : null;
+		if ( $is_refund_transaction === true ) {
 
-		$data = [
-			'fee'      => $fee,
-			'net'      => $net,
-			'currency' => $currency,
-		];
-
+			$data['fee'] = (float) self::get_stripe_fee( $order ) + (float) $data['fee'];
+			$data['net'] = (float) self::get_stripe_net( $order ) + (float) $data['net'];
+		}
 		self::update_stripe_transaction_data( $order, $data );
 
 		if ( is_callable( [ $order, 'save' ] ) ) {
@@ -527,7 +543,7 @@ abstract class Helper {
 		}
 
 		if ( ! empty( $meta_value ) ) {
-			return $meta_value;
+			return maybe_unserialize( $meta_value );
 		}
 
 		return get_post_meta( $order->get_id(), $key, true );
@@ -587,12 +603,13 @@ abstract class Helper {
 	}
 
 	public static function stripe_localize_data() {
+		global $wp;
 		return [
 			'is_product_page'         => is_product() || wc_post_content_has_shortcode( 'product_page' ),
 			'is_cart'                 => is_cart(),
 			'admin_ajax'              => admin_url( 'admin-ajax.php' ),
 			'fkwcs_nonce'             => wp_create_nonce( 'fkwcs_nonce' ),
-			'shipping_required'       => wc_bool_to_string( WC()->cart->needs_shipping() ),
+			'shipping_required'       => ! empty( $wp->query_vars['order-pay'] ) ? 'no' : wc_bool_to_string( WC()->cart->needs_shipping() ),
 			'is_ssl'                  => is_ssl(),
 			'mode'                    => get_option( 'fkwcs_mode', 'test' ),
 			'js_nonce'                => wp_create_nonce( 'fkwcs_js_nonce' ),
@@ -668,9 +685,19 @@ abstract class Helper {
 	 *
 	 * @return int
 	 */
-	public static function get_formatted_amount( $total, $currency = '' ) {
+	public static function get_formatted_amount( $total, $currency = '', $multiplier = 100 ) {
 		if ( ! $currency ) {
 			$currency = get_woocommerce_currency();
+		}
+		if ( empty( $multiplier ) ) {
+			$multiplier = 100;
+		}
+		if ( in_array( strtolower( $currency ), self::get_1000_multiplier_currencies(), true ) ) {
+			$multiplier = 1000; // In cents.
+		}
+
+		if ( $multiplier > 0 ) {
+			$multiplier = absint( $multiplier );
 		}
 
 		if ( in_array( strtolower( $currency ), self::no_decimal_currencies(), true ) ) {
@@ -678,10 +705,12 @@ abstract class Helper {
 			return absint( $total );
 		}
 
-		return absint( wc_format_decimal( ( (float) $total * 100 ), wc_get_price_decimals() ) ); // In cents.
+		return absint( wc_format_decimal( ( (float) $total * $multiplier ), wc_get_price_decimals() ) ); // In cents.
 	}
+
 	/**
 	 * Check if the given set of month and year is expired or not
+	 *
 	 * @param $month string
 	 * @param $year string
 	 *
@@ -708,8 +737,6 @@ abstract class Helper {
 	}
 
 
-
-
 	/**
 	 * Tokenize card payment
 	 *
@@ -719,6 +746,15 @@ abstract class Helper {
 	 * @return object token object.
 	 */
 	public static function create_payment_token_for_user( $user_id, $payment_method, $gateway_id, $is_live ) {
+		global $wpdb;
+		$token_exists = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_payment_tokens where token =%s", $payment_method->id ), ARRAY_A );
+		if ( ! empty( $token_exists ) ) {
+			$token_obj = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
+			if ( ! is_null( $token_obj ) ) {
+				return $token_obj;
+			}
+		}
+
 		$token = new \WC_Payment_Token_CC();
 		$token->set_expiry_month( $payment_method->card->exp_month );
 		$token->set_expiry_year( $payment_method->card->exp_year );
@@ -737,4 +773,6 @@ abstract class Helper {
 	public static function Admin_Field_Sanitize_Callback( $value ) {
 		return is_array( $value ) ? $value : array();
 	}
+
+
 }

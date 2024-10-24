@@ -35,6 +35,7 @@ jQuery(function ($) {
             this.setup_ready = false;
             this.mountable = false;
             this.element_type = '';
+            this.gateway_wallet_wrapper_class = '.fkwcs_wallet_gateways';
             this.prepareStripe();
         }
 
@@ -75,18 +76,26 @@ jQuery(function ($) {
             });
             $(document.body).on('change', 'input[name="payment_method"]', function () {
                 self.showError();
+                self.unsetGateway($(this).val());
+
                 if (self.gateway_id === $(this).val()) {
-                    self.resetGateway();
+                    let valueofgateway = $(this).val();
+                    self.showPlaceOrder();
+                    setTimeout(function () {
+                        self.setGateway(valueofgateway);
+
+                    }, 100);
                 }
             });
             $(document.body).on('updated_checkout', function (e, v) {
+                if (undefined !== v && null !== v) {
+                    self.update_fragment_data(v.fragments);
+                }
                 if (self.gateway_id === self.selectedGateway()) {
                     token_radio.trigger('change');
                     self.mountGateway();
                 }
-                if (undefined !== v && null !== v) {
-                    self.update_fragment_data(v.fragments);
-                }
+
             });
 
             if (document.readyState === 'complete' || document.readyState === 'loading') {
@@ -148,11 +157,36 @@ jQuery(function ($) {
 
         }
 
+        showPlaceOrder() {
+            $('#place_order')?.show();
+            this.hideGatewayWallets();
+        }
 
-        resetGateway() {
+        hidePlaceOrder() {
+            $('#place_order')?.hide();
+        }
+
+        hideGatewayWallets() {
+            $(this.gateway_wallet_wrapper_class)?.hide();
+        }
+
+        /**
+         * This function run when person select a gateway from gateway list
+         */
+        setGateway() {
 
         }
 
+        /**
+         * This function run when person changed gateway from previous selected gateway
+         */
+        unsetGateway(gateway_id) {
+
+            if (gateway_id.indexOf('fkwcs_') < 0) {
+                this.showPlaceOrder();// place order for other gateway
+            }
+
+        }
 
         mountGateway() {
 
@@ -198,23 +232,38 @@ jQuery(function ($) {
             wcCheckoutForm.append(`<input type='hidden' name='fkwcs_source' class='fkwcs_source' value='${payment_method}'>`);
         }
 
-        getAddress() {
-            const billingCountry = document.getElementById('billing_country');
-            const billingPostcode = document.getElementById('billing_postcode');
-            const billingCity = document.getElementById('billing_city');
-            const billingState = document.getElementById('billing_state');
-            const billingAddress1 = document.getElementById('billing_address_1');
-            const billingAddress2 = document.getElementById('billing_address_2');
-
-            return {
-                country: null !== billingCountry ? billingCountry.value : '',
-                city: null !== billingCity ? billingCity.value : '',
-                postal_code: null !== billingPostcode ? billingPostcode.value : '',
-                state: null !== billingState ? billingState.value : '',
-                line1: null !== billingAddress1 ? billingAddress1.value : '',
-                line2: null !== billingAddress2 ? billingAddress2.value : '',
-            };
+        getMethodId(payment_method) {
+            return $('.fkwcs_source').val();
         }
+
+
+        getAddress(type = 'billing') {
+            const billingCountry = document.getElementById(type + '_country');
+            const billingPostcode = document.getElementById(type + '_postcode');
+            const billingCity = document.getElementById(type + '_city');
+            const billingState = document.getElementById(type + '_state');
+            const billingAddress1 = document.getElementById(type + '_address_1');
+            const billingAddress2 = document.getElementById(type + '_address_2');
+
+            let address = {
+                country: null !== billingCountry && '' !== billingCountry ? billingCountry.value : fkwcs_data.country_code,
+                city: null !== billingCity && '' !== billingCity ? billingCity.value : undefined,
+                postal_code: null !== billingPostcode && '' !== billingPostcode ? billingPostcode.value : undefined,
+                state: null !== billingState && '' !== billingState ? billingState.value : undefined,
+                line1: null !== billingAddress1 && '' !== billingAddress1 ? billingAddress1.value : undefined,
+                line2: null !== billingAddress2 && '' !== billingAddress2 ? billingAddress2.value : undefined,
+            };
+
+            // Iterate over the address object and delete any properties that are null, undefined, or an empty string
+            for (let prop in address) {
+                if (address[prop] === null || address[prop] === undefined || address[prop] === '') {
+                    address[prop] = null;
+                }
+            }
+
+            return address;
+        }
+
 
         getBillingAddress(type) {
             if ($('form#order_review').length > 0) {
@@ -222,21 +271,59 @@ jQuery(function ($) {
             }
 
             if (typeof type !== undefined && 'add_payment' === type) {
-                return {};
+                return {
+                    'name': fkwcs_data.current_user_billing.name ? fkwcs_data.current_user_billing.name : undefined,
+                    'email': fkwcs_data.current_user_billing.email ? fkwcs_data.current_user_billing.email : undefined,
+                    address: {
+                        country: null !== fkwcs_data.current_user_billing.address.country && '' !== fkwcs_data.current_user_billing.address.country ? fkwcs_data.current_user_billing.address.country : undefined,
+                        city: null !== fkwcs_data.current_user_billing.address.city && '' !== fkwcs_data.current_user_billing.address.city ? fkwcs_data.current_user_billing.address.city : undefined,
+                        postal_code: null !== fkwcs_data.current_user_billing.address.postal_code && '' !== fkwcs_data.current_user_billing.address.postal_code ? fkwcs_data.current_user_billing.address.postal_code : undefined,
+                        state: null !== fkwcs_data.current_user_billing.address.state && '' !== fkwcs_data.current_user_billing.address.state ? fkwcs_data.current_user_billing.address.state : undefined,
+                        line1: null !== fkwcs_data.current_user_billing.address.line1 && '' !== fkwcs_data.current_user_billing.address.line1 ? fkwcs_data.current_user_billing.address.line1 : undefined,
+                        line2: null !== fkwcs_data.current_user_billing.address.line2 && '' !== fkwcs_data.current_user_billing.address.line2 ? fkwcs_data.current_user_billing.address.line2 : undefined,
+                    }
+
+                };
             }
             const billingFirstName = document.getElementById('billing_first_name');
             const billingLastName = document.getElementById('billing_last_name');
             const billingEmail = document.getElementById('billing_email');
             const billingPhone = document.getElementById('billing_phone');
 
+            const firstName = null !== billingFirstName ? billingFirstName.value : undefined;
+            const lastName = null !== billingLastName ? billingLastName.value : undefined;
+            let getBilling = {
+                name: firstName + ' ' + lastName,
+                email: null !== billingEmail ? billingEmail.value : '',
+                phone: null !== billingPhone ? billingPhone.value : '',
+                address: this.getAddress()
+            };
+
+            return getBilling;
+        }
+
+        getShippingAddress() {
+            let ship_to_different = $('#ship-to-different-address-checkbox');
+            let address = this.getAddress();
+            let billingFirstName = document.getElementById('billing_first_name');
+            let billingLastName = document.getElementById('billing_last_name');
+            if (ship_to_different.length > 0 && ship_to_different.is(":checked")) {
+                address = this.getAddress('shipping');
+                const shippingFirstName = document.getElementById('shipping_first_name');
+                const shippingLastName = document.getElementById('shipping_last_name');
+                if (null !== shippingFirstName && null !== shippingLastName) {
+                    billingFirstName = shippingFirstName;
+                    billingLastName = shippingLastName;
+                }
+
+            }
+
             const firstName = null !== billingFirstName ? billingFirstName.value : '';
             const lastName = null !== billingLastName ? billingLastName.value : '';
 
             return {
                 name: firstName + ' ' + lastName,
-                email: null !== billingEmail ? billingEmail.value : '',
-                phone: null !== billingPhone ? billingPhone.value : '',
-                address: this.getAddress(),
+                address: address,
             };
         }
 
@@ -262,7 +349,6 @@ jQuery(function ($) {
             const order_id = decodeURIComponent(partials[4]);
             const payment_method = decodeURIComponent(partials[5]);
             const is_save_payment_source_used = decodeURIComponent(partials[6]);
-
 
             // Cleanup the URL
             if (this.gateway_id === payment_method) {
@@ -337,20 +423,24 @@ jQuery(function ($) {
         }
 
         getAmountCurrency() {
-            let parent = $(`#${this.gateway_id}_payment_data`);
-            if (parent.length === 0) {
+
+
+            if (this.fragments.hasOwnProperty('fkwcs_paylater_data')) {
+
+                return {'amount': parseFloat(fkwcs_data.fkwcs_paylater_data.amount), 'currency': fkwcs_data.fkwcs_paylater_data.currency.toUpperCase()};
+            } else {
                 return {'amount': 0, 'currency': 'USD'};
+
             }
 
-            let amount = parent.data('amount');
-            let currency = parent.data('currency');
-            return {'amount': parseFloat(amount), 'currency': currency.toUpperCase()};
+
         }
 
         isAvailable() {
             let div = $(`#payment_method_${this.gateway_id}`);
             return div.length > 0;
         }
+
 
     }
 
@@ -395,24 +485,29 @@ jQuery(function ($) {
 
 
         update_fragment_data(fragments) {
+
             super.update_fragment_data(fragments);
             this.updateElements(fragments);
         }
 
         updateElements(fragments) {
-            if (!fragments.hasOwnProperty('fkwcs_paylater_data')) {
-                return;
-            }
-            let amount = fragments.fkwcs_paylater_data.amount;
-            let currency = fragments.fkwcs_paylater_data.currency;
-            if (amount !== this.current_amount && null !== this.element) {
-                this.element.update({'currency': currency.toUpperCase(), 'amount': amount});
-                this.current_amount = amount;
-            }
-            if (true === this.message_element) {
-                this.unmount();
-                this.createMessage(amount, currency);
-                this.mountGateway(false);
+            try {
+                if (!fragments.hasOwnProperty('fkwcs_paylater_data')) {
+                    return;
+                }
+                let amount = fragments.fkwcs_paylater_data.amount;
+                let currency = fragments.fkwcs_paylater_data.currency;
+                if (amount !== this.current_amount && null !== this.element) {
+                    this.element.update({'currency': currency.toUpperCase(), 'amount': amount});
+                    this.current_amount = amount;
+                }
+                if (true === this.message_element) {
+                    this.unmount();
+                    this.createMessage(amount, currency);
+                    this.mountGateway(false);
+                }
+            } catch (e) {
+                console.log(e);// Log Error
             }
         }
 
@@ -438,18 +533,15 @@ jQuery(function ($) {
             });
         }
 
-        confirmStripePayment(clientSecret, redirectURL, intent_type, authenticationAlready = false, order_id = false) {
+        confirmStripePayment(clientSecret, redirectURL, intent_type, order_id = false) {
             if ('' === this.confirmCallBack || !this.stripe.hasOwnProperty(this.confirmCallBack)) {
                 return;
             }
 
             if (this.gateway_id === this.selectedGateway()) {
-                this.stripe[this.confirmCallBack](clientSecret, {
-                    payment_method: this.paymentMethods(),
-                    payment_method_options: this.paymentMethodOptions(),
-                    return_url: homeURL + redirectURL,
-                }).then((response) => {
+                this.stripe[this.confirmCallBack](clientSecret, this.stripePaymentMethodOptions(redirectURL)).then((response) => {
                     if (response.error) {
+                        this.logError(response.error, order_id);
                         this.showError(response.error);
                         return;
                     }
@@ -458,6 +550,19 @@ jQuery(function ($) {
                     this.showError('user cancelled');
                 });
             }
+        }
+
+        /**
+         * variable needed for verify payment using client secrets
+         * @returns {{return_url: *, payment_method_options: {}, payment_method: {billing_details: (*|{}|{address: *, phone: *|string, name: string, email: *|string})}}}
+         */
+        stripePaymentMethodOptions(redirectURL) {
+            return {
+                payment_method: this.paymentMethods(),
+                payment_method_options: this.paymentMethodOptions(),
+                //shipping: this.getShippingAddress(),
+                return_url: homeURL + redirectURL,
+            };
         }
 
         paymentMethodTypes() {
@@ -474,6 +579,7 @@ jQuery(function ($) {
             };
         }
 
+
         unmount() {
             let selector = $(`.${this.gateway_id}_select`);
             if (null !== this.element && '' !== selector.html()) {
@@ -481,7 +587,7 @@ jQuery(function ($) {
             }
         }
 
-        resetGateway() {
+        setGateway() {
             if (false === this.mountable) {
                 return;
             }
@@ -540,6 +646,7 @@ jQuery(function ($) {
             this.mountable = true;
             this.payment_data = {};
             this.element_data = {};
+            this.amount_to_small = false;
         }
 
 
@@ -547,6 +654,7 @@ jQuery(function ($) {
 
             this.gateway_container = '.fkwcs-stripe-elements-form';
             if ('payment' === fkwcs_data.card_form_type) {
+
                 this.setupUPEGateway();
                 return;
             }
@@ -663,7 +771,7 @@ jQuery(function ($) {
         }
 
 
-        resetGateway() {
+        setGateway() {
 
             if ('payment' === fkwcs_data.card_form_type) {
                 if (null !== this.payment) {
@@ -700,6 +808,7 @@ jQuery(function ($) {
                 }
                 return;
             }
+
             if (!this.isInlineGateway() && null !== this.cardNumber) {
                 this.cardNumber.mount('.fkwcs-stripe-elements-wrapper .fkwcs-credit-card-number');
                 this.cardExpiry.mount('.fkwcs-stripe-elements-wrapper .fkwcs-credit-expiry');
@@ -745,6 +854,7 @@ jQuery(function ($) {
         handleSourceResponse(response) {
             if (response.error) {
                 this.showNotice(response.error);
+                this.logError(response.error);
                 return;
             }
             if (response.paymentMethod) {
@@ -889,12 +999,17 @@ jQuery(function ($) {
         }
 
         add_payment_method(e) {
-            let source = this.hasSource();
-            if ('' === source) {
-                this.createSource('add_payment');
-                e.preventDefault();
-                return false;
+            if (this.gateway_id === this.selectedGateway()) {
+
+
+                let source = this.hasSource();
+                if ('' === source) {
+                    this.createSource('add_payment');
+                    e.preventDefault();
+                    return false;
+                }
             }
+
         }
 
         onEarlyRenewalSubmit(e) {
@@ -958,9 +1073,9 @@ jQuery(function ($) {
             $(document.body).on('change', '.woocommerce-SavedPaymentMethods-tokenInput', function () {
                 let name = $(this).attr('name');
                 let el = $('.fkwcs-stripe-elements-wrapper');
-                if (name == 'wc-fkwcs_stripe-payment-token') {
+                if (name === 'wc-fkwcs_stripe-payment-token') {
                     let vl = $(this).val();
-                    if ('new' == vl) {
+                    if ('new' === vl) {
                         el.show();
                     } else {
                         el.hide();
@@ -974,28 +1089,75 @@ jQuery(function ($) {
 
         setupUPEGateway() {
             this.setup_ready = true;
-            this.payment_data = fkwcs_data.fkwcs_payment_data;
-            this.element_data = this.payment_data.element_data;
-            this.element_options = this.payment_data.element_options;
+            let paymentData = fkwcs_data.fkwcs_payment_data;
+            this.element_data = paymentData.element_data;
+            this.element_options = paymentData.element_options;
+            this.element_options.fields.billingDetails = paymentData.element_options.fields.billingDetails;
+
+
+            if (typeof this.element_options.fields.billingDetails !== 'object') {
+                this.element_options.fields.billingDetails = {};
+                this.element_options.fields.billingDetails.address = 'never';
+            }
+            this.element_options.fields.billingDetails.name = jQuery("#billing_first_name").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.email = jQuery("#billing_email").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.phone = jQuery("#billing_phone").length ? "never" : "auto";
+
+
+            if (fkwcs_data.is_add_payment_page === 'yes') {
+
+
+                this.element_options.defaultValues = {
+                    billingDetails: {
+                        'name': fkwcs_data.current_user_billing.name ? fkwcs_data.current_user_billing.name : undefined,
+                        'email': fkwcs_data.current_user_billing.email ? fkwcs_data.current_user_billing.email : undefined
+                    }
+                };
+            } else {
+                this.element_options.defaultValues = {
+                    billingDetails: {
+                        name: jQuery("#billing_first_name").val() + " " + jQuery("#billing_last_name").val(),
+                        email: jQuery("#billing_email").val(),
+                        phone: jQuery("#billing_phone").val()
+                    }
+                };
+            }
+
             this.createStripeElements();
 
         }
 
-        createStripeElements(options = {}) {
+        createStripeElements(options = {}, reset = false) {
+
             this.elements = this.stripe.elements(this.element_data);
             this.payment = this.elements.create('payment', this.element_options);
-
             this.payment.on('change', function (event) {
                 current_upe_gateway = event.value.type;
             });
-            this.link(this.elements);
+            this.payment.on('ready', (event) => {
+                this.amount_to_small = false;
+            });
+            this.payment.on('loaderror', (event) => {
+                if ('amount_too_small' === event.error.code) {
+                    this.amount_to_small = true;
+                }
+            });
+            if (false === reset) {
+                this.link(this.elements);
+            }
         }
 
+
         mountElements() {
-            let selector = '.fkwcs-stripe-payment-elements-field.StripeElement';
-            if ($(selector).length === 0 && null !== this.payment) {
-                this.payment.mount('.fkwcs-stripe-payment-elements-field');
+            try {
+                let selector = '.fkwcs-stripe-payment-elements-field.StripeElement';
+                if ($(selector).length === 0 && null !== this.payment) {
+                    this.payment.mount('.fkwcs-stripe-payment-elements-field');
+                }
+            } catch (e) {
+
             }
+
         }
 
 
@@ -1023,6 +1185,11 @@ jQuery(function ($) {
                 return;
             }
             this.element_data = element_data;
+            if (true === this.amount_to_small) {
+                this.createStripeElements({}, true);
+                this.mountElements();
+                return;
+            }
             let keys = this.updatableElementKeys();
             for (let key in element_data) {
                 if (keys.indexOf(key) < 0) {
@@ -1044,6 +1211,7 @@ jQuery(function ($) {
 
             let payment_submit = this.elements.submit();
             payment_submit.then((response) => {
+
                 this.stripe.createPaymentMethod({
                     elements: this.elements, params: {
                         billing_details: this.getBillingAddress()
@@ -1058,6 +1226,7 @@ jQuery(function ($) {
                              * We do not need to print any validation related errors here since they are auto showed up
                              */
                             this.showError(false);
+                            scrollToDiv('.payment_method_fkwcs_stripe');
                         }
                         return;
                     }
@@ -1128,9 +1297,7 @@ jQuery(function ($) {
                 $(document.body).on('keyup', '#billing_email', function () {
                     modal.launch({email: $(this).val()});
                 });
-                if ('yes' === fkwcs_data.link_authentication_page_load) {
-                    modal.launch({email: $('#billing_email').val()});
-                }
+
                 modal.on('autofill', function (e) {
                     let billing_address = e.value?.billingAddress;
                     let shipping_address = e.value?.shippingAddress;
@@ -1246,7 +1413,7 @@ jQuery(function ($) {
             });
         }
 
-        resetGateway() {
+        setGateway() {
             this.p24.unmount();
             this.mountGateway();
         }
@@ -1323,7 +1490,7 @@ jQuery(function ($) {
             this.setup_ready = true;
         }
 
-        resetGateway() {
+        setGateway() {
             this.sepa.unmount();
             this.mountGateway();
         }
@@ -1361,20 +1528,36 @@ jQuery(function ($) {
         processOrderReview(e) {
             if (this.gateway_id === this.selectedGateway()) {
                 if ('' === this.paymentMethod && !this.isSepaSaveCardChosen()) {
-                    this.createPaymentMethod();
+                    this.createPaymentMethod('order_review');
                     return false;
                 }
             }
         }
 
-        createPaymentMethod() {
+
+        add_payment_method(e) {
+            if (this.gateway_id === this.selectedGateway()) {
+
+                let source_el = $('.fkwcs_source');
+                if (source_el.length > 0) {
+                    return;
+                }
+                this.createPaymentMethod('add_payment');
+                e.preventDefault();
+                return false;
+
+            }
+        }
+
+
+        createPaymentMethod(type = 'submit') {
             /**
              * @todo
              * need return true if cart total is 0
              */
 
             this.stripe.createPaymentMethod({
-                type: 'sepa_debit', sepa_debit: this.sepa, billing_details: this.getBillingAddress(),
+                type: 'sepa_debit', sepa_debit: this.sepa, billing_details: this.getBillingAddress(type),
             }).then((result) => {
 
                 if (result.error) {
@@ -1503,7 +1686,7 @@ jQuery(function ($) {
 
         }
 
-        resetGateway() {
+        setGateway() {
             this.ideal.unmount('.fkwcs_stripe_ideal_form .fkwcs_stripe_ideal_select');
             this.mountGateway();
         }
@@ -1659,7 +1842,704 @@ jQuery(function ($) {
             let billing_country = $('#billing_country').val();
             return ['US'].indexOf(billing_country) > -1;
         }
+
+        stripePaymentMethodOptions(redirectURL) {
+            return {
+                payment_method: this.paymentMethods(),
+                payment_method_options: this.paymentMethodOptions(),
+                return_url: homeURL + redirectURL,
+            };
+        }
     }
+
+
+    class FKWCS_ApplePay extends Gateway {
+        constructor(stripe, gateway_id) {
+
+            super(stripe, gateway_id);
+            this.error_container = '.fkwcs_stripe_apple_pay_error';
+            this.mountable = true;
+            this.gateway_class = 'li.payment_method_fkwcs_stripe_apple_pay';
+            this.apple_place_btn_wrapper = '.fkwcs_apple_pay_gateway_wrap';
+            this.apple_pay_btn = '';
+            this.payment_request_options = null;
+            this.shipping_options = [];
+            this.request_data = {};
+            this.express_btn_click = false;
+            let ct = this;
+            $(document.body).on('fkwcs_smart_buttons_showed', function (key, res, two) {
+                if (two.applePay) {
+                    if ($('li.payment_method_fkwcs_stripe_apple_pay').length > 0) {
+                        $('li.payment_method_fkwcs_stripe_apple_pay').show();
+                        ct.mountGateway();
+                    }
+                } else {
+
+                }
+            });
+        }
+
+
+        setGateway() {
+            this.hidePlaceOrder();
+        }
+
+
+        mountGateway() {
+            this.hidePlaceOrder();
+            this.showButton();
+        }
+
+
+        showButton() {
+            this.PrepareButton();
+        }
+
+
+        PrepareButton() {
+            let wrapper = $(this.apple_place_btn_wrapper);
+            wrapper.hide();
+            this.apple_pay_btn = wrapper;
+            this.apple_pay_btn.addClass('fkwcs-apple-button-container');
+            $('#place_order').after(this.apple_pay_btn);
+            if (this.gateway_id !== this.selectedGateway()) {
+                return;
+            }
+            this.hideGatewayWallets();
+            wrapper.show();
+        }
+
+
+        hidePlaceOrder() {
+            if (this.gateway_id !== this.selectedGateway()) {
+                return;
+            }
+            this.hideGatewayWallets();
+            $('.fkwcs-apple-button-container')?.show();
+            $('#place_order')?.hide();
+        }
+
+        showPlaceOrder() {
+            this.hideGatewayWallets();
+        }
+
+    }
+
+    class FKWCS_GOOGLEPAY extends Gateway {
+        constructor(stripe, gateway_id) {
+            super(stripe, gateway_id);
+            if (!fkwcs_data.hasOwnProperty('google_pay')) {
+                return;
+            }
+
+
+            this.error_container = '.fkwcs_stripe_google_pay_error';
+            this.mountable = true;
+            this.gateway_class = 'li.payment_method_fkwcs_stripe_google_pay';
+            this.gpay_button_html = '';
+            this.google_pay_client = null;
+            this.payment_request_options = null;
+            this.shipping_options = [];
+            this.request_data = {};
+            this.google_is_ready = null;
+            this.express_gpay_available = false;
+            this.express_btn_click = false;
+            this.createPaymentClient();
+            $(document.body).on('fkwcs_smart_buttons_showed', this.checkexpressSmartButtonAvailable.bind(this));
+            $(document.body).on('fkwcs_smart_buttons_not_available', this.hideGatewayForExpressButtons.bind(this));
+
+        }
+
+        isModeLiveMerchantIDNotAvailable() {
+            return 'live' == fkwcs_data.mode && '' == fkwcs_data.google_pay.merchant_id;
+        }
+
+        checkexpressSmartButtonAvailable(e, v, result) {
+            this.express_gpay_available = result.googlePay;
+            if (false === this.express_gpay_available && this.isModeLiveMerchantIDNotAvailable()) {
+                $(this.gateway_class).hide();
+            }
+        }
+
+        hideGatewayForExpressButtons() {
+            if (this.isModeLiveMerchantIDNotAvailable()) {
+                $(this.gateway_class).hide();
+                $('input[name="payment_method"]')?.eq(0).trigger('click');
+            }
+        }
+
+        createPaymentClient() {
+            if ('live' == fkwcs_data.mode && '' == fkwcs_data.google_pay.merchant_id) {
+                return;
+            }
+            try {
+                this.google_pay_client = new google.payments.api.PaymentsClient(this.getMerchantData());
+                let request_data = this.googlePayVersion();
+                request_data.allowedPaymentMethods = [this.getBaseCardBrand()];
+                this.google_pay_client.isReadyToPay(request_data).then(() => {
+                    this.google_is_ready = true;
+                    $(document.body).trigger('fkwcs_google_ready_pay', [this.google_pay_client]);
+                    this.createCheckoutExpressBtn();
+                    $(this.gateway_class).show();
+                }).catch((err) => {
+                    console.log('error', err);
+                });
+
+
+            } catch (e) {
+                console.log(e);
+            }
+        }
+
+
+        googlePayVersion() {
+            return {
+                "apiVersion": 2,
+                "apiVersionMinor": 0
+            };
+        }
+
+
+        getBaseCardBrand() {
+            return {
+                type: 'CARD',
+                parameters: {
+                    allowedAuthMethods: ["PAN_ONLY"],
+                    allowedCardNetworks: ["AMEX", "DISCOVER", "INTERAC", "JCB", "MASTERCARD", "VISA"],
+                    assuranceDetailsRequired: true
+                },
+                tokenizationSpecification: {
+                    type: "PAYMENT_GATEWAY",
+                    parameters: {
+                        gateway: 'stripe',
+                        "stripe:version": "2018-10-31",
+                        "stripe:publishableKey": fkwcs_data.pub_key
+                    }
+                }
+            };
+        }
+
+
+        getMerchantData() {
+            let data = {
+                environment: ('test' === fkwcs_data.mode ? 'TEST' : 'PRODUCTION'),
+                merchantId: fkwcs_data.google_pay.merchant_id,
+                merchantName: fkwcs_data.google_pay.merchant_name,
+                paymentDataCallbacks: {
+                    onPaymentAuthorized: function onPaymentAuthorized() {
+                        return new Promise(function (resolve) {
+                            resolve({
+                                transactionState: "SUCCESS"
+                            });
+                        }.bind(this));
+                    },
+                }
+            };
+            if ('test' === fkwcs_data.mode) {
+                delete data.merchantId;
+            }
+            if (this.shippingAddressRequired()) {
+                data.paymentDataCallbacks.onPaymentDataChanged = this.paymentDataChanged.bind(this);
+            }
+            return data;
+
+        }
+
+
+        setGateway() {
+            this.hidePlaceOrder();
+            this.showGpayButton();
+        }
+
+
+        mountGateway() {
+            this.hidePlaceOrder();
+            this.showGpayButton();
+        }
+
+        update_fragment_data(fragments) {
+            super.update_fragment_data(fragments);
+            this.update_transaction_data(fragments?.fkwcs_google_pay_data);
+            if (this.google_is_ready) {
+                $(this.gateway_class)?.show();
+            }
+        }
+
+        billingAddressRequired() {
+            if ($('form.checkout').length > 0) {
+                if (this.field_required('billing_phone') || this.field_required('billing_email')) {
+                    return true;
+                }
+                return false;
+            }
+            return true;
+        }
+
+        showGpayButton() {
+            if (true === this.google_is_ready) {
+                this.createGpayButton();
+                $(this.gateway_class).show();
+            } else if (this.isModeLiveMerchantIDNotAvailable()) {
+                this.appendGpayBrowserBased();
+            } else {
+                this.showPlaceOrder();
+            }
+        }
+
+        paymentDataChanged(data) {
+            return new Promise((resolve) => {
+                let response = this.update_payment_data(data);
+                response.then((response) => {
+                    resolve(response.paymentRequestUpdate);
+                    $('body').trigger('update_checkout', {update_shipping_method: false});
+                });
+                response.catch((data) => {
+                    resolve(data);
+                });
+            });
+        }
+
+        map_google_pay_address(shippingAddress) {
+            return {'country': shippingAddress.countryCode, 'postcode': shippingAddress.postalCode, 'city': shippingAddress.locality, 'state': shippingAddress.administrativeArea};
+        }
+
+
+        update_payment_data(data, extraData) {
+            return new Promise((resolve) => {
+                let shipping_method = data.shippingOptionData.id === 'default' ? null : data.shippingOptionData.id;
+
+                $.ajax({
+                    url: fkwcs_data.wc_endpoints.fkwcs_gpay_update_shipping_address,
+                    dataType: 'json',
+                    method: 'POST',
+                    data: $.extend({'fkwcs_nonce': fkwcs_data.fkwcs_nonce}, {
+                        shipping_address: this.map_google_pay_address(data.shippingAddress),
+                        shipping_method: [shipping_method]
+                    }, extraData),
+                    success: (response) => {
+                        console.log('response', response);
+                        resolve(response);
+                    }
+                });
+            });
+        }
+
+        /**
+         * Create GooGle Pay Button with custom wrapper
+         * @param callback
+         */
+        createGooglePayButton(callback, indentifier = '') {
+
+            callback.buttonSizeMode = 'fill';
+            indentifier += " fkwcs_google_button_theme_" + fkwcs_data.google_pay_btn_theme;
+
+            if ('yes' === fkwcs_data.is_change_payment_page || 'yes' === fkwcs_data.is_pay_for_order_page) {
+                this.update_transaction_data(fkwcs_data.gpay_cart_data);
+            }
+            return $(`<div class='fkwcs_google_pay_wrapper fkwcs_smart_product_button ${indentifier}'></div>`).html(this.google_pay_client.createButton(callback));
+        }
+
+
+        createGpayButton() {
+            if (this.gpay_button_html) {
+                this.gpay_button_html.remove();
+            }
+            if ('yes' === fkwcs_data.google_pay_as_regular) {
+                this.gpay_button_html = this.createGooglePayButton(this.getGatewayOptions(), 'fkwcs-gpay-button-container fkwcs_wallet_gateways');
+                $('#place_order').after(this.gpay_button_html);
+            }
+        }
+
+        appendGpayBrowserBased() {
+
+            if (false === this.express_gpay_available) {
+                $(this.gateway_class).hide();
+            }
+            if ($('.woocommerce-checkout-payment').find('.fkwcs_wallet_gateways_gpay').length > 0) {
+                $('.fkwcs_wallet_gateways_gpay').show();
+                return;
+            }
+            setTimeout(() => {
+                $('.fkwcs_wallet_gateways_gpay').remove();
+                let place_order = $('#place_order');
+                let stripeGpay = $('#fkwcs_custom_express_button .fkwcs_express_google_pay');
+                if (stripeGpay.length > 0) {
+                    place_order.after($('#fkwcs_custom_express_button').clone().addClass('fkwcs_wallet_gateways fkwcs_wallet_gateways_gpay'));
+                    $('.fkwcs_wallet_gateways_gpay').show();
+                    $(this.gateway_class).show();
+                }
+            }, 300);
+        }
+
+        createCheckoutExpressBtn() {
+            if ('yes' !== fkwcs_data.google_pay_as_express || 'yes' !== fkwcs_data.is_checkout) {
+                return;
+            }
+            let checkout_express = $('#wfacp_smart_button_fkwcs_google_pay');
+            if (checkout_express.length > 0) {
+                checkout_express.html(this.createGooglePayButton(this.getExpressOptions(), 'fkwcs-express-wfacp'));
+                this.hidePaymentRequestBtn();
+                checkout_express.show();
+            } else {
+
+                let native_checkout = jQuery('.fkwcs_custom_express_button').eq(0);
+                if (native_checkout.length > 0) {
+                    native_checkout.after(this.createGooglePayButton(this.getExpressOptions(), 'fkwcs-express-native'));
+                    this.hidePaymentRequestBtn();
+                }
+            }
+        }
+
+        hidePaymentRequestBtn() {
+            let link_button = $('.fkwcs_express_payment_request_api');// Check for Link
+            let apple_pay_button = $('.fkwcs_express_apple_pay');// Check for Link
+            let google_pay_button = $('.fkwcs_express_google_pay');// Check for Link
+            if (apple_pay_button.length > 0) {
+                return;
+            }
+
+            if (link_button.length > 0 || google_pay_button.length > 0) {
+                google_pay_button?.hide();
+                link_button?.hide();
+            }
+
+        }
+
+
+        /**
+         * Create button for Express Button on Checkout page.
+         * @returns {{onClick: any, buttonType: *, buttonColor: *}}
+         */
+
+        getExpressOptions() {
+            return {
+                buttonColor: fkwcs_data.google_pay_btn_color,
+                buttonType: fkwcs_data.google_pay_btn_theme,
+                onClick: this.startExpressGpayPayment.bind(this),
+            };
+        }
+
+        /**
+         * Create Button in Regular Payment Gateway
+         * @returns {{onClick: any, buttonType: *, buttonColor: *}}
+         */
+
+        getGatewayOptions() {
+            return {
+                buttonColor: fkwcs_data.google_pay_btn_color,
+                buttonType: fkwcs_data.google_pay_btn_theme,
+                onClick: this.startGpayPayment.bind(this),
+            };
+        }
+
+        startExpressGpayPayment() {
+            this.express_btn_click = true;
+            this.startGpayPayment();
+        }
+
+
+        startGpayPayment() {
+            this.google_pay_client.loadPaymentData(this.buildGpayPaymentData()).then(this.processGpayData.bind(this)).catch((error) => {
+                if (error.statusCode === "CANCELED") {
+                    return;
+                }
+                if (error.statusMessage && error.statusMessage.indexOf("paymentDataRequest.callbackIntent") > -1) {
+                    this.showError({"message": "DEVELOPER_ERROR_WHITELIST"});
+                } else {
+                    this.showError({"message": error.statusMessage});
+                }
+            });
+        }
+
+
+        processGpayData(paymentData) {
+            let data = JSON.parse(paymentData.paymentMethodData.tokenizationData.token);
+            this.updateAddress(paymentData);
+            // convert token to payment method
+            this.stripe.createPaymentMethod({
+                type: 'card',
+                card: {token: data.id},
+                billing_details: this.getBillingAddress()
+            }).then((result) => {
+                if (result.error) {
+                    return this.showError(result.error);
+                }
+                this.appendMethodId(result.paymentMethod.id);
+            });
+        }
+
+        shippingAddressRequired() {
+
+            if ('yes' === fkwcs_data.is_change_payment_page || 'yes' === fkwcs_data.is_pay_for_order_page) {
+                if ('yes' !== fkwcs_data.gpay_cart_data.shipping_required) {
+                    return false;
+                }
+            }
+            if ('yes' !== fkwcs_data.shipping_required) {
+                return false;
+            }
+            if (!this.isCheckoutPage()) {
+                return true;
+            }
+            let field = ['address_1', 'city', 'postcode', 'state', 'country'];
+
+            if ($('form.checkout').length > 0) {
+                let type = 'billing';
+                if ($('#ship-to-different-address-checkbox').is(":checked")) {
+                    type = 'shipping';
+                }
+                for (let i = 0; i < field.length; i++) {
+                    let key = field[i];
+                    let required = this.field_required(`${type}_${key}`);
+                    if (required) {
+                        return true;
+                    }
+                }
+            }
+
+
+            return false;
+        }
+
+        isCheckoutPage() {
+            return $('form.checkout').length > 1;
+        }
+
+        buildGpayPaymentData() {
+            let request = $.extend({}, this.googlePayVersion(), {
+                emailRequired: this.field_required('billing_email') || !this.isCheckoutPage(),
+                environment: ('test' === fkwcs_data.mode ? 'TEST' : 'PRODUCTION'),
+                merchantInfo: {
+                    merchantName: fkwcs_data.google_pay.merchant_name,
+                    merchantId: fkwcs_data.google_pay.merchant_id,
+                },
+                allowedPaymentMethods: [this.getBaseCardBrand()],
+            });
+
+
+            request.shippingAddressRequired = this.shippingAddressRequired();
+
+            request.callbackIntents = ["PAYMENT_AUTHORIZATION"];
+            request.allowedPaymentMethods[0].parameters.billingAddressRequired = this.billingAddressRequired();
+            if (request.allowedPaymentMethods[0].parameters.billingAddressRequired) {
+                request.allowedPaymentMethods[0].parameters.billingAddressParameters = {
+                    format: "FULL",
+                    phoneNumberRequired: this.field_required('billing_phone') || !this.isCheckoutPage()
+                };
+            }
+            request = $.extend(request, this.request_data);
+            if (request.shippingAddressRequired) {
+                request.shippingAddressParameters = {};
+                request.shippingOptionRequired = true;
+                request.shippingOptionParameters = {
+                    shippingOptions: this.shipping_options
+                };
+                request.callbackIntents = ["SHIPPING_ADDRESS", "SHIPPING_OPTION", "PAYMENT_AUTHORIZATION"];
+
+            }
+            return request;
+        }
+
+
+        update_transaction_data(fkwcs_google_pay_data) {
+            let disaplay_items = fkwcs_google_pay_data.order_data.displayItems;
+            this.request_data = {
+                transactionInfo: {
+                    countryCode: fkwcs_google_pay_data.order_data.country_code.toUpperCase(),
+                    currencyCode: fkwcs_google_pay_data.order_data.currency.toUpperCase(),
+                    totalPriceStatus: "ESTIMATED",
+                    totalPrice: fkwcs_google_pay_data.order_data.total.amount.toString(),
+                    displayItems: disaplay_items,
+                    totalPriceLabel: fkwcs_google_pay_data.order_data.total.label
+                }
+            };
+            if (fkwcs_google_pay_data?.shipping_options) {
+                this.shipping_options = fkwcs_google_pay_data?.shipping_options;
+            }
+        }
+
+        field_required(key) {
+            if ($('form.checkout').length > 0) {
+                return $(`#${key}_field`)?.length > 0 && $(`#${key}_field`).hasClass('validate-required') && '' == $(`#${key}`).val();
+            }
+            return false;
+        }
+
+
+        hidePlaceOrder() {
+            $('.fkwcs-gpay-button-container')?.show();
+            $('#place_order')?.hide();
+        }
+
+        showPlaceOrder() {
+            this.hideGatewayWallets();
+        }
+
+        appendMethodId(source) {
+            super.appendMethodId(source);
+            if (this.express_btn_click) {
+                $('#terms')?.prop('checked', true);
+            }
+            $('#payment_method_fkwcs_stripe_google_pay')?.trigger('click');
+
+            if ($('form#order_review').length > 0) {
+                $('form#order_review').trigger('submit');
+            } else {
+                $('form.checkout').trigger('submit');
+
+            }
+        }
+
+        /**
+         * Update checkout field with address details and also return in json data.
+         * @param type
+         * @param addressData
+         * @returns {{}}
+         */
+        mapAddress(type, addressData) {
+            let json = {};
+            if (addressData.hasOwnProperty('address1')) {
+                $(`#${type}_address_1`)?.val(addressData?.address1);
+                json[`line_1`] = addressData?.address1;
+            }
+            if (addressData.hasOwnProperty('address2')) {
+                $(`#${type}_address_2`)?.val(addressData?.address2 + addressData?.address3);
+                json[`line_2`] = addressData?.address2 + addressData?.address3;
+
+            }
+            if (addressData.hasOwnProperty('locality')) {
+                $(`#${type}_city`)?.val(addressData?.locality);
+                json[`city`] = addressData?.locality;
+            }
+            if (addressData.hasOwnProperty('postalCode')) {
+                $(`#${type}_postcode`)?.val(addressData?.postalCode);
+                json[`postal_code`] = addressData?.postalCode;
+            }
+            if (addressData.hasOwnProperty('administrativeArea')) {
+                $(`#${type}_state`)?.val(addressData?.administrativeArea);
+                json[`state`] = addressData?.administrativeArea;
+            }
+            if (addressData.hasOwnProperty('countryCode')) {
+                $(`#${type}_country`)?.val(addressData?.countryCode);
+                json[`country`] = addressData?.countryCode;
+            }
+            if (addressData.hasOwnProperty('name')) {
+                json[`name`] = addressData.name;
+                if ($(`#${type}_last_name`).length > 0) {
+                    let names = addressData.name.split(' ');
+                    let first_name = names[0];
+                    let last_names = names.splice(0, 1);
+                    $(`#${type}_first_name`).val(first_name);
+                    $(`#${type}_last_name`).val(last_names.join(' '));
+
+                } else {
+                    $(`#${type}_first_name`).val(addressData.name);
+                }
+            }
+            return json;
+
+        }
+
+        confirmStripePayment(clientSecret, redirectURL, intent_type, order_id = false) {
+
+            let cardPayment = null;
+
+
+            if (intent_type == 'si') {
+                cardPayment = this.stripe.handleCardSetup(clientSecret, {payment_method: this.getMethodId()}, {handleActions: false});
+            } else {
+                cardPayment = this.stripe.confirmCardPayment(clientSecret, {payment_method: this.getMethodId()}, {handleActions: false});
+            }
+
+
+            cardPayment.then((result) => {
+                if (result.error) {
+                    this.showNotice(result.error);
+                    let source_el = $('.fkwcs_source');
+                    if (source_el.length > 0) {
+                        source_el.remove();
+                    }
+                    if (result.error.hasOwnProperty('type') && result.error.type === 'api_connection_error') {
+                        return;
+                    }
+                    this.logError(result.error, order_id);
+                } else {
+                    let intent = result[('si' === intent_type) ? 'setupIntent' : 'paymentIntent'];
+                    if (intent.status === "requires_action" || intent.status === "requires_source_action") {
+                        let cardPaymentRetry = null;
+                        // Let Stripe.js handle the rest of the payment flow.
+                        if (intent_type == 'si') {
+                            cardPaymentRetry = this.stripe.handleCardSetup(clientSecret);
+                        } else {
+                            cardPaymentRetry = this.stripe.confirmCardPayment(clientSecret);
+
+                        }
+                        cardPaymentRetry.then((result) => {
+                            if (result.error) {
+                                this.showNotice(result.error);
+                                let source_el = $('.fkwcs_source');
+                                if (source_el.length > 0) {
+                                    source_el.remove();
+                                }
+                                if (result.error.hasOwnProperty('type') && result.error.type === 'api_connection_error') {
+                                    return;
+                                }
+                                this.logError(result.error, order_id);
+                            } else {
+                                window.location = redirectURL;
+                            }
+                        });
+                        return;
+                    }
+                    window.location = redirectURL;
+                }
+            }).catch(function (error) {
+
+                // Report back to the server.
+                $.get(redirectURL + '&is_ajax');
+            });
+        }
+
+        /**
+         * Update User details in checkout field also Return in json
+         * @param paymentData
+         * @returns {{}}
+         */
+        updateAddress(paymentData) {
+            let user_details = {};
+
+            let shipping_address = paymentData.hasOwnProperty('shippingAddress') ? paymentData.shippingAddress : null;
+            if (null !== shipping_address) {
+                user_details.shipping = this.mapAddress('shipping', shipping_address);
+                user_details.shipping.shipping_method = paymentData?.shippingOptionData;
+                $('#ship_to_different_address').prop('checked', true);
+            }
+            let billing_address = (paymentData.hasOwnProperty('paymentMethodData') && paymentData.paymentMethodData.hasOwnProperty('info') && paymentData.paymentMethodData.info.hasOwnProperty('billingAddress')) ? paymentData.paymentMethodData.info.billingAddress : null;
+            if (null !== billing_address) {
+                user_details.billing = this.mapAddress('billing', billing_address);
+            }
+            if (null == billing_address && null !== shipping_address) {
+                user_details.billing = this.mapAddress('billing', shipping_address);
+            }
+            if (null !== billing_address && billing_address.hasOwnProperty('phoneNumber')) {
+                user_details.phone = billing_address?.phoneNumber;
+            }
+
+            if (paymentData?.email) {
+                $('#billing_email')?.val(paymentData?.email);
+                user_details.email = paymentData?.email;
+            }
+            if (paymentData?.phone) {
+                user_details.phone = paymentData?.phone;
+                $('#billing_phone')?.val(paymentData?.phone);
+                $('#shipping_phone')?.val(paymentData?.phone);
+            }
+
+            return user_details;
+        }
+
+    }
+
 
     function init_gateways() {
 
@@ -1685,7 +2565,22 @@ jQuery(function ($) {
             available_gateways.klarna = new FKWCS_KLARNA(stripe, 'fkwcs_stripe_klarna');
             available_gateways.afterpay = new FKWCS_AFTERPAY(stripe, 'fkwcs_stripe_afterpay');
 
-            //available_gateways.payments = new FKWCS_Payments(stripe, 'fkwcs_payment');
+            available_gateways.google_pay = new FKWCS_GOOGLEPAY(stripe, 'fkwcs_stripe_google_pay');
+            available_gateways.apple_pay = new FKWCS_ApplePay(stripe, 'fkwcs_stripe_apple_pay');
+
+            $(document).trigger('fkwcs_gateway_loaded', {
+                "Gateway": Gateway,
+                "LocalGateway": LocalGateway,
+                "FKWCS_Stripe": FKWCS_Stripe,
+                "FKWCS_P24": FKWCS_P24,
+                "FKWCS_Sepa": FKWCS_Sepa,
+                "FKWCS_Ideal": FKWCS_Ideal,
+                "FKWCS_BanContact": FKWCS_BanContact,
+                "FKWCS_AFFIRM": FKWCS_AFFIRM,
+                "FKWCS_KLARNA": FKWCS_KLARNA,
+                "FKWCS_AFTERPAY": FKWCS_AFTERPAY,
+                'stripe_object': stripe
+            });
         } catch (e) {
             console.log(e);
         }
@@ -1703,6 +2598,8 @@ jQuery(function ($) {
             history.pushState({}, '', window.location.pathname);
             $(window).trigger('fkwcs_on_hash_change', [partials]);
         });
+
+
     }
 
     init_gateways();

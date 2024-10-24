@@ -13,9 +13,11 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 	protected $setting_description_default = '';
 	protected $paylater_message_service = false;
 	protected $icon_url = '';
+	protected $shipping_address_required = false;
 	public $paylater_message_position = 'description';
 	public $has_fields = true;
 	private static $fragment_sent = false;
+
 
 	public function __construct() {
 		$this->override_defaults();
@@ -49,6 +51,8 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_stripe_js' ] );
 		add_filter( 'woocommerce_payment_successful_result', [ $this, 'modify_successful_payment_result' ], 999, 2 );
 		add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'merge_cart_details' ], 1000 );
+		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
+
 
 	}
 
@@ -154,12 +158,12 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 				'capture_method'       => 'automatic',
 			];
 			$data['metadata'] = $this->add_metadata( $order );
-			$data             = $this->set_shipping_data( $data, $order );
+			$data             = $this->set_shipping_data( $data, $order, $this->shipping_address_required );
 
 
 			$intent_data = $this->get_payment_intent( $order, $idempotency_key, $data );
 
-			Helper::log( sprintf( __( 'Begin processing payment with P24 for order %1$1s for the amount of %2$2s', 'funnelkit-stripe-woo-payment-gateway' ), $order_id, $order->get_total() ) );
+			Helper::log( sprintf( __( 'Begin processing payment with  %1$1s for order %2$2s for the amount of %3$3s', 'funnelkit-stripe-woo-payment-gateway' ), $this->get_title(), $order_id, $order->get_total() ) );
 			if ( $intent_data ) {
 				/**
 				 * @see modify_successful_payment_result()
@@ -254,14 +258,17 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 			'fkwcs_redirect_to' => rawurlencode( $result['fkwcs_redirect'] ),
 			'gateway'           => $this->id,
 		];
-
-		$is_token_used=isset($result['token_used'])?'yes':'no';
+		if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$output['wfacp_id']                   = wc_clean( $_GET['wfacp_id'] ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$output['wfacp_is_checkout_override'] = wc_clean( $_GET['wfacp_is_checkout_override'] ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		$is_token_used = isset( $result['token_used'] ) ? 'yes' : 'no';
 		// Put the final thank you page redirect into the verification URL.
 		$verification_url = add_query_arg( $output, \WC_AJAX::get_endpoint( 'fkwcs_stripe_verify_payment_intent' ) );
 		if ( isset( $result['fkwcs_setup_intent_secret'] ) ) {
-			$redirect = sprintf( '#fkwcs-confirm-si-%s:%s:%d:%s:%s', $result['fkwcs_setup_intent_secret'], rawurlencode( $verification_url ), $order->get_id(), $this->id,$is_token_used );
+			$redirect = sprintf( '#fkwcs-confirm-si-%s:%s:%d:%s:%s', $result['fkwcs_setup_intent_secret'], rawurlencode( $verification_url ), $order->get_id(), $this->id, $is_token_used );
 		} else {
-			$redirect = sprintf( '#fkwcs-confirm-pi-%s:%s:%d:%s:%s', $result['fkwcs_intent_secret'], rawurlencode( $verification_url ), $order->get_id(), $this->id,$is_token_used );
+			$redirect = sprintf( '#fkwcs-confirm-pi-%s:%s:%d:%s:%s', $result['fkwcs_intent_secret'], rawurlencode( $verification_url ), $order->get_id(), $this->id, $is_token_used );
 		}
 
 
@@ -278,6 +285,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 	 */
 	public function verify_intent() {
 		global $woocommerce;
+
 		$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 		try {
 			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -297,6 +305,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 
 		try {
 			$intent = $this->get_intent_from_order( $order );
+
 			if ( false === $intent ) {
 				throw new \Exception( 'Intent Not Found' );
 			}
@@ -324,12 +333,15 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 
 			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
-			}else if ( 'requires_payment_method' === $intent->status ) {
+			} else if ( 'requires_payment_method' === $intent->status ) {
 
 
 				$redirect_url = wc_get_checkout_url();
-				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'woocommerce-gateway-stripe' ), 'error' );
+				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 
+				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					$redirect_url = get_the_permalink( wc_clean( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				}
 				/**
 				 * Handle intent with no payment method here, we mark the order as failed and show users a notice
 				 */
@@ -366,5 +378,23 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 
 		return $fragments;
 	}
+
+	public function save_payment_method( $order, $intent ) {
+
+	}
+
+	public function localize_element_data( $data ) {
+
+		if ( !isset( WC()->cart ) ) {
+			return $data;
+		}
+		$order_total                 = WC()->cart->get_total( false );
+		$data['fkwcs_paylater_data'] = [
+			'currency' => strtolower( get_woocommerce_currency() ),
+			'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
+		];
+		return $data;
+	}
+
 
 }

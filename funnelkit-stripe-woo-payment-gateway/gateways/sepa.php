@@ -68,7 +68,6 @@ class Sepa extends Abstract_Payment_Gateway {
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_stripe_js' ] );
 
 
-		include_once FKWCS_DIR . '/includes/token.php'; //phpcs:ignore WordPressVIPMinimum.Files.IncludingFile.UsingCustomConstant
 
 	}
 
@@ -99,8 +98,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			'products',
 			'refunds',
 			'tokenization',
-			'add_payment_method',
-			'pre-orders'
+			'add_payment_method'
 		] ) );
 	}
 
@@ -360,7 +358,8 @@ class Sepa extends Abstract_Payment_Gateway {
 				'description'          => $this->get_order_description( $order ),
 				'customer'             => $payment_method->customer,
 			];
-
+			$request['metadata'] = $this->add_metadata( $order );
+			$request             = $this->set_shipping_data( $request, $order );
 			$intent = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
 
 			$this->save_intent_to_order( $order, $intent );
@@ -461,7 +460,7 @@ class Sepa extends Abstract_Payment_Gateway {
 
 
 			$redirect_url = wc_get_checkout_url();
-			wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'woocommerce-gateway-stripe' ), 'error' );
+			wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 
 			/**
 			 * Handle intent with no payment method here, we mark the order as failed and show users a notice
@@ -676,7 +675,7 @@ class Sepa extends Abstract_Payment_Gateway {
 	 *
 	 */
 	public function create_payment_token_for_user( $user_id, $payment_method, $is_live ) {
-		$token = new \FKWCS\Inc\Token();
+		$token = new Token();
 		$token->set_last4( $payment_method->sepa_debit->last4 );
 		$token->set_gateway_id( $this->id );
 		$token->set_token( $payment_method->id );

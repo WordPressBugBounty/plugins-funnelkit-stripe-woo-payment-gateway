@@ -44,6 +44,7 @@
         }
 
         events() {
+
             try {
 
                 let self = this;
@@ -64,6 +65,7 @@
         }
 
         attachEvents() {
+
             $('body').on('updated_wc_div', () => {
                 this.cartPage();
             });
@@ -85,7 +87,6 @@
                 if (supported_currency.indexOf(currency) < 0 || supported_countries.indexOf(fkwcs_paylater.country_code) < 0) {
                     return;
                 }
-
                 let element = this.elements.create('paymentMethodMessaging', {
                     amount: amount,
                     currency: currency,

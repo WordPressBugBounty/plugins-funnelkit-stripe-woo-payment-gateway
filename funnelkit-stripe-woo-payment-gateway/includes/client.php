@@ -232,6 +232,11 @@ class Client {
 		return $this->execute( 'plans', $method, $args );
 	}
 
+
+	public function prices( $method, $args ) {
+		return $this->execute( 'prices', $method, $args );
+	}
+
 	public function subscriptions( $method, $args ) {
 		return $this->execute( 'subscriptions', $method, $args );
 	}

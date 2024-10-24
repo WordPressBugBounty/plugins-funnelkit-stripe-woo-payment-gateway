@@ -30,6 +30,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	protected $processing_payment_element = false;
 
 	private static $enqueued = false;
+	public $supports_success_webhook = false;
 
 	/**
 	 * Construct
@@ -48,7 +49,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return void
 	 */
 	protected function set_api_keys() {
-		$this->test_mode       = get_option( 'fkwcs_mode', 'test' );
+		$this->test_mode       = $this->get_gateway_mode();
 		$this->test_pub_key    = get_option( 'fkwcs_test_pub_key', '' );
 		$this->test_secret_key = get_option( 'fkwcs_test_secret_key', '' );
 		$this->live_pub_key    = get_option( 'fkwcs_pub_key', '' );
@@ -97,6 +98,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	protected function core_hooks() {
 
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, [ $this, 'process_admin_options' ] );
+
 		add_action( 'wp_enqueue_scripts', [ $this, 'register_stripe_js' ] );
 	}
 
@@ -128,7 +130,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return void
 	 */
 	public function register_stripe_js() {
-		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], FKWCS_VERSION, true );
+
+		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], false, true );
 		wp_register_script( 'fkwcs-stripe-js', FKWCS_URL . 'assets/js/stripe-elements' . Helper::is_min_suffix() . '.js', [
 			'jquery',
 			'jquery-payment',
@@ -143,7 +146,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return boolean
 	 */
 	public function is_page_supported() {
-		return $this->is_product() || is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		return is_checkout() || isset( $_GET['pay_for_order'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -239,6 +243,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			return;
 		}
 
+
 		/** If Stripe is not enabled bail */
 		if ( 'yes' !== $this->enabled ) {
 			return;
@@ -253,12 +258,12 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		if ( self::$enqueued ) {
 			return;
 		}
-		wp_enqueue_script( 'fkwcs-stripe-external' );
 		$this->tokenization_script();
 
 		wp_enqueue_script( 'fkwcs-stripe-js' );
 		wp_localize_script( 'fkwcs-stripe-js', 'fkwcs_data', $this->localize_data() );
 		add_action( 'wp_head', [ $this, 'enqueue_cc_css' ] );
+		add_filter( 'script_loader_tag', [ $this, 'prevent_stripe_script_blocking' ], 10, 2 );
 		do_action( 'fkwcs_core_element_js_enqueued' );
 		self::$enqueued = true;
 	}
@@ -274,6 +279,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			'is_checkout'          => $this->is_checkout() ? 'yes' : 'no',
 			'pub_key'              => $this->get_client_key(),
 			'mode'                 => $this->test_mode,
+			'wc_endpoints'         => self::get_public_endpoints(),
 			'current_user_billing' => $this->get_current_user_billing_details(),
 		] );
 
@@ -300,6 +306,16 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		if ( ! empty( $user->user_email ) ) {
 			$details['email'] = $user->user_email;
 		}
+		$customer = new \WC_Customer( $user->ID );
+
+		$details['address'] = [
+			'country'     => ! empty( $customer->get_billing_country() ) ? $customer->get_billing_country() : null,
+			'city'        => ! empty( $customer->get_billing_city() ) ? $customer->get_billing_city() : null,
+			'postal_code' => ! empty( $customer->get_billing_postcode() ) ? $customer->get_billing_postcode() : null,
+			'state'       => ! empty( $customer->get_billing_state() ) ? $customer->get_billing_state() : null,
+			'line1'       => ! empty( $customer->get_billing_address_1() ) ? $customer->get_billing_address_1() : null,
+			'line2'       => ! empty( $customer->get_billing_address_2() ) ? $customer->get_billing_address_2() : null,
+		];
 
 		return apply_filters( 'fkwcs_current_user_billing_details', $details, get_current_user_id() );
 	}
@@ -340,9 +356,9 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return bool|void|\WP_Error
 	 */
 	public function process_refund( $order_id, $amount = null, $reason = '' ) {
-        if(!$this->is_configured()) {
-            return new \WP_Error('error', __('Stripe is not configured properly.', 'funnelkit-stripe-woo-payment-gateway'));
-        }
+		if ( ! $this->is_configured() ) {
+			return new \WP_Error( 'error', __( 'Stripe is not configured properly.', 'funnelkit-stripe-woo-payment-gateway' ) );
+		}
 		if ( 0 >= $amount ) {
 			return false;
 		}
@@ -610,7 +626,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			$client   = $this->get_client();
 			$response = $client->customers( 'retrieve', [ $absolute_customer_id ] );
 
-			if ( false === $is_recurrence && false === $response['success'] ) {
+			if ( false === $is_recurrence && ( false === $response['success'] || ( isset( $response['data']->deleted ) && true === $response['data']->deleted ) ) ) {
 
 				delete_user_option( $user_id, '_fkwcs_customer_id', false );
 				delete_user_option( $user_id, '_stripe_customer_id', false );
@@ -726,7 +742,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return boolean
 	 */
 	public function should_save_card( $order ) {  //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
-		return $this->supports('tokenization');
+		return $this->supports( 'tokenization' );
 	}
 
 
@@ -827,7 +843,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$stripe_source = false;
 		$source_object = false;
 
-		$source_id = Helper::get_meta( $order, '_fkwcs_source_id' );
+		$source_id = $this->get_order_stripe_data( '_fkwcs_source_id', $order );
 		if ( $source_id ) {
 			$stripe_source = $source_id;
 			$response      = $client->payment_methods( 'retrieve', [ $source_id ] );
@@ -1232,13 +1248,17 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public static function get_available_public_endpoints() {
 		$endpoints = [
-			'fkwcs_button_payment_request'  => 'process_smart_checkout',
-			'wc_stripe_create_order'        => 'process_smart_checkout',
-			'fkwcs_update_shipping_address' => 'update_shipping_address',
-			'fkwcs_update_shipping_option'  => 'update_shipping_option',
-			'fkwcs_add_to_cart'             => 'ajax_add_to_cart',
-			'fkwcs_selected_product_data'   => 'ajax_fkwcs_selected_product_data',
-			'fkwcs_get_cart_details'        => 'ajax_get_cart_details',
+			'fkwcs_button_payment_request'       => 'process_smart_checkout',
+			'wc_stripe_create_order'             => 'process_smart_checkout',
+			'fkwcs_update_shipping_address'      => 'update_shipping_address',
+			'fkwcs_update_shipping_option'       => 'update_shipping_option',
+			'fkwcs_add_to_cart'                  => 'ajax_add_to_cart',
+			'fkwcs_gpay_add_to_cart'             => 'ajax_add_to_cart',
+			'fkwcs_selected_product_data'        => 'ajax_fkwcs_selected_product_data',
+			'fkwcs_get_cart_details'             => 'ajax_get_cart_details',
+			'fkwcs_gpay_update_shipping_address' => 'gpay_update_shipping_address',
+			'fkwcs_gpay_button_payment_request'  => 'process_smart_checkout',
+
 		];
 
 		return apply_filters( 'fkwcs_public_endpoints', $endpoints );
@@ -1462,7 +1482,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 *
 	 * @return mixed
 	 */
-	public function set_shipping_data( $data, $order ) {
+	public function set_shipping_data( $data, $order, $always_shipping_address_required = false ) {
 		if ( ! empty( $order->get_shipping_postcode() ) ) {
 			$data['shipping'] = [
 
@@ -1477,6 +1497,22 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 					'country'     => $order->get_shipping_country(),
 					'postal_code' => $order->get_shipping_postcode(),
 					'state'       => $order->get_shipping_state(),
+				],
+			];
+		} else if ( $always_shipping_address_required ) {
+			$data['shipping'] = [
+
+				/**
+				 * Prepare shipping data for the api call
+				 */
+				'name'    => trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
+				'address' => [
+					'line1'       => $order->get_billing_address_1(),
+					'line2'       => $order->get_billing_address_2(),
+					'city'        => $order->get_billing_city(),
+					'country'     => $order->get_billing_country(),
+					'postal_code' => $order->get_billing_postcode(),
+					'state'       => $order->get_billing_state(),
 				],
 			];
 		}
@@ -1809,7 +1845,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			return '';
 		}
 
-		$charge_object = $this->get_client()->charges( 'GET', [ $charge_id ] );
+		$charge_object = $this->get_client()->charges( 'retrieve', [ $charge_id ] );
 
 		if ( $charge_object['success'] === false ) {
 			throw new \Exception( $charge_object['success'] ); //phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped,WordPress.Security.EscapeOutput.OutputNotEscaped
@@ -1854,10 +1890,14 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 			if ( ! $order->has_status( apply_filters( 'fkwcs_stripe_allowed_payment_processing_statuses', [ 'pending', 'failed' ], $order ) ) ) {
 				$redirect_url = $this->get_return_url( $order );
+				remove_all_actions( 'wp_redirect' );
 				wp_safe_redirect( $redirect_url );
 				exit;
 
 			}
+
+
+			//
 			$intent = $this->get_intent_from_order( $order );
 			if ( false === $intent ) {
 				throw new \Exception( 'Intent Not Found' );
@@ -1904,7 +1944,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 
 				$redirect_url = wc_get_checkout_url();
-				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'woocommerce-gateway-stripe' ), 'error' );
+				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 
 				/**
 				 * Handle intent with no payment method here, we mark the order as failed and show users a notice
@@ -1928,6 +1968,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			wc_add_notice( esc_html( $e->getMessage() ), 'error' );
 		}
 		if ( ! isset( $_GET['is_ajax'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			remove_all_actions( 'wp_redirect' );
 			wp_safe_redirect( $redirect_url );
 			exit;
 
@@ -1944,6 +1985,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return void
 	 */
 	public function save_payment_method( $order, $intent ) {
+
+
 		$payment_method = $intent->payment_method;
 		$response       = $this->get_client()->payment_methods( 'retrieve', [ $payment_method ] );
 		$payment_method = $response['success'] ? $response['data'] : false;
@@ -1952,7 +1995,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$user  = $order->get_id() ? $order->get_user() : wp_get_current_user();
 		if ( $user instanceof \WP_User ) {
 			$user_id = $user->ID;
-			$token   = $this->create_payment_token_for_user( $user_id, $payment_method, $intent->livemode );
+			$token   = Helper::create_payment_token_for_user( $user_id, $payment_method, $intent->livemode );
+
 			Helper::log( sprintf( 'Payment method tokenized for Order id - %1$1s with token id - %2$2s', $order->get_id(), $token->get_id() ) );
 		}
 
@@ -1992,30 +2036,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$this->maybe_update_source_on_subscription_order( $order, $payment_method );
 	}
 
-
-	/**
-	 * Tokenize card payment
-	 *
-	 * @param int $user_id id of current user placing .
-	 * @param object $payment_method payment method object.
-	 *
-	 * @return object token object.
-	 */
-	public function create_payment_token_for_user( $user_id, $payment_method, $is_live ) {
-		$token = new \WC_Payment_Token_CC();
-		$token->set_expiry_month( $payment_method->card->exp_month );
-		$token->set_expiry_year( $payment_method->card->exp_year );
-		$token->set_card_type( strtolower( $payment_method->card->brand ) );
-		$token->set_last4( $payment_method->card->last4 );
-		$token->set_gateway_id( $this->id );
-		$token->set_token( $payment_method->id );
-		$token->set_user_id( $user_id );
-		$token->update_meta_data( 'mode', ( $is_live ) ? 'live' : 'test' );
-		$token->save_meta_data();
-		$token->save();
-
-		return $token;
-	}
 
 	/**
 	 * Create multiple countries selection HTML
@@ -2106,5 +2126,86 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return ! in_array( $default_store_country, [ 'IN' ], true );
 	}
 
+	public function prevent_stripe_script_blocking( $tag, $handle ) {
+		if ( 'fkwcs-stripe-external' === $handle ) {
+			// Add the custom attribute
+			$tag = str_replace( ' src', ' data-cookieconsent="ignore" src', $tag );
+		}
 
+		return $tag;
+	}
+
+	/**
+	 * This function return if shipping enabled on product or Cart
+	 * @return bool
+	 */
+	public function shipping_required() {
+		if ( ! wc_shipping_enabled() ) {
+			return false;
+		}
+		if ( $this->is_product() ) {
+			global $post;
+			$product = wc_get_product( $post->ID );
+			if ( $product instanceof \WC_Product && $product->is_virtual() ) {
+				return false;
+			}
+		} else if ( is_null( WC()->cart ) || ! WC()->cart->needs_shipping() ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	public function get_supported_currency() {
+		return true;
+	}
+
+	/**
+	 * This method handle all the formalities we need to do with order in cases of the successful payment
+	 * This method could only trigger by the payment_intent.succeeded webhook OR manually by upsell scheduled action
+	 *
+	 * @param \stdClass $intent
+	 * @param \WC_Order $order
+	 *
+	 * @return void
+	 */
+	public function handle_intent_success( $intent, $order ) {
+		if ( $this->supports_success_webhook === false || $order->get_payment_method() !== $this->id ) {
+			return;
+		}
+		$charge = '';
+		if ( 'off_session' === $intent->setup_future_usage ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+			$this->save_payment_method( $order, $intent );
+
+
+			if ( 'setup_intent' === $intent->object ) {
+				$mandate_id = isset( $intent->mandate ) ? $intent->mandate : false;
+			} else {
+				$charge = $this->get_latest_charge_from_intent( $intent );
+				if ( isset( $charge->payment_method_details->card->mandate ) ) {
+					$mandate_id = $charge->payment_method_details->card->mandate;
+
+				}
+			}
+
+			if ( isset( $mandate_id ) && ! empty( $mandate_id ) ) {
+				$order->update_meta_data( '_stripe_mandate_id', $mandate_id );
+				$order->save_meta_data();
+			}
+
+		}
+
+		if ( 'setup_intent' === $intent->object && 'succeeded' === $intent->status ) {
+			$order->payment_complete();
+		} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
+			$charge = ! empty( $charge ) ? $charge : $this->get_latest_charge_from_intent( $intent );
+			$this->process_final_order( $charge, $order->get_id() );
+		}
+	}
+
+	private function get_gateway_mode() {
+		return ( 'test_admin_only' === get_option( 'fkwcs_mode', 'test' ) && is_super_admin() ) ? 'test' : get_option( 'fkwcs_mode', 'test' );
+	}
 }
+

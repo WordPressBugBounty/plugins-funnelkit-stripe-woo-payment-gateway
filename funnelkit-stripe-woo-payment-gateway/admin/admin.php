@@ -24,24 +24,27 @@ class Admin {
 	 * @var string[]
 	 */
 	private $options_keys = [
-		'fkwcs_test_pub_key'                 => '',
-		'fkwcs_test_secret_key'              => '',
-		'fkwcs_pub_key'                      => '',
-		'fkwcs_secret_key'                   => '',
-		'fkwcs_con_status'                   => '',
-		'fkwcs_mode'                         => 'live',
-		'fkwcs_live_webhook_secret'          => '',
-		'fkwcs_test_webhook_secret'          => '',
-		'fkwcs_debug_log'                    => '',
-		'fkwcs_account_id'                   => '',
-		'fkwcs_auto_connect'                 => '',
-		'fkwcs_setup_status'                 => '',
-		'fkwcs_live_created_webhook'         => '',
-		'fkwcs_test_created_webhook'         => '',
-		'fkwcs_apple_pay_verified_domain'    => '',
-		'fkwcs_apple_pay_domain_is_verified' => '',
+		'fkwcs_test_pub_key'                                 => '',
+		'fkwcs_test_secret_key'                              => '',
+		'fkwcs_pub_key'                                      => '',
+		'fkwcs_secret_key'                                   => '',
+		'fkwcs_con_status'                                   => '',
+		'fkwcs_mode'                                         => 'live',
+		'fkwcs_live_webhook_secret'                          => '',
+		'fkwcs_test_webhook_secret'                          => '',
+		'fkwcs_debug_log'                                    => '',
+		'fkwcs_currency_fee'                                 => '',
+		'fkwcs_account_id'                                   => '',
+		'fkwcs_auto_connect'                                 => '',
+		'fkwcs_setup_status'                                 => '',
+		'fkwcs_live_created_webhook'                         => '',
+		'fkwcs_test_created_webhook'                         => '',
+		'fkwcs_apple_pay_verified_domain'                    => '',
+		'fkwcs_apple_pay_domain_is_verified'                 => '',
+		'fkwcs_stripe_statement_descriptor_full'             => '',
 		'fkwcs_stripe_statement_descriptor_should_customize' => '',
-		'fkwcs_stripe_statement_descriptor_suffix' => '{{WOO_ORDER_ID}}'
+		'fkwcs_stripe_statement_descriptor_prefix'           => '',
+		'fkwcs_stripe_statement_descriptor_suffix'           => '{{WOO_ORDER_ID}}'
 	];
 	private $settings = [];
 	private $domain;
@@ -87,6 +90,7 @@ class Admin {
 			'fkwcs_stripe_bancontact',
 			'fkwcs_stripe_p24',
 			'fkwcs_stripe_sepa',
+			'fkwcs_stripe_google_pay',
 		] );
 
 		add_action( 'admin_head', [ $this, 'add_custom_css' ] );
@@ -153,6 +157,8 @@ class Admin {
 		add_filter( 'woocommerce_generate_fkwcs_radio_html', [ $this, 'fkwcs_radio_html_field' ], 10, 4 );
 		add_filter( 'woocommerce_generate_fkwcs_admin_fields_start_html', [ $this, 'fkwcs_admin_fields_start_html_field' ], 10, 4 );
 		add_filter( 'woocommerce_generate_fkwcs_admin_fields_end_html', [ $this, 'fkwcs_admin_fields_end_html_field' ], 10, 4 );
+
+
 	}
 
 	/**
@@ -200,8 +206,10 @@ class Admin {
 			'fkwcs_api_settings'      => __( 'Stripe Settings', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe'            => __( 'Credit Cards', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_express_checkout'  => __( 'Express Checkout', 'funnelkit-stripe-woo-payment-gateway' ),
-            'fkwcs_stripe_affirm'     => __( 'Affirm', 'funnelkit-stripe-woo-payment-gateway' ),
-			'fkwcs_stripe_afterpay'     => __( 'Afterpay', 'funnelkit-stripe-woo-payment-gateway' ),
+			'fkwcs_stripe_google_pay' => __( 'Google Pay', 'funnelkit-stripe-woo-payment-gateway' ),
+			'fkwcs_stripe_apple_pay'  => __( 'Apple Pay', 'funnelkit-stripe-woo-payment-gateway' ),
+			'fkwcs_stripe_affirm'     => __( 'Affirm', 'funnelkit-stripe-woo-payment-gateway' ),
+			'fkwcs_stripe_afterpay'   => __( 'Afterpay', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_klarna'     => __( 'Klarna', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_ideal'      => __( 'iDeal', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_bancontact' => __( 'Bancontact', 'funnelkit-stripe-woo-payment-gateway' ),
@@ -287,8 +295,9 @@ class Admin {
 				'name'     => __( 'Mode', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'     => 'select',
 				'options'  => [
-					'test' => 'Test',
-					'live' => 'Live',
+					'test'            => 'Test Mode',
+					'test_admin_only' => 'Test Mode (For administrators)',
+					'live'            => 'Live Mode',
 				],
 				'desc'     => __( 'No live transactions are processed in test mode. To fully use test mode, you must have a sandbox (test) account for the payment gateway you are testing.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'id'       => 'fkwcs_mode',
@@ -319,20 +328,32 @@ class Admin {
 				'id'       => 'fkwcs_test_secret_key',
 			],
 
-			'do_connection'                         => [
+			'do_connection' => [
 				'name'  => __( 'Test Connection', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'  => 'wc_fkwcs_connection_test',
 				'class' => 'wc_fkwcs_connection_test',
 				'desc'  => __( 'Click this button to test a connection. If successful, your site is connected to Stripe.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'id'    => 'wc_fkwcs_connection_test',
 			],
+
+
+			'currency_fee' => [
+				'title'    => __( 'Stripe Fees Currency', 'funnelkit-stripe-woo-payment-gateway' ),
+				'type'     => 'checkbox',
+				'default'  => 'no',
+				'desc'     => __( 'Show Stripe Fee in Order Currency', 'funnelkit-stripe-woo-payment-gateway' ),
+				'desc_tip' => __( 'When enabled, the Stripe fee and payout will be shown in the order\'s currency. By default, Stripe provides the fee and payout in the currency of the Stripe account.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'id'       => 'fkwcs_currency_fee'
+			],
+
+
 			'statement_descriptor_full'             => [
 				'title'             => __( 'Statement Descriptor', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'              => 'text',
-				'desc'  => __( 'You can change the Statement descriptor your customers see on their bank statement in your <a href="https://dashboard.stripe.com/settings/public" target="_blank">Stripe account settings</a>. It recommended to keep it to your domain address so your buyers can reach out to you and avoid potential disputes and chargebacks.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'desc'              => __( 'You can change the Statement descriptor your customers see on their bank statement in your <a href="https://dashboard.stripe.com/settings/public" target="_blank">Stripe account settings</a>. It recommended to keep it to your domain address so your buyers can reach out to you and avoid potential disputes and chargebacks.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'           => Admin::get_instance()->account_data['statement_descriptor_full'],
 				'custom_attributes' => [ 'readonly' => 'readonly' ],
-				'id'       => 'fkwcs_stripe_statement_descriptor_full',
+				'id'                => 'fkwcs_stripe_statement_descriptor_full',
 
 			],
 			'statement_descriptor_should_customize' => [
@@ -345,7 +366,7 @@ class Admin {
 			],
 			'statement_descriptor_prefix'           => [
 				'title'             => __( 'Shortened Descriptor', 'funnelkit-stripe-woo-payment-gateway' ),
-				'desc' => __( 'You can change the Shortened Descriptor your customers see on their bank statement in your <a href="https://dashboard.stripe.com/settings/public" target="_blank">Stripe account settings</a>.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'desc'              => __( 'You can change the Shortened Descriptor your customers see on their bank statement in your <a href="https://dashboard.stripe.com/settings/public" target="_blank">Stripe account settings</a>.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'class'             => 'fkwcs_statement_desc_options',
 				'custom_attributes' => [ 'readonly' => 'readonly' ],
 				'type'              => 'text',
@@ -353,12 +374,12 @@ class Admin {
 				'id'                => 'fkwcs_stripe_statement_descriptor_prefix',
 			],
 			'statement_descriptor_suffix'           => [
-				'title'       => __( 'Shortened Descriptor Suffix', 'funnelkit-stripe-woo-payment-gateway' ),
-				'type'        => 'text',
-				'class'       => 'fkwcs_statement_desc_options',
-				'default'     => '{{WOO_ORDER_ID}}',
-				'id'          => 'fkwcs_stripe_statement_descriptor_suffix',
-				'desc' => __( 'You can pass custom payment descriptor suffix along with shortened descriptor in your <a href="https://dashboard.stripe.com/settings/public" target="_blank">Stripe account settings</a>. You can change the shortened descriptor or use dynamic Order ID using merge tag {{WOO_ORDER_ID}}', 'funnelkit-stripe-woo-payment-gateway' ),
+				'title'   => __( 'Shortened Descriptor Suffix', 'funnelkit-stripe-woo-payment-gateway' ),
+				'type'    => 'text',
+				'class'   => 'fkwcs_statement_desc_options',
+				'default' => '{{WOO_ORDER_ID}}',
+				'id'      => 'fkwcs_stripe_statement_descriptor_suffix',
+				'desc'    => __( 'You can pass custom payment descriptor suffix along with shortened descriptor in your <a href="https://dashboard.stripe.com/settings/public" target="_blank">Stripe account settings</a>. You can change the shortened descriptor or use dynamic Order ID using merge tag {{WOO_ORDER_ID}}', 'funnelkit-stripe-woo-payment-gateway' ),
 
 			],
 
@@ -387,7 +408,7 @@ class Admin {
 				'type'  => 'fkwcs_webhook_url',
 				'class' => 'wc_fkwcs_webhook_url',
 				/* translators: %1$1s - %2$2s HTML markup */
-				'desc'  => sprintf( __( 'Important: the webhook URL is called by Stripe when events occur in your account, like a source becomes chargeable. %1$1sWebhook Guide%2$2s', 'funnelkit-stripe-woo-payment-gateway' ), '<a href="#" target="_blank">', '</a>' ),
+				'desc'  => sprintf( __( 'Important: the webhook URL is called by Stripe when events occur in your account, like a source becomes chargeable. %1$1sWebhook Guide%2$2s', 'funnelkit-stripe-woo-payment-gateway' ), '<a href="https://funnelkit.com/docs/stripe-gateway-for-woocommerce/webhooks/" target="_blank">', '</a>' ),
 				'id'    => 'fkwcs_webhook_url',
 			],
 			'live_webhook_secret'   => [
@@ -408,7 +429,7 @@ class Admin {
 				'name'     => __( 'Debug Log', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'     => 'checkbox',
 				'desc'     => __( 'Log debug messages', 'funnelkit-stripe-woo-payment-gateway' ),
-				'desc_tip' => sprintf( __( 'Log Stripe API calls, inside %s Note: this may log personal information. We recommend using this for debugging purposes only and deleting the logs when finished.', 'woocommerce' ), '<code>' . \WC_Log_Handler_File::get_log_file_path( 'fkwcs-stripe' ) . '</code>' ),
+				'desc_tip' => sprintf( __( 'Log Stripe API calls, inside %s Note: this may log personal information. We recommend using this for debugging purposes only and deleting the logs when finished.', 'funnelkit-stripe-woo-payment-gateway' ), '<code>' . \WC_Log_Handler_File::get_log_file_path( 'fkwcs-stripe' ) . '</code>' ),
 				'id'       => 'fkwcs_debug_log',
 			],
 			'section_end'           => [
@@ -570,7 +591,7 @@ class Admin {
 
 		// Default values need to be set in Helper class.
 		$settings = [
-			'section_title'               => [
+			'section_title'   => [
 				'name' => __( 'Express Checkout', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type' => 'title',
 				/* translators: HTML for the  express checkout section heading */
@@ -579,13 +600,13 @@ The visibility of these payment buttons is browser dependent. Click on "Test Vis
 Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Browser Payment method.', 'funnelkit-stripe-woo-payment-gateway' ), '<a href="https://stripe.com/docs/stripe-js/elements/payment-request-button#html-js-testing" target="_blank">', '</a>' ),
 				'id'   => 'fkwcs_express_checkout',
 			],
-			'enable'                      => [
+			'enable'          => [
 				'name'  => __( 'Enable Express Checkout', 'funnelkit-stripe-woo-payment-gateway' ),
 				'id'    => 'fkwcs_express_checkout_enabled',
 				'type'  => 'checkbox',
 				'value' => $values['express_checkout_enabled'],
 			],
-			'button_location'             => [
+			'button_location' => [
 				'title'    => __( 'Show button on', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'     => 'multiselect',
 				'class'    => 'fkwcs_express_checkout_location multiselect',
@@ -598,7 +619,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 				],
 				'value'    => $values['express_checkout_location'],
 			],
-			'button_type'                 => [
+			'button_type'     => [
 				'title'    => __( 'Button text', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'     => 'text',
 				'id'       => 'fkwcs_express_checkout_button_text',
@@ -606,7 +627,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 				'value'    => $values['express_checkout_button_text'],
 				'desc_tip' => true,
 			],
-			'button_theme'                => [
+			'button_theme'    => [
 				'title'    => __( 'Button theme', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'     => 'select',
 				'id'       => 'fkwcs_express_checkout_button_theme',
@@ -620,22 +641,22 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 				'desc_tip' => true,
 			],
 
-			'preview'                     => [
+			'preview' => [
 				'title' => __( 'Button Preview', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'  => 'fkwcs_express_checkout_preview',
 				'id'    => 'fkwcs_express_checkout_preview',
 			],
 
-			'link_button_enabled'                 => [
+			'link_button_enabled' => [
 				'title'    => __( 'Enable Stripe Link', 'funnelkit-stripe-woo-payment-gateway' ),
-				'label'       => __( 'Enable Stripe Link', 'funnelkit-stripe-woo-payment-gateway' ),
+				'label'    => __( 'Enable Stripe Link', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'     => 'checkbox',
 				'id'       => 'fkwcs_express_checkout_link_button_enabled',
-				'desc'     => __('Enable Stripe link button to show as Express checkout button when Google Pay and Apple Pay are not available.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'value' => $values['express_checkout_link_button_enabled'],
+				'desc'     => __( 'Enable Stripe link button to show as Express checkout button when Google Pay and Apple Pay are not available.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'value'    => $values['express_checkout_link_button_enabled'],
 				'desc_tip' => true,
 			],
-			'section_end'                 => [
+			'section_end'         => [
 				'type' => 'sectionend',
 				'id'   => 'fkwcs_express_checkout',
 			],
@@ -788,7 +809,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 		$express_checkout = [];
 		$radio_checkbox   = [
-			'express_checkout_enabled' => 'no',
+			'express_checkout_enabled'             => 'no',
 			'express_checkout_link_button_enabled' => 'no',
 		];
 		foreach ( $_POST as $key => $value ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
@@ -904,9 +925,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		if ( isset( $_GET['page'] ) && 'wc-settings' === $_GET['page'] && isset( $_GET['tab'] ) && ( 'fkwcs_api_settings' === $_GET['tab'] || isset( $_GET['section'] ) && ( in_array( sanitize_text_field( $_GET['section'] ), $this->allow_scripts_methods, true ) ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 			wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], FKWCS_VERSION, true );
-			wp_enqueue_script( 'fkwcs-stripe-external' );
-
-			wp_register_script( 'fkwcs-admin-js', plugins_url( 'assets/js/admin.js', __FILE__ ), [ 'jquery' ], FKWCS_VERSION, true );
+			wp_register_script( 'fkwcs-admin-js', plugins_url( 'assets/js/admin.js', __FILE__ ), [ 'jquery', 'fkwcs-stripe-external' ], FKWCS_VERSION, true );
 			wp_enqueue_script( 'fkwcs-admin-js' );
 
 			$settings_data       = array();
@@ -929,7 +948,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 					'applepay_light' => FKWCS_URL . 'assets/icons/apple_pay_light.svg',
 					'gpay_light'     => FKWCS_URL . 'assets/icons/gpay_light.svg',
 					'gpay_gray'      => FKWCS_URL . 'assets/icons/gpay_gray.svg',
-					'link'      => FKWCS_URL . 'assets/icons/link.svg',
+					'link'           => FKWCS_URL . 'assets/icons/link.svg',
 				],
 				'settings'                 => $settings_data,
 				'messages'                 => [
@@ -952,6 +971,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 				'stripe_disconnect'        => __( 'Your Stripe account has been disconnected.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'stripe_connect_other_acc' => __( 'You can connect other Stripe account now.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'stripe_notice_re_verify'  => __( 'Sorry, we are unable to re-verify domain at the moment. ', 'funnelkit-stripe-woo-payment-gateway' ),
+				'test_mode_admin_only'     => __( 'This will enable Test mode only for the admin users. While other users will continue to process payments in Live mode.', 'funnelkit-stripe-woo-payment-gateway' )
 
 
 			] ) );
@@ -1005,7 +1025,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		?>
         <tr>
             <td class="label fkwcs-stripe-payout">
-				<?php echo wp_kses_post( wc_help_tip( __( 'This net total that will be credited to your stripe bank account. This may be in the currency that is set in your Stripe account.', 'funnelkit-stripe-woo-payment-gateway' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
+				<?php echo wp_kses_post( wc_help_tip( __( 'This net total that will be credited to your stripe bank account.', 'funnelkit-stripe-woo-payment-gateway' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
 				<?php esc_html_e( 'Stripe Payout:', 'funnelkit-stripe-woo-payment-gateway' ); ?>
             </td>
             <td width="1%"></td>
@@ -1158,6 +1178,24 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 			$this->settings['fkwcs_auto_connect'] = 'yes';
 			$this->settings['fkwcs_debug_log']    = 'yes';
+
+
+			$client = Helper::get_new_client( $this->settings['fkwcs_secret_key'] );
+			$args   = $client->accounts( 'retrieve', [ $this->settings['fkwcs_account_id'] ] );
+
+			if ( ! empty( $args['success'] ) ) {
+				$account                                                    = $args['data'];
+				$this->settings['fkwcs_stripe_statement_descriptor_prefix'] = $account->settings->card_payments->statement_descriptor_prefix;
+				$this->settings['fkwcs_stripe_statement_descriptor_full']   = $account->settings->payments->statement_descriptor;
+				$stripe_account_settings                                    = get_option( 'fkwcs_stripe_account_settings', [] );
+				if ( empty( $stripe_account_settings ) ) {
+					$stripe_account_settings = array(
+						'country'          => $account->country,
+						'default_currency' => $account->default_currency,
+					);
+					update_option( 'fkwcs_stripe_account_settings', $stripe_account_settings );
+				}
+			}
 			$this->update_options( $this->settings );
 
 			if ( ! empty( $response['wp_hash'] ) ) {
@@ -1167,6 +1205,8 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			wp_safe_redirect( $redirect_url );
 			exit;
 		}
+
+
 	}
 
 	/**
@@ -1302,9 +1342,6 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		}
 
 		if ( isset( $_GET['tab'] ) && 'checkout' === $_GET['tab'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			/* translators: %1$1s HTML Markup */
-			echo wp_kses_post( sprintf( '<div class="notice notice-error"><p>' . __( 'You Stripe Publishable and Secret Keys are not set correctly. You can connect to Stripe and correct them from <a href="%1$1s">here.</a>', 'funnelkit-stripe-woo-payment-gateway' ) . '</p></div>', admin_url( 'admin.php?page=wc-settings&tab=fkwcs_api_settings' ) ) );
-
 			return;
 		}
 
@@ -1349,11 +1386,11 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	 *
 	 * @return bool
 	 */
-	public function maybe_verify_domain() {
+	public function maybe_verify_domain( $force = false ) {
 		/**
 		 * Check if we have already setup for the current domain
 		 */
-		if ( ! empty( $this->verified_domain ) && $this->domain === $this->verified_domain && $this->domain_is_verfied ) {
+		if ( $force === false && ! empty( $this->verified_domain ) && $this->domain === $this->verified_domain && $this->domain_is_verfied ) {
 			return true;
 		}
 
@@ -1366,8 +1403,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			return false;
 		}
 
-		$is_already_configured = $this->already_verified_domain();
-		if ( $is_already_configured ) {
+		if ( $force === false && $this->already_verified_domain() ) {
 			update_option( 'fkwcs_apple_pay_verified_domain', $this->domain );
 			update_option( 'fkwcs_apple_pay_domain_is_verified', true );
 			Helper::log( 'Apple Pay domain verification already setup correctly.' );
@@ -1506,7 +1542,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		}
 
 		// Add notice if missing webhook secret key.
-		if ( isset( $_GET['page'] ) && 'wc-settings' === $_GET['page'] && 'live' === $this->get_gateway_keys( 'test_mode' ) && ! $this->get_gateway_keys( 'webhook_secret' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['page'] ) && 'wc-settings' === $_GET['page'] && 'live' === $this->get_gateway_keys( 'test_mode' ) && $this->is_stripe_connected() && ! $this->get_gateway_keys( 'webhook_secret' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			add_action( 'admin_notices', [ $this, 'webhook_missing_notice' ] );
 		}
 
@@ -1524,6 +1560,11 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			$fk_block_notice = true;
 			add_action( 'admin_notices', [ $this, 'wc_notif_for_block_usage' ] );
 
+		}
+
+
+		if ( $this->get_api_key() !== '' && 'test' === $this->get_gateway_keys( 'test_mode' ) && ! $this->is_notice_dismissed( 'test_mode' ) ) {
+			add_action( 'admin_notices', [ $this, 'test_mode_notice' ] );
 		}
 
 	}
@@ -1613,7 +1654,21 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	 */
 	function stripe_php_version_notice() {
 		$message = __( 'Stripe Payment Gateway for WooCommerce requires PHP version 7.0+. Please reach out to your host to upgrade the PHP version.', 'funnelkit-stripe-woo-payment-gateway' );
-		echo '<div class="notice notice-error"><p>' . esc_html( $message ) . '</p></div>';
+		echo '<div class="notice"><p>' . esc_html( $message ) . '</p></div>';
+	}
+
+	/**
+	 * PHP min version notice text
+	 *
+	 * @return void
+	 */
+	function test_mode_notice() {
+		$message           = sprintf( /* translators: 1: Opening strong tag, 2: Closing strong tag */ esc_html__( '%1$sStripe Payment Gateway for WooCommerce%2$s is in Test mode, please ensure it is switched to Live mode after testing.', 'funnelkit-stripe-woo-payment-gateway' ), '<strong>', '</strong>' );
+		$current_admin_url = rawurlencode( basename( $_SERVER['REQUEST_URI'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$dismiss_url       = admin_url( 'admin-ajax.php?action=fkwcs_dismiss_notice&notice_identifier=test_mode&_security=' . wp_create_nonce( 'fkwcs_admin_request' ) . '&redirect=' . $current_admin_url );
+
+		echo sprintf( '<div class="notice notice-error"><p>%1$s <a href="%2$s"><button class="button">%3$s</button></a>&nbsp; <a href="%4$s">%5$s</a></p></div>', $message, esc_url( admin_url( 'admin.php?page=wc-settings&tab=fkwcs_api_settings' ) ), esc_html__( 'Switch to Live mode', 'funnelkit-stripe-woo-payment-gateway' ), $dismiss_url, esc_html__( 'I\'ll do it later', 'funnelkit-stripe-woo-payment-gateway' ) ); //phpcs:ignore WordPress.Security.EscapeOutput
+
 	}
 
 	/**
@@ -1757,6 +1812,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		if ( ! empty( $response['livemode'] ) ) {
 			update_option( 'fkwcs_live_webhook_secret', $response['secret'] );
 			update_option( 'fkwcs_live_created_webhook', array( 'secret' => $response['secret'], 'id' => $response['id'] ) );
+			update_option( 'fkwcs_live_webhook_url', Helper::get_webhook_url() );
 		} else {
 			update_option( 'fkwcs_test_webhook_secret', $response['secret'] );
 			update_option( 'fkwcs_test_created_webhook', array( 'secret' => $response['secret'], 'id' => $response['id'] ) );
@@ -1776,7 +1832,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		$this->domain_is_verfied = null;
 		$this->verified_domain   = null;
 
-		$response = $this->maybe_verify_domain();
+		$response = $this->maybe_verify_domain( true );
 		if ( $response ) {
 			wp_send_json_success( [ 'msg' => __( 'Domain verification successful', 'funnelkit-stripe-woo-payment-gateway' ) ] );
 		}
@@ -1833,31 +1889,48 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		check_ajax_referer( 'fkwcs_admin_request', '_security' );
 		$this->check_wc_admin();
 
-		if ( isset( $_GET['fkwcs_mode'] ) && ! empty( trim( $_GET['fkwcs_mode'] ) ) ) {//phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		try {
+			foreach ( [ 'live', 'test' ] as $mode ) {
 
-			$mode = ! empty( $_GET['fkwcs_mode'] ) ? sanitize_text_field( trim( $_GET['fkwcs_mode'] ) ) : '';//phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-			if ( $mode === 'test' ) {
-				$secret_key = $this->get_api_option( 'fkwcs_test_secret_key' );//phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-			} else {
-				$secret_key = $this->get_api_option( 'fkwcs_secret_key' );//phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+				if ( $mode === 'test' ) {
+					$secret_key = $this->get_api_option( 'fkwcs_test_secret_key' );//phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+				} else {
+					$secret_key = $this->get_api_option( 'fkwcs_secret_key' );//phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+				}
+
+				$webhook_secret = $this->get_api_option( 'fkwcs_' . $mode . '_webhook_secret' );//phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+				$option_name    = 'fkwcs_' . $mode . '_created_webhook';
+
+				$webhook_data = $this->get_api_option( $option_name );
+
+				$params = [ 'secret_key' => $secret_key, 'webhook_secret' => $webhook_secret, 'webhook_id' => $webhook_data['id'] ];
+
+				$response = $this->delete_webhook( $params );
+				if ( ! empty( $response ) && true === $response['deleted'] ) {
+					delete_option( $option_name );
+					delete_option( 'fkwcs_' . $mode . '_webhook_secret' );
+				}
 			}
+		} catch ( \Exception $e ) {
+			if ( false !== strpos( $e->getMessage(), 'No such webhook endpoint' ) ) {
+				delete_option( 'fkwcs_live_created_webhook' );
+				delete_option( 'fkwcs_test_created_webhook' );
+				delete_option( 'fkwcs_live_webhook_secret' );
+				delete_option( 'fkwcs_test_webhook_secret' );
+				delete_option( 'fkwcs_live_webhook_url' );
 
-			$webhook_secret = $this->get_api_option( 'fkwcs_' . $mode . '_webhook_secret' );//phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-			$option_name    = 'fkwcs_' . $mode . '_created_webhook';
-
-			$webhook_data = $this->get_api_option( $option_name );
-
-			$params = [ 'secret_key' => $secret_key, 'webhook_secret' => $webhook_secret, 'webhook_id' => $webhook_data['id'] ];
-
-			$response = $this->delete_webhook( $params );
-			if ( ! empty( $response ) && true === $response['deleted'] ) {
-				delete_option( $option_name );
-				delete_option( 'fkwcs_' . $mode . '_webhook_secret' );
+				Helper::log( 'StripeException delete webhook data when no webhook found : ' . $e->getMessage() );
 				wp_send_json_success( [ 'msg' => __( 'Webhook Deleted successfully', 'funnelkit-stripe-woo-payment-gateway' ) ] );
+
+			} else {
+				Helper::log( 'StripeException During webhook deletion: ' . $e->getMessage() );
+				wp_send_json_error( [ 'msg' => __( 'Webhook could not be deleted', 'funnelkit-stripe-woo-payment-gateway' ) ] );
+
 			}
 		}
 
-		wp_send_json_error( [ 'msg' => __( 'Webhook could not be deleted', 'funnelkit-stripe-woo-payment-gateway' ) ] );
+		wp_send_json_success( [ 'msg' => __( 'Webhook Deleted successfully', 'funnelkit-stripe-woo-payment-gateway' ) ] );
 	}
 
 	/**
@@ -2042,20 +2115,9 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			return [];
 		}
 
-		$response = array();
-		$resp     = [];
+
 		$client   = new \Stripe\StripeClient( $client_secret );
-
-		try {
-			$response = $client->webhookEndpoints->delete( $params['webhook_id'] );
-		} catch ( \Exception $e ) {
-			$resp['status'] = false;
-			$resp['msg']    = __( 'Error connecting webhook. Please try again', 'funnelkit-stripe-woo-payment-gateway' );
-			// Log Stripe Error Message.
-			Helper::log( 'StripeException: ' . $e->getMessage() );
-
-			wp_send_json( $resp );
-		}
+		$response = $client->webhookEndpoints->delete( $params['webhook_id'] );
 
 		return $response;
 	}
@@ -2306,26 +2368,8 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			$this->options_keys[ $key ] = $value;
 		}
 	}
-	public function fkwcs_admin_fields_start_html_field( $html, $key, $data, $instance ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
-        ob_start();
-        ?>
-        </table>
-        <table class="form-table <?php echo esc_attr($data['class'])?>">
 
-
-
-        <?php
-        return ob_get_clean();
-    }
-    public function fkwcs_admin_fields_end_html_field( $html, $key, $data, $instance ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
-        ob_start();
-        ?>
-        </table>
-        <table class="form-table">
-        <?php
-        return ob_get_clean();
-    }
-	public function fkwcs_radio_html_field( $html, $key, $data, $instance ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+	public function fkwcs_radio_html_field( $html, $key, $data, $instance ) {  //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		$field_key = $instance->get_field_key( $key );
 		$defaults  = array(
 			'title'             => '',
@@ -2342,7 +2386,6 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		$data = wp_parse_args( $data, $defaults );
 
 
-
 		ob_start();
 		?>
         <tr valign="top">
@@ -2351,7 +2394,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
             </th>
             <td class="forminp">
                 <fieldset>
-                    <input type='radio' class="<?php echo esc_attr( $data['class'] ); ?>" name="<?php echo esc_attr( $field_key ); ?>" id="<?php echo esc_attr( $field_key ); ?>" style="<?php echo esc_attr( $data['css'] ); ?>" value="<?php echo esc_attr( $instance->get_option( $key ) ); ?>"  placeholder="<?php echo esc_attr( $data['placeholder'] ); ?>" <?php disabled( $data['disabled'], true ); ?> <?php echo $instance->get_custom_attribute_html( $data ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped  ?> />
+                    <input type='radio' class="<?php echo esc_attr( $data['class'] ); ?>" name="<?php echo esc_attr( $field_key ); ?>" id="<?php echo esc_attr( $field_key ); ?>" style="<?php echo esc_attr( $data['css'] ); ?>" value="<?php echo esc_attr( $instance->get_option( $key ) ); ?>" placeholder="<?php echo esc_attr( $data['placeholder'] ); ?>" <?php disabled( $data['disabled'], true ); ?> <?php echo $instance->get_custom_attribute_html( $data ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped  ?> />
                     <span class="screen-reader-text1"><span><?php echo wp_kses_post( $data['label'] ); ?></span></span>
 					<?php echo $instance->get_description_html( $data ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped  ?>
                 </fieldset>
@@ -2376,7 +2419,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		echo '<div class="notice notice-warning fkwcs_dismiss_notice_wrap_wc_block_incompat" >';
 
 		echo wp_kses_post( $this->block_incompat_notice() );
-		echo '<p><a class="button button-primary" href="' . esc_url( $action_url ) . '">' . __( ' Switch to classic cart/checkout', 'funnel-builder' ) . '</a>     <a href="' . esc_url( $dismiss_url ) . '" class="button fkwcs_dismiss_notice" data-notice="wc_block_incompat">' . __( 'Dismiss', 'funnel-builder' ) . '</a>  </p>'; //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo '<p><a class="button button-primary" href="' . esc_url( $action_url ) . '">' . __( ' Switch to classic cart/checkout', 'funnelkit-stripe-woo-payment-gateway' ) . '</a>     <a href="' . esc_url( $dismiss_url ) . '" class="button fkwcs_dismiss_notice" data-notice="wc_block_incompat">' . __( 'Dismiss', 'funnelkit-stripe-woo-payment-gateway' ) . '</a>  </p>'; //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		echo '</div>';
 	}
 
@@ -2395,9 +2438,9 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		}
 
 
-        check_ajax_referer( 'fkwcs_blocks_incompatible_switch_to_classic', 'nonce', true );
+		check_ajax_referer( 'fkwcs_blocks_incompatible_switch_to_classic', 'nonce', true );
 
-        $this->check_wc_admin();
+		$this->check_wc_admin();
 
 		$wc_cart_page     = get_post( wc_get_page_id( 'cart' ) );
 		$wc_checkout_page = get_post( wc_get_page_id( 'checkout' ) );
@@ -2443,19 +2486,31 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 			$client = Helper::get_new_client( $this->options_keys['fkwcs_secret_key'] );
 			$args   = $client->accounts( 'retrieve', [ $this->options_keys['fkwcs_account_id'] ] );
+
 			if ( ! empty( $args['success'] ) ) {
 				$account                                           = $args['data'];
 				$this->account_data['statement_descriptor_prefix'] = $account->settings->card_payments->statement_descriptor_prefix;
 				$this->account_data['statement_descriptor_full']   = $account->settings->payments->statement_descriptor;
+				$stripe_account_settings                           = get_option( 'fkwcs_stripe_account_settings', [] );
 
-                $stripe_account_settings = get_option('fkwcs_stripe_account_settings',[]);
-                 if(empty($stripe_account_settings))  {
-                    $stripe_account_settings = array(
-                        'country' =>  $account->country,
-                        'default_currency' =>  $account->default_currency,
-                    );
-                    update_option('fkwcs_stripe_account_settings', $stripe_account_settings);
-                 }
+				if ( $this->options_keys['fkwcs_stripe_statement_descriptor_full'] === '' && $this->account_data['statement_descriptor_full'] !== '' ) {
+
+					update_option( 'fkwcs_stripe_statement_descriptor_full', $this->account_data['statement_descriptor_full'] );
+					$this->options_keys['fkwcs_stripe_statement_descriptor_full'] = $this->account_data['statement_descriptor_full'];
+				}
+
+				if ( $this->options_keys['fkwcs_stripe_statement_descriptor_prefix'] === '' && $this->account_data['statement_descriptor_prefix'] !== '' ) {
+					update_option( 'fkwcs_stripe_statement_descriptor_prefix', $this->account_data['statement_descriptor_prefix'] );
+					$this->options_keys['fkwcs_stripe_statement_descriptor_prefix'] = $this->account_data['statement_descriptor_prefix'];
+				}
+
+				if ( empty( $stripe_account_settings ) ) {
+					$stripe_account_settings = array(
+						'country'          => $account->country,
+						'default_currency' => $account->default_currency,
+					);
+					update_option( 'fkwcs_stripe_account_settings', $stripe_account_settings );
+				}
 			}
 		}
 	}
@@ -2487,7 +2542,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
                                 <span class="fkwcs-card-amount"><?php esc_html_e( 'Amount', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
                             </div>
                             <div class="fkwcs-card-transactions-data">
-                                <a href="javascript:void(0)" id="fkwcs_custom_statement_desc_val" class="fkwcs-transaction-id"><?php echo esc_html($value['customdata']['statement_descriptor_prefix']) . '* '; ?></a>
+                                <a href="javascript:void(0)" id="fkwcs_custom_statement_desc_val" class="fkwcs-transaction-id"><?php echo esc_html( $value['customdata']['statement_descriptor_prefix'] ) . '* '; ?></a>
                                 <span class="fkwcs-amount-figure">$452.25</span>
                             </div>
                         </div>
@@ -2511,7 +2566,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
                                 <span class="fkwcs-card-amount"><?php esc_html_e( 'Amount', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
                             </div>
                             <div class="fkwcs-card-transactions-data">
-                                <a href="javascript:void(0)" class="fkwcs-transaction-id"><?php echo esc_html($value['customdata']['statement_descriptor_full']); ?></a>
+                                <a href="javascript:void(0)" class="fkwcs-transaction-id"><?php echo esc_html( $value['customdata']['statement_descriptor_full'] ); ?></a>
                                 <span class="fkwcs-amount-figure">$452.25</span>
                             </div>
                         </div>
@@ -2525,5 +2580,40 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	}
 
 
+	public function fkwcs_admin_fields_start_html_field( $html, $key, $data, $instance ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+		ob_start();
+		?>
+        </table>
+        <table class="form-table <?php echo esc_attr( $data['class'] ) ?>">
+		<?php
+		return ob_get_clean();
+	}
+
+	public function fkwcs_admin_fields_end_html_field( $html, $key, $data, $instance ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+		ob_start();
+		?>
+        </table>
+        <table class="form-table">
+		<?php
+		return ob_get_clean();
+	}
+
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

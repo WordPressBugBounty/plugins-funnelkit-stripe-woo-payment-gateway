@@ -67,7 +67,7 @@
                 }
 
                 // Show Apple Pay, GooglePay button for now
-                result = {applePay: true, googlePay: true}
+                result = {applePay: true, googlePay: true};
 
                 if (result.applePay) {
                     requestType = 'apple_pay';
@@ -120,7 +120,9 @@
 
 
     function toggleDescriptor() {
-        if($('#fkwcs_stripe_statement_descriptor_should_customize').length === 0){
+
+        if ($('#fkwcs_stripe_statement_descriptor_should_customize').length === 0) {
+
             return;
         }
         let isChecked = $('#fkwcs_stripe_statement_descriptor_should_customize').is(":checked");
@@ -212,7 +214,9 @@
     }
 
     function checkPaymentRequestAvailibility() {
-
+        if (fkwcs_admin_data.pub_key === '') {
+            return;
+        }
         var stripe = Stripe(fkwcs_admin_data.pub_key);
 
         var paymentRequest = stripe.paymentRequest({
@@ -267,6 +271,7 @@
                 $('#fkwcs_delete_webhook_button').closest('tr').hide();
                 $('#fkwcs_debug_log').closest('tr').hide();
                 $('#fkwcs_test_connection').closest('tr').hide();
+                $('#fkwcs_currency_fee').closest('tr').hide();
                 $('#fkwcs_stripe_statement_descriptor_full').closest('tr').hide();
                 $('#fkwcs_stripe_statement_descriptor_should_customize').closest('tr').hide();
                 $('.fkwcs-cards-wrap').hide();
@@ -299,20 +304,99 @@
     }
 
     function show_smart_button_connection() {
-        let g = $('#is_google_pay_available')
+        let g = $('#is_google_pay_available');
         if (smart_button_result.google_pay) {
             g.addClass('fkwcs-express-button-active');
             g.children('.fkwcs_btn_connection').html('&#9989;');
         } else {
             g.addClass('fkwcs-express-button-not-active');
         }
-        let a = $('#is_apple_pay_available')
+        let a = $('#is_apple_pay_available');
         if (smart_button_result.apple_pay) {
             a.addClass('fkwcs-express-button-active');
             a.children('.fkwcs_btn_connection').html('&#9989;');
         } else {
             a.addClass('fkwcs-express-button-not-active');
         }
+    }
+
+    function show_google_pay_button() {
+
+        if (fkwcs_admin_data.pub_key === '') {
+            return;
+        }
+        let data = {
+            environment: 'TEST',
+            merchantId: '',
+            merchantName: '',
+            paymentDataCallbacks: {
+                onPaymentAuthorized: function onPaymentAuthorized() {
+                    return new Promise(function (resolve) {
+                        resolve({
+                            transactionState: "SUCCESS"
+                        });
+                    }.bind(this));
+                },
+            }
+        };
+        let version_data = {
+            "apiVersion": 2,
+            "apiVersionMinor": 0
+        };
+        let brand_data = {
+            type: 'CARD',
+            parameters: {
+                allowedAuthMethods: ["PAN_ONLY"],
+                allowedCardNetworks: ["AMEX", "DISCOVER", "INTERAC", "JCB", "MASTERCARD", "VISA"],
+                assuranceDetailsRequired: true
+            },
+            tokenizationSpecification: {
+                type: "PAYMENT_GATEWAY",
+                parameters: {
+                    gateway: 'stripe',
+                    "stripe:version": "2018-10-31",
+                    "stripe:publishableKey": fkwcs_admin_data.pub_key
+                }
+            }
+        };
+        const button_settings = () => {
+            let btn_color = $('#woocommerce_fkwcs_stripe_google_pay_button_color');
+            let btn_theme = $('#woocommerce_fkwcs_stripe_google_pay_button_theme');
+            return {
+                buttonColor: btn_color.val(),
+                buttonType: btn_theme.val(),
+                onClick: () => {
+                    console.log('Gpay Not Working in Admin Area');
+                }
+            };
+        };
+        const createButton = (google_pay_client) => {
+            $('#woocommerce_fkwcs_stripe_google_pay_button_dummy_button').replaceWith('<div id="woocommerce_fkwcs_stripe_google_pay_button_dummy_button"></div>');
+            $('#woocommerce_fkwcs_stripe_google_pay_button_color , #woocommerce_fkwcs_stripe_google_pay_button_theme')?.on('change', () => {
+                $('#woocommerce_fkwcs_stripe_google_pay_button_dummy_button').html($(google_pay_client.createButton(button_settings())));
+            });
+            $('#woocommerce_fkwcs_stripe_google_pay_button_dummy_button').html($(google_pay_client.createButton(button_settings())));
+        };
+        const init = () => {
+            try {
+
+                let google_pay_client = new google.payments.api.PaymentsClient(data);
+                let request_data = version_data;
+                version_data.allowedPaymentMethods = [brand_data];
+                google_pay_client.isReadyToPay(request_data).then(() => {
+                    createButton(google_pay_client);
+                }).catch((err) => {
+                    console.log(err);
+                });
+
+
+            } catch (e) {
+                console.log(e);
+            }
+
+
+        };
+        $.getScript('https://pay.google.com/gp/p/js/pay.js', init);
     }
 
     if (fkwcs_admin_data.is_connected === '1') {
@@ -340,6 +424,7 @@
         toggleOptions();
         toggleDescriptor();
         checkPaymentRequestAvailibility();
+        show_google_pay_button();
 
         $('#fkwcs_express_checkout_button_text, #fkwcs_express_checkout_button_theme').change(function () {
             style = {
@@ -408,12 +493,12 @@
                 show_smart_button_connection();
                 $('.fkwcs-btn-type-info-wrapper').show();
                 spinner.removeClass('fkwcs_show_spinner');
-            }, 1500, spinner)
+            }, 1500, spinner);
 
         });
 
 
-        let form_type = $('#woocommerce_fkwcs_stripe_payment_form:checked')
+        let form_type = $('#woocommerce_fkwcs_stripe_payment_form:checked');
         if (form_type.length > 0) {
             $('.link_fields_wrapper').show();
         } else {
@@ -433,7 +518,7 @@
             });
 
         }
-    })
+    });
 
     $(document).on('change', '#fkwcs_mode', function (e) {
 
@@ -687,12 +772,6 @@
     $(document).on('click change', '.fkwcs_link_type_selection', function (e) {
         let checked_length = $('.fkwcs_link_type_selection:checked').length;
         let is_checked = $(this).is(":checked");
-        let id = $(this).attr('id');
-        if ('woocommerce_fkwcs_stripe_link_authentication' === id) {
-            $('#woocommerce_fkwcs_stripe_link_authentication_load').parents('tr').show();
-        } else {
-            $('#woocommerce_fkwcs_stripe_link_authentication_load').parents('tr').hide();
-        }
 
         if (checked_length === 0 && false === is_checked) {
             $(this).prop('checked', true);
@@ -709,7 +788,6 @@
         let checked_length = checkedElem.length;
         let is_checked = checkedElem.is(":checked");
         let id = checkedElem.attr('id');
-        console.log(id);
         if ('woocommerce_fkwcs_stripe_payment_form' === id) {
             $('.link_fields_wrapper').show();
         } else {
@@ -722,6 +800,23 @@
         }
         $('.fkwcs_form_type_selection').not(checkedElem).prop('checked', false);
     })();
+
+
+    window.addEventListener('load', function () {
+        const fkwcsMode = $('#fkwcs_mode');
+        const appendDescription = () => {
+            if (fkwcsMode.val() === 'test_admin_only') {
+                fkwcsMode.parent().append('<p class="fkwcs_test_admin_only_desc description">' + fkwcs_admin_data.test_mode_admin_only + '</p>');
+            }
+        };
+
+        fkwcsMode.on('change', function () {
+            $('.fkwcs_test_admin_only_desc').remove();
+            appendDescription();
+        });
+
+        appendDescription();
+    });
 
     $('.fkwcs_link_type_selection:checked').trigger('click');
 

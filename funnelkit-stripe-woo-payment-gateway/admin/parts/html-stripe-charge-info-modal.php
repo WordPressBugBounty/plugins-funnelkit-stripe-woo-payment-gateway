@@ -1,7 +1,9 @@
 <?php
 /**
  * @var \Stripe\Charge $charge
+ * @var \WC_Order $order
  */
+$payment_intent_id = $order->get_meta( '_payment_intent_id', true );
 ?>
 
 <div class="data-container">
@@ -15,7 +17,7 @@
             <label><?php esc_html_e( 'Status', 'funnelkit-stripe-woo-payment-gateway' ); ?></label>:&nbsp;
 			<?php echo esc_html($charge->status); ?>
         </div>
-		<?php if ( ( $payment_intent_id = $order->get_meta( '_payment_intent_id', true ) ) ) : ?>
+		<?php if ( $payment_intent_id ) : ?>
             <div class="metadata">
                 <label><?php esc_html_e( 'Payment Intent', 'funnelkit-stripe-woo-payment-gateway' ); ?></label>:&nbsp;
 				<?php echo esc_html($payment_intent_id); ?>

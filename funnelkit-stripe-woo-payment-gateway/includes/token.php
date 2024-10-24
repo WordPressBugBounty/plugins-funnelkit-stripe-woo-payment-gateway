@@ -1,6 +1,6 @@
 <?php
 
-namespace FKWCS\Inc;
+namespace FKWCS\Gateway\Stripe;
 
 use WC_Payment_Token;
 #[\AllowDynamicProperties]

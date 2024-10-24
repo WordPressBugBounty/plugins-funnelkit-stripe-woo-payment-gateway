@@ -1,6 +1,5 @@
 <?php
 
-use FKWCS\Gateway\Stripe\CreditCard;
 use FKWCS\Gateway\Stripe\Helper;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -58,6 +57,13 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			add_action( 'wfocu_front_primary_order_cancelled', array( $this, 'remove_intent_meta_form_cancelled_order' ) );
 
 
+			add_action( 'fkwcs_webhook_payment_succeed', [ $this, 'maybe_save_webhook_status' ] );
+			add_action( 'fkwcs_webhook_payment_on-hold', [ $this, 'maybe_save_webhook_status' ] );
+			add_action( 'fkwcs_webhook_payment_failed', [ $this, 'maybe_save_webhook_status' ] );
+
+			add_filter( 'wfocu_front_order_status_after_funnel', array( $this, 'replace_recorded_status_with_ipn_response' ), 10, 2 );
+
+
 		}
 
 		public static function get_instance() {
@@ -85,7 +91,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		 * @return boolean on success false otherwise
 		 */
 		public function has_token( $order ) {
-			$this->token = Helper::get_meta( $order, '_fkwcs_source_id' );
+			$this->token = $this->get_wc_gateway()->get_order_stripe_data( '_fkwcs_source_id', $order );
 			if ( ! empty( $this->token ) ) {
 				return true;
 			}
@@ -103,7 +109,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		 * @return boolean on success false otherwise
 		 */
 		public function get_token( $order ) {
-			$this->token = Helper::get_meta( $order, '_fkwcs_source_id' );
+			$this->token = $this->get_wc_gateway()->get_order_stripe_data( '_fkwcs_source_id', $order );
 			if ( ! empty( $this->token ) ) {
 				return $this->token;
 			}
@@ -139,7 +145,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 			$billing_email = $order->get_billing_email();
 			if ( Helper::should_customize_statement_descriptor() ) {
-				$post_data['statement_descriptor_suffix'] = $gateway->clean_statement_descriptor( Helper::get_gateway_descriptor_suffix($order) );
+				$post_data['statement_descriptor_suffix'] = $gateway->clean_statement_descriptor( Helper::get_gateway_descriptor_suffix( $order ) );
 			}
 			if ( ! empty( $billing_email ) ) {
 				$post_data['receipt_email'] = $billing_email;
@@ -164,7 +170,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		protected function create_intent( $order, $prepared_source ) {
 			// The request for a charge contains metadata for the intent.
 			$full_request = $this->generate_payment_request( $order, $prepared_source );
-			$gateway    = $this->get_wc_gateway();
+			$gateway      = $this->get_wc_gateway();
 
 			$request = array(
 				'payment_method'       => $prepared_source->source,
@@ -232,12 +238,6 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			return $confirmed_intent;
 		}
 
-		/**
-		 * @param WC_Order $order
-		 * @param $balance_transaction_id
-		 *
-		 * @return void
-		 */
 		public function update_stripe_fees( $order, $balance_transaction_id ) {
 			$stripe              = $this->get_wc_gateway();
 			$stripe_api          = $stripe->get_client();
@@ -251,46 +251,62 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			if ( isset( $balance_transaction ) && isset( $balance_transaction->fee ) ) {
 
 
-				$fee      = ! empty( $balance_transaction->fee ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->fee ) : 0;
-				$net      = ! empty( $balance_transaction->net ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->net ) : 0;
-				$currency = ! empty( $balance_transaction->currency ) ? strtoupper( $balance_transaction->currency ) : null;
+				$fee = ! empty( $balance_transaction->fee ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->fee ) : 0;
+				$net = ! empty( $balance_transaction->net ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->net ) : 0;
 
 				/**
 				 * Handling for Stripe Fees
 				 */
 				$order_behavior = WFOCU_Core()->funnels->get_funnel_option( 'order_behavior' );
 				$is_batching_on = ( 'batching' === $order_behavior ) ? true : false;
-				if ( true === $is_batching_on ) {
-					$fee  = $fee + Helper::get_stripe_fee( $order );
-					$net  = $net + Helper::get_stripe_net( $order );
-					$data = [
-						'fee'      => $fee,
-						'net'      => $net,
-						'currency' => $currency,
-					];
-					Helper::update_stripe_transaction_data( $order, $data );
+
+				$data = [];
+				if ( ( 'yes' === get_option( 'fkwcs_currency_fee', 'no' ) && ! empty( $balance_transaction->exchange_rate ) ) ) {
+					$data['currency'] = $order->get_currency();
+					$fee = $fee / $balance_transaction->exchange_rate;
+					$net = $net / $balance_transaction->exchange_rate;
+
+				} else {
+					$data['currency'] = ! empty( $balance_transaction->currency ) ? strtoupper( $balance_transaction->currency ) : null;
+
 				}
-				WFOCU_Core()->data->set( 'wfocu_stripe_fee', $fee );
-				WFOCU_Core()->data->set( 'wfocu_stripe_net', $net );
-				WFOCU_Core()->data->set( 'wfocu_stripe_currency', $currency );
+				$data['fee'] = $fee;
+				$data['net'] = $net;
+				if ( true === $is_batching_on ) {
+					$fee = $fee + Helper::get_stripe_fee( $order );
+					$net = $net + Helper::get_stripe_net( $order );
+
+					$data['fee'] = $fee;
+					$data['net'] = $net;
+					Helper::update_stripe_transaction_data( $order, $data );
+
+				} else {
+					WFOCU_Core()->data->set( 'wfocu_stripe_fee', $fee );
+					WFOCU_Core()->data->set( 'wfocu_stripe_net', $net );
+					WFOCU_Core()->data->set( 'wfocu_stripe_currency', $data['currency'] );
+				}
+
+
 			}
 		}
 
 		public function maybe_render_in_offer_transaction_scripts() {
+
 			$order = WFOCU_Core()->data->get_current_order();
 
 			if ( ! $order instanceof WC_Order ) {
 				return;
 			}
-			remove_filter( 'woocommerce_order_get_payment_method', array( 'FKWCS\Gateway\WC_Stripe_Conversions', 'change_payment_method' ), 99 );
+			remove_filter( 'woocommerce_order_get_payment_method', array( FKWCS\Gateway\Stripe::get_instance(), 'change_payment_method' ), 99 );
 
 			if ( $this->key !== $order->get_payment_method() ) {
 				return;
 			}
-			add_filter( 'woocommerce_order_get_payment_method', array( 'FKWCS\Gateway\WC_Stripe_Conversions', 'change_payment_method' ), 99, 2 );
+
+			add_filter( 'woocommerce_order_get_payment_method', array( FKWCS\Gateway\Stripe::get_instance(), 'change_payment_method' ), 99, 2 );
 
 			?>
-            <script src="https://js.stripe.com/v3/?ver=3.0"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript ?>
+            <script src="https://js.stripe.com/v3/?ver=3.0" data-gateway="stripe" data-cookieconsent="ignore"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript ?>
 
             <script>
 
@@ -605,7 +621,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 					if ( 'requires_action' === $intent->status ) {
 
 						/**
-						 * return intent_secret as the data to the client so that necesary next operations could taken care.
+						 * return intent_secret as the data to the client so that necessary next operations could have taken care.
 						 */
 						wp_send_json( array(
 							'result'        => 'success',
@@ -680,7 +696,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 
 		/**
-		 * Filter gateways for the zero doller cart, allow our gateway to come
+		 * Filter gateways for the zero dollar cart, allow our gateway to come
 		 *
 		 * @param $gateways
 		 *
@@ -830,9 +846,9 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 
 		/**
-         *
-         * Removed stripe meta for restricted any stripe process on upsell cancelled order
-         *
+		 *
+		 * Removed stripe meta for restricted any stripe process on upsell cancelled order
+		 *
 		 * @param $cancelled_order
 		 *
 		 * @return void
@@ -844,6 +860,69 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			$cancelled_order->delete_meta_data( '_fkwcs_webhook_paid' );
 			$cancelled_order->delete_meta_data( '_fkwcs_intent_id' );
 			$cancelled_order->save_meta_data();
+		}
+
+
+		/**
+		 * @param WC_Order $order
+		 *
+		 * @return void
+		 *
+		 */
+		public function maybe_save_webhook_status( $order ) {
+
+			$current_action     = current_action();
+			$is_case_of_webhook = Helper::get_meta( wc_get_order( $order->get_id() ), '_wfocu_payment_complete_on_hold' );
+
+			if ( empty( $is_case_of_webhook ) ) {
+
+				return;
+			}
+
+			if ( $current_action === 'fkwcs_webhook_payment_succeed' ) {
+				$order->update_meta_data( 'wfocu_stripe_ipn_status', 'succeeded' );
+
+			} elseif ( $current_action === 'fkwcs_webhook_payment_on-hold' ) {
+				$order->update_meta_data( 'wfocu_stripe_ipn_status', 'on-hold' );
+
+			} else {
+				$order->update_meta_data( 'wfocu_stripe_ipn_status', 'failed' );
+
+			}
+			$order->save_meta_data();
+		}
+
+
+		/**
+		 * @param $status
+		 * @param WC_Order $order
+		 */
+		public function replace_recorded_status_with_ipn_response( $status, $order ) {
+
+			$get_meta = Helper::get_meta( $order, 'wfocu_stripe_ipn_status' );
+
+			if ( empty( $get_meta ) ) {
+				return $status;
+			}
+
+
+			switch ( $get_meta ) {
+				case 'succeeded':
+
+					return apply_filters( 'woocommerce_payment_complete_order_status', $order->needs_processing() ? 'processing' : 'completed', $order->get_id(), $order );
+				case 'on-hold':
+					return 'on-hold';
+				case 'failed':
+				case 'Failed':
+				case 'denied':
+				case 'Denied':
+				case 'Expired':
+				case 'expired':
+					return 'failed';
+
+			}
+
+			return $status;
 		}
 
 

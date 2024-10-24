@@ -22,7 +22,7 @@
 }
 
 
-div#fkwcs_stripe_smart_button.fkwcs_disabled_btn button {
+div#fkwcs_stripe_smart_button .fkwcs_disabled_btn button {
     background: gray;
 }
 
@@ -33,6 +33,7 @@ div#fkwcs_stripe_smart_button.fkwcs_disabled_btn button {
 #fkwcs_stripe_smart_button_wrapper:not(.inline) #fkwcs_custom_express_button .fkwcs_smart_buttons {
     min-height: 40px;
     min-width: 100px;
+    margin-top:8px;
 }
 
 #fkwcs_custom_express_button .fkwcs_smart_buttons {
@@ -251,7 +252,8 @@ body #payment #fkwcs-stripe-elements-wrapper label {
     display: inline-block;
     vertical-align: middle;
 }
-body #payment #fkwcs-stripe-elements-wrapper .fkwcs-save-cards input{
+
+body #payment #fkwcs-stripe-elements-wrapper .fkwcs-save-cards input {
     margin: 0 10px 0 0;
     vertical-align: middle;
 }
@@ -432,12 +434,12 @@ body #payment .fkwcs-saved-payment-methods ul li {
 }
 
 #fkwcs_custom_express_button .fkwcs_ec_link_button-dark, #fkwcs_custom_express_button .fkwcs_ec_link_button-light, #fkwcs_custom_express_button .fkwcs_ec_link_button-light-outline {
-    background-color: #33ddb3 !important;
+    background-color: #00D66F !important;
     color: #1d3944 !important;
 }
 
 #fkwcs_custom_express_button .fkwcs_ec_link_button-dark:hover, #fkwcs_custom_express_button .fkwcs_ec_link_button-light:hover, #fkwcs_custom_express_button .fkwcs_ec_link_button-light-outline:hover {
-    background-color: #33ddb3 !important;
+    background-color: #00D66F !important;
     color: #1d3944 !important;
 }
 
@@ -472,6 +474,9 @@ body #payment .payment_box .fkwcs_local_gateway_wrapper .fkwcs-offisite-redirect
     margin-top: 16px;
 }
 
+.wfacp_smart_button_container .gpay-card-info-container {
+    width: 100%
+}
 
 @media (max-width: 760px) {
     #fkwcs-stripe-elements-wrapper .fkwcs-tooltip::after {
@@ -480,4 +485,46 @@ body #payment .payment_box .fkwcs_local_gateway_wrapper .fkwcs-offisite-redirect
     }
 }
 
+li.payment_method_fkwcs_stripe_apple_pay,li.payment_method_fkwcs_stripe_google_pay {
+    display: none;
+}
 
+#fkwcs_stripe_smart_button_wrapper .fkwcs_disabled_btn,.fkwcs_google_pay_wrapper .fkwcs_disabled_btn {
+    opacity: 0.5 !important;
+    cursor: not-allowed;
+}
+
+.fkwcs_google_pay_wrapper button {
+    width: 100%;
+}
+
+.fkwcs_google_pay_wrapper {
+
+    margin: 8px 0;
+}
+
+.fkwcs_fkcart_gpay_wrapper {
+    margin-top: 8px;
+}
+
+.fkwcs_smart_checkout_button .fkwcs_express_checkout_button_icon {
+    display: block !important;
+}
+
+
+#wfacp_smart_buttons.wfacp_smart_buttons .wfacp_smart_button_container .gpay-card-info-iframe,
+body #wfacp-sec-wrapper #payment .gpay-card-info-iframe,
+body #payment .gpay-card-info-iframe,
+body  #fkwcs-expresscheckout-fieldset .gpay-card-info-iframe{
+    margin: 0 auto !important;
+}
+
+.fkwcs_google_pay_wrapper .gpay-card-info-container.black {
+    outline: none;
+}
+.fkwcs_stripe_gpay_icons img,.fkwcs_stripe_apple_pay_icons img {
+    width: 56px;
+}
+body button#gpay-button-online-api-id {
+    padding: 0;
+}

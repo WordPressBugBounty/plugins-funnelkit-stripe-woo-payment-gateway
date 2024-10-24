@@ -6,15 +6,15 @@
 namespace FKWCS\Gateway\Stripe;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
-use DateTime;
 use Exception as Exception;
 use Stripe\Exception\SignatureVerificationException as SignatureException;
 use UnexpectedValueException as UnexpectedException;
+
 #[\AllowDynamicProperties]
 class Webhook {
 
 	private static $instance = null;
-
+	private $mode = 'test';
 	const FKWCS_LIVE_BEGAN_AT = 'fkwcs_live_webhook_began_at';
 	const FKWCS_LIVE_LAST_SUCCESS_AT = 'fkwcs_live_webhook_last_success_at';
 	const FKWCS_LIVE_LAST_FAILURE_AT = 'fkwcs_live_webhook_last_failure_at';
@@ -29,8 +29,6 @@ class Webhook {
 	public function __construct() {
 		add_action( 'rest_api_init', [ $this, 'register_endpoints' ] );
 
-		add_action( 'woocommerce_api_wc_stripe', [ $this, 'control_webhook' ] );
-		add_filter( 'rest_pre_dispatch', [ $this, 'control_webhook' ], 10, 3 );
 
 	}
 
@@ -47,29 +45,6 @@ class Webhook {
 		return self::$instance;
 	}
 
-
-	/**
-	 * This method simply overrides webhook for the WooCommerce stripe gateway, so that stripe will no longer notify sellers about webhook endpoint returning 400.
-	 * @return null|void
-	 */
-	public function control_webhook( $return = null, $rest = null, $request = null ) { //  phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.VoidReturn,WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement
-
-
-		if ( current_action() === 'woocommerce_api_wc_stripe' ) {
-			if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || ( 'POST' !== $_SERVER['REQUEST_METHOD'] ) || ! isset( $_GET['wc-api'] ) || ( 'wc_stripe' !== $_GET['wc-api'] ) ) { //  phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				return;
-			}
-		}
-
-		if ( current_filter() === 'rest_pre_dispatch' ) {
-			if ( $request->get_route() !== '/wc-stripe/v1/webhook' ) {
-				return $return;
-			}
-		}
-
-		http_response_code( 200 );
-		exit();
-	}
 
 	/**
 	 * Returns message about interaction with Stripe webhook
@@ -129,7 +104,7 @@ class Webhook {
 				}
 				if ( ! empty( trim( $endpoint_secret ) ) ) {
 					$current_time = time();
-					update_option( $began, $current_time,'no' );
+					update_option( $began, $current_time, 'no' );
 
 					/* translators: timestamp */
 
@@ -166,11 +141,11 @@ class Webhook {
 
 		$payload = file_get_contents( 'php://input' ); //phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsRemoteFile
 
-		$mode            = $this->get_mode( $payload );
+		$this->mode      = $this->get_mode( $payload );
 		$endpoint_secret = '';
-		if ( 'live' === $mode ) {
+		if ( 'live' === $this->mode ) {
 			$endpoint_secret = get_option( 'fkwcs_live_webhook_secret' );
-		} elseif ( 'test' === $mode ) {
+		} elseif ( 'test' === $this->mode ) {
 			$endpoint_secret = get_option( 'fkwcs_test_webhook_secret' );
 		}
 
@@ -179,10 +154,10 @@ class Webhook {
 			exit();
 		}
 
-		$began = constant( 'self::FKWCS_' . strtoupper( $mode ) . '_BEGAN_AT' );
+		$began = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_BEGAN_AT' );
 
 		if ( ! get_option( $began ) ) {
-			update_option( $began, time(),'no' );
+			update_option( $began, time(), 'no' );
 		}
 
 		$sig_header = isset( $_SERVER['HTTP_STRIPE_SIGNATURE'] ) ? wc_clean( $_SERVER['HTTP_STRIPE_SIGNATURE'] ) : '';
@@ -192,10 +167,10 @@ class Webhook {
 			Helper::log( 'Webhook data: ' . wp_json_encode( $event->toArray() ) );
 		} catch ( UnexpectedException|SignatureException $e ) {
 			Helper::log( 'Webhook error : ' . $e->getMessage() . ' Full Payload below: ' . $payload );
-			$error_at = constant( 'self::FKWCS_' . strtoupper( $mode ) . '_LAST_FAILURE_AT' );
-			update_option( $error_at, time(),'no' );
-			$error = constant( 'self::FKWCS_' . strtoupper( $mode ) . '_LAST_ERROR' );
-			update_option( $error, $e->getMessage(),'no' );
+			$error_at = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_FAILURE_AT' );
+			update_option( $error_at, time(), 'no' );
+			$error = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_ERROR' );
+			update_option( $error, $e->getMessage(), 'no' );
 			http_response_code( 400 );
 			exit();
 		}
@@ -239,10 +214,22 @@ class Webhook {
 			case 'review.closed':
 				$this->review_closed( $object );
 				break;
+			case 'invoice.paid':
+				do_action( 'fkwcs_invoice.paid_webhook', $object );
+				break;
+			case 'invoice.finalized':
+				do_action( 'fkwcs_invoice.finalized_webhook', $object );
+				break;
+			case 'customer.subscription.deleted':
+				do_action( 'fkwcs_customer.subscription.deleted_webhook', $object );
+				break;
+			case 'payment_intent.requires_action':
+				$this->require_action( $object );
+				break;
 
 		}
-		$success = constant( 'self::FKWCS_' . strtoupper( $mode ) . '_LAST_SUCCESS_AT' );
-		update_option( $success, time(),'no' );
+		$success = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_SUCCESS_AT' );
+		update_option( $success, time(), 'no' );
 		exit;
 	}
 
@@ -519,7 +506,14 @@ class Webhook {
 		$order = wc_get_order( $order_id );
 		do_action( 'fkwcs_webhook_event_intent_succeeded', $intent, $order );
 
-		if ( 'fkwcs_stripe' === $order->get_payment_method() && '' === Helper::get_meta( $order, '_fkwcs_maybe_check_for_auth' ) ) {
+
+		if ( in_array( $order->get_payment_method(), [
+				'fkwcs_stripe',
+				'fkwcs_stripe_afterpay',
+				'fkwcs_stripe_affirm',
+				'fkwcs_stripe_klarna',
+				'fkwcs_stripe_p24'
+			], true ) && '' === Helper::get_meta( $order, '_fkwcs_maybe_check_for_auth' ) ) {
 			return;
 		}
 
@@ -545,7 +539,7 @@ class Webhook {
 
 	/**
 	 * Handles webhook call of event charge.succeeded
-
+	 *
 	 * @param object $charge charge object received from Stripe.
 	 *
 	 * @return void
@@ -611,16 +605,17 @@ class Webhook {
 
 			return;
 		}
-		$order = wc_get_order( $order_id );
-
+		$order   = wc_get_order( $order_id );
+		$gateway = $order->get_payment_method();
 		/**
 		 * Check if this transaction is happening or already done
 		 * If found to be the ongoing transaction, then stop here because the frontend code will handle if the charge fails.
 		 */
-		if ( '' === $order->get_transaction_id() ) {
+		if ( '' === $order->get_transaction_id() && ! in_array( $gateway, [ 'fkwcs_stripe_affirm', 'fkwcs_stripe_afterpay', 'fkwcs_stripe_klarna' ], true ) ) {
 			return;
 
 		}
+
 
 		/**
 		 * return if order is already paid
@@ -628,8 +623,8 @@ class Webhook {
 		if ( $order->is_paid() ) {
 			return;
 		}
-		$mode = get_option( 'fkwcs_mode', 'test' );
-		if ( 'live' === $mode ) {
+
+		if ( 'live' === $this->mode ) {
 			$client_secret = get_option( 'fkwcs_secret_key' );
 		} else {
 			$client_secret = get_option( 'fkwcs_test_secret_key' );
@@ -647,11 +642,26 @@ class Webhook {
 			return;
 		}
 
-		/* translators: The error message that was received from Stripe. */
-		$error_message = isset( $intent->last_payment_error ) ? sprintf( __( 'Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->last_payment_error->message ) : '';
-		/* translators: The error message that was received from Stripe. */
-		$message = $error_message;
-		$order->update_status( 'failed', $message );
+
+		$error_message = '';
+
+		$error_message .= __( 'Intent ID', 'funnelkit-stripe-woo-payment-gateway' ) . ":" . $charge->payment_intent;
+
+		$localized_message = Helper::get_localized_error_message( $intent->last_payment_error );
+
+
+		$error_message .= "\n\n" . $localized_message;
+
+
+		if ( ! empty( $error_message ) ) {
+
+			if ( $order->has_status( 'failed' ) ) {
+				$order->add_order_note( $error_message );
+			} else {
+				$order->update_status( 'failed', $error_message );
+			}
+		}
+
 		do_action( 'fkwcs_webhook_payment_failed', $order );
 
 	}
@@ -702,6 +712,7 @@ class Webhook {
 		$order->update_status( Helper::get_meta( $order, 'fkwcs_status_before_review' ), $message );
 	}
 
+
 	/**
 	 * Fetch WooCommerce order id from payment intent
 	 *
@@ -709,26 +720,15 @@ class Webhook {
 	 *
 	 * @return string|null order id.
 	 */
-	public function get_order_id_from_intent_query( $payment_intent ) {
+	public function get_order_id_from_intent_query( $payment_intent, $meta_key = '_fkwcs_intent_id' ) {
 		global $wpdb;
 
 		if ( class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) && method_exists( '\Automattic\WooCommerce\Utilities\OrderUtil', 'custom_orders_table_usage_is_enabled' ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
 
-			$order_ids = wc_get_orders( [
-				'type'       => 'shop_order',
-				'limit'      => 1,
-				'return'     => 'ids',
-				'meta_query' => [
-					[
-						'key'   => '_fkwcs_intent_id',
-						'value' => $payment_intent
-					]
-				]
-			] );
-			$order_id  = ! empty( $order_ids ) ? $order_ids[0] : null;
+			$order_id = $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM " . $wpdb->prefix . "wc_orders_meta WHERE meta_key = %s AND meta_value LIKE %s LIMIT 1", $meta_key, '%' . $payment_intent . '%' ) );
 
 		} else {
-			$order_id = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM $wpdb->posts AS posts LEFT JOIN $wpdb->postmeta AS postmeta ON posts.ID = postmeta.post_id WHERE posts.post_type = %s AND postmeta.meta_key = %s AND postmeta.meta_value LIKE %s LIMIT 1", 'shop_order', '_fkwcs_intent_id', '%' . $payment_intent . '%' ) );
+			$order_id = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM $wpdb->posts AS posts LEFT JOIN $wpdb->postmeta AS postmeta ON posts.ID = postmeta.post_id WHERE posts.post_type = %s AND postmeta.meta_key = %s AND postmeta.meta_value LIKE %s LIMIT 1", 'shop_order', $meta_key, '%' . $payment_intent . '%' ) );
 		}
 
 
@@ -754,19 +754,20 @@ class Webhook {
 	/**
 	 * Shows time difference as  - XX minutes ago.
 	 *
-	 * @param String $datetime time of last event.
+	 * @param string $datetime time of last event.
 	 * @param boolean $full show full time difference.
 	 *
 	 * @return string
 	 */
 	public static function time_elapsed_string( $datetime, $full = false ) {
 		try {
-			$current = new DateTime();
-			$ago     = new DateTime( $datetime );
+			$current = new \DateTime();
+			$ago     = new \DateTime( $datetime );
 			$diff    = $current->diff( $ago );
 
-			$diff->w = floor( $diff->d / 7 );
-			$diff->d -= $diff->w * 7;
+			// Calculate weeks separately and store in a variable
+			$weeks   = floor( $diff->d / 7 );
+			$diff->d -= $weeks * 7;
 
 			$string = array(
 				'y' => 'year',
@@ -777,8 +778,11 @@ class Webhook {
 				'i' => 'minute',
 				's' => 'second',
 			);
+
 			foreach ( $string as $k => &$v ) {
-				if ( $diff->$k ) {
+				if ( $k === 'w' && $weeks ) {
+					$v = $weeks . ' ' . $v . ( $weeks > 1 ? 's' : '' );
+				} elseif ( $k !== 'w' && $diff->$k ) {
 					$v = $diff->$k . ' ' . $v . ( $diff->$k > 1 ? 's' : '' );
 				} else {
 					unset( $string[ $k ] );
@@ -793,8 +797,8 @@ class Webhook {
 		} catch ( Exception $e ) {
 			return 'just now';
 		}
-
 	}
+
 
 	/**
 	 * Process response for saved cards
@@ -915,6 +919,28 @@ class Webhook {
 	}
 
 
+	public function require_action( $intent ) {
+		Helper::log( __FUNCTION__ );
+
+		if ( ! $this->validate_site_url( $intent ) ) {
+			Helper::log( 'Website url check failed ' . $intent->id );
+
+			return;
+		}
+		$order_id = $this->maybe_get_order_id_from_intent( $intent );
+		if ( ! $order_id ) {
+			Helper::log( 'Could not find order via charge ID: ' . $intent->id );
+
+			return;
+		}
+
+		$gateway = wc_get_order( $order_id )->get_payment_method();
+
+		if ( in_array( $gateway, [ 'fkwcs_stripe_affirm', 'fkwcs_stripe_afterpay', 'fkwcs_stripe_klarna' ], true ) ) {
+			wc_get_order( $order_id )->add_order_note( wc_get_order( $order_id )->get_payment_method_title() . ' Incomplete Payment: The customer must complete an additional authentication step.' );
+		}
+	}
+
 	/**
 	 * Maybe get order ID from the intent object
 	 *
@@ -953,7 +979,7 @@ class Webhook {
 			return Helper::get_payment_mode();
 		}
 
-		return $json_payload['livemode'] ? 'live' : "test";
+		return $json_payload['livemode'] ? 'live' : 'test';
 	}
 
 	/**
