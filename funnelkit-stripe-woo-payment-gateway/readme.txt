@@ -4,7 +4,7 @@ Tags: stripe, woocommerce, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
 Tested up to: 6.6.2
 Requires PHP: 7.0
-Stable tag: 1.9.0
+Stable tag: 1.9.1
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -217,6 +217,11 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 == Change log ==
 
+= 1.9.1 =
+* Fixed: Google Pay and Apple Pay gateway title was not setting up when stripe is disconnected. (#489)
+* Improved: Express Checkout visibility conditions with FunnelKit Checkouts. (#476)
+* Improved: Handling for console stripe session APi request error due to locale passing during elements update. (#476)
+* Improved: SEPA Payment method styling improvements for add payment method page. (#475)
 
 = 1.9.0 =
 * Added: Affirm, Klarna, AfterPay & P24 gateways support for upsell payments with Funnel Builder. (#488)

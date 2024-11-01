@@ -13,8 +13,6 @@ class ApplePay extends CreditCard {
 	public $payment_method_types = 'card';
 	public $merchant_id = '';
 	public $merchant_name = '';
-	public $display_as_express = 'no';
-	public $display_as_regular = 'yes';
 
 	public static function get_instance() {
 		if ( is_null( self::$instance ) ) {
@@ -29,16 +27,15 @@ class ApplePay extends CreditCard {
 		 * Validate if its setup correctly
 		 */
 		$this->set_api_keys();
-		if ( false === $this->is_configured() ) {
-			return;
-		}
+
 		$this->init_supports();
 		$this->init();
 		$this->maybe_init_subscriptions();
+		if ( false === $this->is_configured() ) {
+			return;
+		}
 		add_action( 'wc_ajax_fkwcs_gpay_update_shipping_address', [ $this, 'gpay_update_shipping_address' ] );
 		add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'add_apple_pay_data' ], 100 );
-
-		add_filter( 'wfacp_smart_buttons', [ $this, 'add_buttons' ], 8 );
 
 
 	}
@@ -71,9 +68,10 @@ class ApplePay extends CreditCard {
 		$this->merchant_id          = $this->get_option( 'merchant_id' );
 		$this->description          = $this->get_option( 'description' );
 		$this->statement_descriptor = $this->get_option( 'statement_descriptor' );
-		$this->display_as_express   = $this->get_option( 'display_as_express' );
-		$this->display_as_regular   = $this->get_option( 'display_as_regular' );
 		$this->capture_method       = 'automatic';
+		if ( false === $this->is_configured() ) {
+			return;
+		}
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_stripe_js' ] );
 		$this->filter_hooks();
 
@@ -90,19 +88,7 @@ class ApplePay extends CreditCard {
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, [ $this, 'process_admin_options' ] );
 	}
 
-	public function add_buttons( $buttons ) {
 
-		if ( 'no' === $this->display_as_express ) {
-			return $buttons;
-		}
-
-		$buttons['fkwcs_apple_pay'] = [
-			'iframe' => true,
-			'name'   => __( 'Apple Pay', 'funnelkit-stripe-woo-payment-gateway' ),
-		];
-
-		return $buttons;
-	}
 
 	/**
 	 * Initialise gateway settings form fields

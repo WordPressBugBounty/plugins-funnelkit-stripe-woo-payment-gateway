@@ -708,4 +708,14 @@ class Sepa extends Abstract_Payment_Gateway {
 
 		return $tokens;
 	}
+
+	/**
+	 * Checks if current page supports express checkout
+	 *
+	 * @return boolean
+	 */
+	public function is_page_supported() {
+
+		return  is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
 }

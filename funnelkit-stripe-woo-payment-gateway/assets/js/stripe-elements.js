@@ -644,14 +644,14 @@ jQuery(function ($) {
             super(stripe, gateway_id);
             this.error_container = '.fkwcs-credit-card-error';
             this.mountable = true;
-            this.payment_data = {};
-            this.element_data = {};
+
             this.amount_to_small = false;
         }
 
 
         setupGateway() {
-
+            this.payment_data = {};
+            this.element_data = {};
             this.gateway_container = '.fkwcs-stripe-elements-form';
             if ('payment' === fkwcs_data.card_form_type) {
 
@@ -1129,6 +1129,7 @@ jQuery(function ($) {
 
         createStripeElements(options = {}, reset = false) {
 
+
             this.elements = this.stripe.elements(this.element_data);
             this.payment = this.elements.create('payment', this.element_options);
             this.payment.on('change', function (event) {
@@ -1162,7 +1163,7 @@ jQuery(function ($) {
 
 
         updatableElementKeys() {
-            return ['locale', 'mode', 'currency', 'amount', 'setup_future_usage', 'capture_method', 'payment_method_types', 'appearance', 'on_behalf_of'];
+            return [ 'mode', 'currency', 'amount', 'setup_future_usage', 'capture_method', 'payment_method_types', 'appearance', 'on_behalf_of'];
         }
 
         update_fragment_data(fragments) {
@@ -1171,7 +1172,7 @@ jQuery(function ($) {
         }
 
         updateElements() {
-            if ('payment' !== fkwcs_data.card_form_type) {
+            if ('payment' !== fkwcs_data.card_form_type || Object.keys(this.element_data).length === 0) {
                 return;
             }
             let fragments = this.get_fragment_data();

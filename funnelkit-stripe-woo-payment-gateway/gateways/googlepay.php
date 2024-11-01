@@ -11,8 +11,6 @@ class GooglePay extends CreditCard {
 	public $payment_method_types = 'card';
 	public $merchant_id = '';
 	public $merchant_name = '';
-	public $display_as_express = 'no';
-	public $display_as_regular = 'yes';
 	public $btn_color = 'black';
 	public $btn_theme = 'pay';
 	private static $mini_cart_wrapper_rendered = false;
@@ -30,11 +28,12 @@ class GooglePay extends CreditCard {
 		 * Validate if its setup correctly
 		 */
 		$this->set_api_keys();
+
+		$this->init_supports();
+		$this->init();
 		if ( false === $this->is_configured() ) {
 			return;
 		}
-		$this->init_supports();
-		$this->init();
 		add_action( 'wc_ajax_fkwcs_gpay_update_shipping_address', [ $this, 'gpay_update_shipping_address' ] );
 		add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'add_google_pay_data' ], 100 );
 		add_filter( 'woocommerce_add_to_cart_fragments', [ $this, 'add_google_pay_data' ], 100 );
@@ -117,13 +116,13 @@ class GooglePay extends CreditCard {
 		$this->merchant_id          = $this->get_option( 'merchant_id' );
 		$this->description          = $this->get_option( 'description' );
 		$this->statement_descriptor = $this->get_option( 'statement_descriptor' );
-		$this->display_as_express   = $this->get_option( 'display_as_express' );
-		$this->display_as_regular   = $this->get_option( 'display_as_regular' );
 		$this->btn_color            = $this->get_option( 'button_color' );
 		$this->btn_theme            = $this->get_option( 'button_theme' );
 
 		$this->capture_method = 'automatic';
-
+		if ( false === $this->is_configured() ) {
+			return;
+		}
 		add_action( 'wp_enqueue_scripts', [ $this, 'register_stripe_js' ] );
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_stripe_js' ], 11 );
 		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );

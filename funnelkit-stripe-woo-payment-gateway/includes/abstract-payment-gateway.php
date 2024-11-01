@@ -259,7 +259,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			return;
 		}
 		$this->tokenization_script();
-
 		wp_enqueue_script( 'fkwcs-stripe-js' );
 		wp_localize_script( 'fkwcs-stripe-js', 'fkwcs_data', $this->localize_data() );
 		add_action( 'wp_head', [ $this, 'enqueue_cc_css' ] );
@@ -1112,7 +1111,14 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return bool
 	 */
 	public function is_checkout() {
-		return is_checkout() || wc_post_content_has_shortcode( 'woocommerce_checkout' );
+
+
+		if ( ( is_checkout() || wc_post_content_has_shortcode( 'woocommerce_checkout' ) ) && ! is_order_received_page() ) {
+			return true;
+		}
+
+
+		return false;
 	}
 
 	/**

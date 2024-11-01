@@ -19,19 +19,30 @@ if ( ! class_exists( 'FKWCS_Compat_FK_Checkout' ) ) {
 
 		public function add_buttons( $buttons ) {
 
+
+			/**
+			 * Smart Buttons Support
+			 */
 			$instance = SmartButtons::get_instance();
 			remove_action( 'woocommerce_checkout_before_customer_details', [ $instance, 'payment_request_button' ], 5 );
-
 			$buttons['fkwcs_gpay_apay'] = [
 				'iframe' => true,
 				'name'   => __( 'Stripe Payment Request', 'funnelkit-stripe-woo-payment-gateway' ),
 			];
 
 			$instance = FKWCS\Gateway\Stripe\GooglePay::get_instance();
-			if ( $instance->is_available() && 'yes' === $instance->display_as_express ) {
+			if ( $instance->is_available() ) {
 				$buttons['fkwcs_google_pay'] = [
 					'iframe' => true,
 					'name'   => __( 'Google Pay', 'funnelkit-stripe-woo-payment-gateway' ),
+				];
+			}
+
+			$instance = FKWCS\Gateway\Stripe\ApplePay::get_instance();
+			if ( $instance->is_available() ) {
+				$buttons['fkwcs_apple_pay'] = [
+					'iframe' => true,
+					'name'   => __( 'Apple Pay', 'funnelkit-stripe-woo-payment-gateway' ),
 				];
 			}
 
