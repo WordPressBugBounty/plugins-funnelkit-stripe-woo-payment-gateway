@@ -314,17 +314,46 @@
              */
             onPaymentMethod(event) {
                 let payment_data = this.paymentMethodData(event);
+
+
                 $.ajax({
-                    type: 'POST', data: payment_data, dataType: 'json', url: this.ajaxEndpoint('wc_stripe_create_order'), success: (response) => {
-                        if ('success' === response.result) {
+                    type: 'POST',
+                    data: payment_data,
+                    dataType: 'text', // Set to 'text' to handle any extra text around JSON
+                    url: this.ajaxEndpoint('wc_stripe_create_order'),
+                    success: (responseText) => {
+                        const parseJSONFromResponse = (response) => {
+                            // Regular expression to find JSON-like content
+                            const jsonMatch = response.match(/\{(?:[^{}]|(\{[^{}]*\}))*\}/);
+
+                            if (jsonMatch) {
+                                try {
+                                    // Attempt to parse the matched JSON
+                                    return JSON.parse(jsonMatch[0]);
+                                } catch (e) {
+                                    console.error("Failed to parse JSON:", e);
+                                    return null;
+                                }
+                            } else {
+                                console.warn("No JSON object found in response.");
+                                return null;
+                            }
+                        };
+
+                        // Parse the JSON from response text
+                        const response = parseJSONFromResponse(responseText);
+
+                        // Proceed only if valid JSON was parsed
+                        if (response && response.result === 'success') {
                             if (false === this.confirmPaymentIntent(event, response.redirect)) {
                                 window.location = response.redirect;
                             }
                         } else {
-                            this.abortPayment(event, response.messages);
+                            this.abortPayment(event, response ? response.messages : "Error processing payment");
                         }
                     }
                 });
+
             }
 
             addToCartProduct() {
@@ -1442,9 +1471,29 @@
                     let response = this.update_payment_data(data);
                     response.then((response) => {
                         resolve(response.paymentRequestUpdate);
-                    });
-                    response.catch((data) => {
-                        resolve(data);
+
+                        if (response.result === 'fail') {
+                            // Reject with an error message to show in Google Pay popup
+                            resolve({
+                                error: {
+                                    reason: 'SHIPPING_ADDRESS_UNSUPPORTED',
+                                    message: fkwcs_data.shipping_error,
+                                    intent: 'SHIPPING_ADDRESS'
+                                }
+                            });
+                        } else {
+                            // Resolve with successful shipping update data
+                            resolve(response.paymentRequestUpdate);
+                        }
+                    }).catch((data) => {
+                        // Handle any unexpected errors gracefully
+                        resolve({
+                            error: {
+                                reason: 'SHIPPING_ADDRESS_UNSUPPORTED',
+                                message: fkwcs_data.shipping_error,
+                                intent: 'SHIPPING_ADDRESS'
+                            }
+                        });
                     });
                 });
             }
@@ -1591,18 +1640,40 @@
                     $.ajax({
                         type: 'POST',
                         data: this.prepareCheckoutData(user_details),
-                        dataType: 'json',
+                        dataType: 'text', // Set to 'text' to handle any extra text around JSON
                         url: this.ajaxEndpoint('fkwcs_gpay_button_payment_request'),
-                        success: (response) => {
-                            if ('success' === response.result) {
+                        success: (responseText) => {
+                            const parseJSONFromResponse = (response) => {
+                                // Regular expression to find JSON-like content
+                                const jsonMatch = response.match(/\{(?:[^{}]|(\{[^{}]*\}))*\}/);
+
+                                if (jsonMatch) {
+                                    try {
+                                        // Attempt to parse the matched JSON
+                                        return JSON.parse(jsonMatch[0]);
+                                    } catch (e) {
+                                        console.error("Failed to parse JSON:", e);
+                                        return null;
+                                    }
+                                } else {
+                                    console.warn("No JSON object found in response.");
+                                    return null;
+                                }
+                            };
+
+                            // Parse the JSON from response text
+                            const response = parseJSONFromResponse(responseText);
+
+                            // Proceed only if valid JSON was parsed
+                            if (response && response.result === 'success') {
                                 this.confirmPaymentIntent(result, response.redirect);
                             } else {
-
                                 $('body').unblock();
                                 window.location.reload();
                             }
                         }
                     });
+
                 }).catch(() => {
                     $('body').unblock();
                 });

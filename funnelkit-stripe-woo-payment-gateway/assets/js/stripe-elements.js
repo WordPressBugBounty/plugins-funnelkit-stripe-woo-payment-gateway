@@ -267,7 +267,7 @@ jQuery(function ($) {
 
         getBillingAddress(type) {
             if ($('form#order_review').length > 0) {
-                return fkwcs_data.current_user_billing;
+                return fkwcs_data.current_user_billing_for_order;
             }
 
             if (typeof type !== undefined && 'add_payment' === type) {
@@ -2090,12 +2090,32 @@ jQuery(function ($) {
         paymentDataChanged(data) {
             return new Promise((resolve) => {
                 let response = this.update_payment_data(data);
+
+                // Validate shipping data via an AJAX call
                 response.then((response) => {
-                    resolve(response.paymentRequestUpdate);
-                    $('body').trigger('update_checkout', {update_shipping_method: false});
-                });
-                response.catch((data) => {
-                    resolve(data);
+                    if (response.result === 'fail') {
+                        // Reject with an error message to show in Google Pay popup
+                        resolve({
+                            error: {
+                                reason: 'SHIPPING_ADDRESS_UNSUPPORTED',
+                                message: fkwcs_data.shipping_error,
+                                intent: 'SHIPPING_ADDRESS'
+                            }
+                        });
+                    } else {
+                        // Resolve with successful shipping update data
+                        resolve(response.paymentRequestUpdate);
+                        $('body').trigger('update_checkout', {update_shipping_method: false});
+                    }
+                }).catch((data) => {
+                    // Handle any unexpected errors gracefully
+                    resolve({
+                        error: {
+                            reason: 'SHIPPING_ADDRESS_UNSUPPORTED',
+                            message: fkwcs_data.shipping_error,
+                            intent: 'SHIPPING_ADDRESS'
+                        }
+                    });
                 });
             });
         }
@@ -2106,7 +2126,7 @@ jQuery(function ($) {
 
 
         update_payment_data(data, extraData) {
-            return new Promise((resolve) => {
+            return new Promise((resolve, reject) => {
                 let shipping_method = data.shippingOptionData.id === 'default' ? null : data.shippingOptionData.id;
 
                 $.ajax({
@@ -2119,11 +2139,28 @@ jQuery(function ($) {
                     }, extraData),
                     success: (response) => {
                         console.log('response', response);
-                        resolve(response);
+
+                        // Check for a failed response
+                        if (response.result === 'fail') {
+                            this.showError({
+                                message: 'Shipping address is invalid or no shipping methods are available. Please update your address and try again.'
+                            });
+                            reject(response);
+                        } else {
+                            resolve(response);
+                        }
+                    },
+                    error: (jqXHR, textStatus, errorThrown) => {
+                        console.error('Error in shipping address update:', textStatus, errorThrown);
+                        this.showError({
+                            message: 'There was an error processing the shipping address. Please try again later.'
+                        });
+                        reject(errorThrown);
                     }
                 });
             });
         }
+
 
         /**
          * Create GooGle Pay Button with custom wrapper
@@ -2540,6 +2577,15 @@ jQuery(function ($) {
         }
 
     }
+    class FKWCS_AliPay extends LocalGateway {
+        constructor(stripe, gateway_id) {
+            super(stripe, gateway_id);
+            this.error_container = '.fkwcs_stripe_alipay_error';
+            this.confirmCallBack = 'confirmAlipayPayment';
+        }
+
+
+    }
 
 
     function init_gateways() {
@@ -2568,7 +2614,7 @@ jQuery(function ($) {
 
             available_gateways.google_pay = new FKWCS_GOOGLEPAY(stripe, 'fkwcs_stripe_google_pay');
             available_gateways.apple_pay = new FKWCS_ApplePay(stripe, 'fkwcs_stripe_apple_pay');
-
+            available_gateways.alipay = new FKWCS_AliPay(stripe, 'fkwcs_stripe_alipay');
             $(document).trigger('fkwcs_gateway_loaded', {
                 "Gateway": Gateway,
                 "LocalGateway": LocalGateway,

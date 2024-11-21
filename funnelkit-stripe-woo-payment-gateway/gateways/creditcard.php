@@ -68,6 +68,15 @@ class CreditCard extends Abstract_Payment_Gateway {
 		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
 		add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10, 3 );
 		add_action( 'fkwcs_webhook_event_intent_succeeded', [ $this, 'handle_webhook_intent_succeeded' ], 10, 2 );
+		add_filter( 'woocommerce_gateway_title', function ( $title ) {
+			global $theorder;
+
+			if ( $theorder instanceof \WC_Order && $theorder->get_payment_method() === 'fkwcs_stripe' && ! empty( $theorder->get_payment_method_title() ) ) {
+				$title = $theorder->get_payment_method_title();
+			}
+
+			return $title;
+		} );
 	}
 
 	/**
@@ -167,7 +176,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 				'title'       => '&nbsp;',
 				'type'        => 'checkbox',
 				'description' => __( 'Use inline credit card for card payments', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => get_option('woocommerce_fkwcs_stripe_settings',false) === false ?'no':'yes',
+				'default'     => get_option( 'woocommerce_fkwcs_stripe_settings', false ) === false ? 'no' : 'yes',
 				'desc_tip'    => true,
 				'class'       => 'fkwcs_form_type_selection fkwcs_checkbox_radio',
 			],
@@ -176,7 +185,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 				'title'       => '&nbsp;',
 				'type'        => 'checkbox',
 				'description' => __( 'Use stripe payment elements for card payments', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => get_option('woocommerce_fkwcs_stripe_settings',false) === false?'yes':'no',
+				'default'     => get_option( 'woocommerce_fkwcs_stripe_settings', false ) === false ? 'yes' : 'no',
 				'desc_tip'    => true,
 				'class'       => 'fkwcs_form_type_selection fkwcs_checkbox_radio',
 			],
@@ -282,7 +291,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 		try {
 			if ( $use_order_source ) {
 				/**
-				 * Process subscriptions renewals
+				 * Process subscription renewals
 				 */
 				$prepared_source = $this->prepare_order_source( $order );
 			} else {
@@ -313,6 +322,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 				'payment_method'       => $prepared_source->source,
 				'customer'             => $prepared_source->customer,
 				'capture_method'       => $this->capture_method,
+				'confirm'              => true,
 			];
 
 			if ( Helper::should_customize_statement_descriptor() ) {
@@ -321,10 +331,10 @@ class CreditCard extends Abstract_Payment_Gateway {
 			if ( $this->should_save_card( $order ) ) {
 				$data['setup_future_usage'] = 'off_session';
 			}
-
-
+			
 			$data['metadata'] = $this->add_metadata( $order );
 			$data             = $this->set_shipping_data( $data, $order );
+			$data             = $this->maybe_mandate_data_required( $data, $order );
 
 			$intent_data = $this->make_payment( $order, $prepared_source, $data );
 
@@ -363,6 +373,47 @@ class CreditCard extends Abstract_Payment_Gateway {
 						'redirect' => $return_url
 					] );
 				}
+
+
+				if ( 'succeeded' === $intent_data->status || 'requires_capture' === $intent_data->status ) {
+
+					if ( $this->should_save_card( $order ) || 'off_session' === $intent_data->setup_future_usage ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+						$this->save_payment_method( $order, $intent_data );
+
+
+						$charge = $this->get_latest_charge_from_intent( $intent_data );
+						if ( isset( $charge->payment_method_details->card->mandate ) ) {
+							$mandate_id = $charge->payment_method_details->card->mandate;
+
+
+						}
+
+						if ( isset( $mandate_id ) && ! empty( $mandate_id ) ) {
+							$order->update_meta_data( '_stripe_mandate_id', $mandate_id );
+							$order->save_meta_data();
+						}
+
+					}
+					$redirect_url = $this->process_final_order( end( $intent_data->charges->data ), $order_id );
+
+					return [
+						'result'   => 'success',
+						'redirect' => $redirect_url,
+					];
+				} else if ( 'requires_payment_method' === $intent_data->status ) {
+
+
+					if ( ! $order->has_status( 'failed' ) ) {
+						// Load the right message and update the status.
+						$status_message = isset( $intent_data->last_payment_error ) /* translators: 1) The error message that was received from Stripe. */ ? sprintf( __( 'Stripe SCA authentication failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent_data->last_payment_error->message ) : __( 'Stripe SCA authentication failed.', 'funnelkit-stripe-woo-payment-gateway' );
+						throw new \Exception( $status_message, 200 );
+
+					}
+
+
+				}
+
+
 				/**
 				 * @see modify_successful_payment_result()
 				 * This modifies the final response return in WooCommerce process checkout request
@@ -487,7 +538,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 
 	/**
-	 * After verify intent got called its time to save payment method to the order
+	 * After verify intent got called it's time to save payment method to the order
 	 *
 	 * @param $order
 	 * @param $intent
@@ -516,7 +567,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 	}
 
 	/**
-	 * Save Meta Data Like Balance Charge ID & status
+	 * Save Metadata Like Balance Charge ID & status
 	 * Add respective  order notes according to stripe charge status
 	 *
 	 * @param $response
@@ -538,24 +589,43 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 			/* translators: 1: Charge ID. 2: Brand name 3: last four digit */
 
-			if ( property_exists( $response->payment_method_details, 'card' ) || isset( $response->payment_method_details->card ) ) {
+
+			if ( property_exists( $response->payment_method_details, 'link' ) ) {
+				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, 'link' ) );
+				Helper::log( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, 'link' ) );
+
+			}
+			if ( property_exists( $response->payment_method_details, 'card' )  ) {
 				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s ending in %d', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
 				Helper::log( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s ending in %d', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
 
-				if ( property_exists( $response->payment_method_details->card, 'wallet' ) || isset( $response->payment_method_details->card->wallet ) ) {
+				if ( property_exists( $response->payment_method_details->card, 'wallet' ) ) {
 					$wallet_name = ( 'google_pay' === $response->payment_method_details->card->wallet->type ) ? 'Google Pay' : ( $response->payment_method_details->card->wallet->type === 'apple_pay' ? 'Apple Pay' : $response->payment_method_details->card->wallet->type );
 					$order->add_order_note( sprintf( __( 'Wallet Used %s', 'funnelkit-stripe-woo-payment-gateway' ), $wallet_name ) );
 					do_action( 'fkwcs_process_final_order_wallet_payment', $response, $order );
+
+					if ( 'google_pay' === $response->payment_method_details->card->wallet->type ) {
+
+						$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_google_pay'];
+						$order->set_payment_method_title( $gateway->get_title() );
+						$order->save();
+					} elseif ( $response->payment_method_details->card->wallet->type === 'apple_pay' ) {
+						$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_apple_pay'];
+						$order->set_payment_method_title( $gateway->get_title() );
+						$order->save();
+
+					}
 				}
 
 			}
 
 			/**
-			 * Remove the webhook paid meta data from the order
-			 * This is to avoid any extra processing of this order
+			 * Remove webhook paid meta-data if order is paid from same IP
 			 */
-			$order->delete_meta_data( '_fkwcs_webhook_paid' );
-			$order->save_meta_data();
+			if ( $order->get_customer_ip_address() === \WC_Geolocation::get_ip_address() ) {
+				$order->delete_meta_data( '_fkwcs_webhook_paid' );
+				$order->save_meta_data();
+			}
 		} else {
 			$order->set_transaction_id( $response->id );
 			$order->save();
@@ -937,7 +1007,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 * Save payment method to meta of the current order
 	 *
 	 * @param object $order current WooCommerce order.
-	 * @param object $payment_method payment method associated with current order.
+	 * @param object $payment_method payment method associated with the current order.
 	 *
 	 * @return void
 	 */
@@ -952,7 +1022,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		if ( ! empty( $payment_method->token ) ) {
 			$order->update_meta_data( '_fkwcs_token_id', $payment_method->token );
-			$token_obj = \WC_Payment_Tokens::get( $payment_method->token );
+			$token_obj = WC_Payment_Tokens::get( $payment_method->token );
 			if ( ! is_null( $token_obj ) ) {
 				$token_obj->add_meta_data( Helper::get_customer_key(), $payment_method->customer );
 				$token_obj->save();
@@ -997,4 +1067,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 
 }
+
+
+
 

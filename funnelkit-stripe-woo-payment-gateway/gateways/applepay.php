@@ -89,7 +89,6 @@ class ApplePay extends CreditCard {
 	}
 
 
-
 	/**
 	 * Initialise gateway settings form fields
 	 *
@@ -123,7 +122,43 @@ class ApplePay extends CreditCard {
 	}
 
 	public function enqueue_stripe_js() {
+
+
+		if ( ! $this->is_available() ) {
+			return;
+		}
+
+		/**
+		 * Check if selected location is not the current location
+		 * OR
+		 * Allow devs to enqueue assets
+		 */
+		if ( ! ( $this->is_selected_location() || ( apply_filters( 'fkwcs_enqueue_express_button_assets', false, $this ) ) ) ) {
+			return;
+		}
 		parent::enqueue_stripe_js();
+	}
+
+	/**
+	 * Checks if current location is chosen to display express checkout button
+	 *
+	 * @return boolean
+	 */
+	private function is_selected_location() {
+		if ( $this->is_product() ) {
+			return true;
+		}
+
+		if ( is_cart() ) {
+			return true;
+		}
+
+		if ( is_checkout() ) {
+			return true;
+		}
+
+		return false;
+
 	}
 
 

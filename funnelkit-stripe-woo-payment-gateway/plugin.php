@@ -103,6 +103,7 @@ class Stripe {
 		$methods['fkwcs_afterpay']   = 'FKWCS\Gateway\Stripe\AfterPay';
 		$methods['fkwcs_googlepay']  = 'FKWCS\Gateway\Stripe\GooglePay';
 		$methods['fkwcs_applepay']   = 'FKWCS\Gateway\Stripe\ApplePay';
+		$methods['fkwcs_alipay']     = 'FKWCS\Gateway\Stripe\Alipay';
 
 
 		return $methods;
@@ -142,6 +143,7 @@ class Stripe {
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/afterpay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/googlepay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/applepay.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/alipay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/includes/paylater.php';
 
 		do_action( 'fkwcs_gateways_included' );
@@ -160,6 +162,7 @@ class Stripe {
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-bancontact-upsell.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe-apple-pay.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe-google-pay.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-alipay-upsell.php';
 
 
 			}
@@ -217,6 +220,7 @@ class Stripe {
 		$gateways['fkwcs_stripe_p24']        = 'WFOCU_Plugin_Integration_Fkwcs_p24';
 		$gateways['fkwcs_stripe_google_pay'] = 'WFOCU_Plugin_Integration_Fkwcs_Google_Pay';
 		$gateways['fkwcs_stripe_apple_pay']  = 'WFOCU_Plugin_Integration_Fkwcs_Apple_Pay';
+		$gateways['fkwcs_stripe_alipay']     = 'WFOCU_Plugin_Integration_Fkwcs_Alipay';
 
 		return $gateways;
 	}
@@ -237,6 +241,7 @@ class Stripe {
 		$gateways[] = 'fkwcs_stripe_p24';
 		$gateways[] = 'fkwcs_stripe_google_pay';
 		$gateways[] = 'fkwcs_stripe_apple_pay';
+		$gateways[] = 'fkwcs_stripe_alipay';
 
 		return $gateways;
 	}
@@ -266,6 +271,9 @@ class Stripe {
 		}
 		if ( isset( $resp['fkwcs_stripe_klarna'] ) && true === $resp['fkwcs_stripe_klarna'] ) {
 			array_push( $all_options['gateways'], 'fkwcs_stripe_klarna' );
+		}
+		if ( isset( $resp['fkwcs_stripe_alipay'] ) && true === $resp['fkwcs_stripe_alipay'] ) {
+			array_push( $all_options['gateways'], 'fkwcs_stripe_alipay' );
 		}
 		WFOCU_Core()->data->update_options( $all_options );
 	}
@@ -380,7 +388,7 @@ class Stripe {
 	}
 
 	public function is_rest_api_request() {
-		return ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ( isset( $_SERVER['REQUEST_URI'] ) && (strpos( $_SERVER['REQUEST_URI'], '/wp-json/' ) !== false || strpos( $_SERVER['REQUEST_URI'], 'rest_route' ) !== false)  ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		return ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ( isset( $_SERVER['REQUEST_URI'] ) && ( strpos( $_SERVER['REQUEST_URI'], '/wp-json/' ) !== false || strpos( $_SERVER['REQUEST_URI'], 'rest_route' ) !== false ) ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 	}
 
 	/**

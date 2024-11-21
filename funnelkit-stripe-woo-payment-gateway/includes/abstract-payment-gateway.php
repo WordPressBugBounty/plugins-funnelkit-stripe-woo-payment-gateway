@@ -49,7 +49,12 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return void
 	 */
 	protected function set_api_keys() {
-		$this->test_mode       = $this->get_gateway_mode();
+		if ( Helper::get_mode() === '' ) {
+			$this->test_mode = $this->get_gateway_mode();
+		} else {
+			$this->test_mode = Helper::get_mode();
+		}
+
 		$this->test_pub_key    = get_option( 'fkwcs_test_pub_key', '' );
 		$this->test_secret_key = get_option( 'fkwcs_test_secret_key', '' );
 		$this->live_pub_key    = get_option( 'fkwcs_pub_key', '' );
@@ -274,12 +279,13 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	protected function localize_data() {
 		$localized = array_merge( Helper::stripe_localize_data(), [
-			'locale'               => $this->convert_wc_locale_to_stripe_locale( get_locale() ),
-			'is_checkout'          => $this->is_checkout() ? 'yes' : 'no',
-			'pub_key'              => $this->get_client_key(),
-			'mode'                 => $this->test_mode,
-			'wc_endpoints'         => self::get_public_endpoints(),
-			'current_user_billing' => $this->get_current_user_billing_details(),
+			'locale'                         => $this->convert_wc_locale_to_stripe_locale( get_locale() ),
+			'is_checkout'                    => $this->is_checkout() ? 'yes' : 'no',
+			'pub_key'                        => $this->get_client_key(),
+			'mode'                           => $this->test_mode,
+			'wc_endpoints'                   => self::get_public_endpoints(),
+			'current_user_billing'           => $this->get_current_user_billing_details(),
+			'current_user_billing_for_order' => $this->get_current_user_billing_details_for_order(),
 		] );
 
 
@@ -317,6 +323,35 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		];
 
 		return apply_filters( 'fkwcs_current_user_billing_details', $details, get_current_user_id() );
+	}
+
+
+	/**
+	 * Get current user billing details
+	 *
+	 * @return mixed|void|null
+	 */
+	public function get_current_user_billing_details_for_order() {
+
+
+		if ( ! is_wc_endpoint_url( 'order-pay' ) ) {
+			return [];
+		}
+		global $wp;
+		$order_id = $wp->query_vars['order-pay'];
+
+		$order              = wc_get_order( $order_id );
+		$details            = [];
+		$details['address'] = [
+			'country'     => ! empty( $order->get_billing_country() ) ? $order->get_billing_country() : null,
+			'city'        => ! empty( $order->get_billing_city() ) ? $order->get_billing_city() : null,
+			'postal_code' => ! empty( $order->get_billing_postcode() ) ? $order->get_billing_postcode() : null,
+			'state'       => ! empty( $order->get_billing_state() ) ? $order->get_billing_state() : null,
+			'line1'       => ! empty( $order->get_billing_address_1() ) ? $order->get_billing_address_1() : null,
+			'line2'       => ! empty( $order->get_billing_address_2() ) ? $order->get_billing_address_2() : null,
+		];
+
+		return apply_filters( 'fkwcs_current_user_billing_details_order', $details, $order );
 	}
 
 	/**
@@ -1139,6 +1174,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		if ( ! empty( $_POST['fkwcs_source'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
 			$stripe_source = wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
 			$response      = $stripe_api->payment_methods( 'retrieve', [ $stripe_source ] );
+
 			$source_object = $response['success'] ? $response['data'] : false;
 			if ( ! $source_object ) {
 				return;
@@ -1796,6 +1832,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			$redirect = sprintf( '#fkwcs-confirm-pi-%s:%s:%d:%s:%s', $result['fkwcs_intent_secret'], rawurlencode( $verification_url ), $order->get_id(), $gateway_id, $is_token_used );
 		}
 
+		Helper::log( "Redirect URL: $redirect" );
+
 		return [
 
 			'result'   => 'success',
@@ -1894,7 +1932,10 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			$redirect_url = isset( $_GET['fkwcs_redirect_to'] ) ? esc_url_raw( wp_unslash( $_GET['fkwcs_redirect_to'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 
-			if ( ! $order->has_status( apply_filters( 'fkwcs_stripe_allowed_payment_processing_statuses', [ 'pending', 'failed' ], $order ) ) ) {
+			if ( $order->is_paid() || ! is_null( $order->get_date_paid() ) || ! $order->has_status( apply_filters( 'fkwcs_stripe_allowed_payment_processing_statuses', [
+					'pending',
+					'failed'
+				], $order ) ) ) {
 				$redirect_url = $this->get_return_url( $order );
 				remove_all_actions( 'wp_redirect' );
 				wp_safe_redirect( $redirect_url );
@@ -2212,6 +2253,68 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 	private function get_gateway_mode() {
 		return ( 'test_admin_only' === get_option( 'fkwcs_mode', 'test' ) && is_super_admin() ) ? 'test' : get_option( 'fkwcs_mode', 'test' );
+	}
+
+	/**
+	 * For Stripe Link & card with deferred intent UPE,
+	 * create a mandate to acknowledge that terms have been shown to the customer.
+	 * This adds mandate data required for deferred intent UPE payment.
+	 *
+	 * @param array  $request       The payment request array.
+	 * @param $order \WC_Order
+	 * @return array|mixed
+	 */
+	public function maybe_mandate_data_required( $request, $order ) {
+
+		try {
+			$is_mandate = false;
+			$is_link    = ! empty( $this->settings ) && isset( $this->settings['link_none'] ) ? $this->settings['link_none'] : 'no';
+			if ( ! empty( $this->credit_card_form_type ) && 'payment' === $this->credit_card_form_type && $is_link === 'no' ) {
+				$is_mandate = true;
+			}
+
+			// Check if the payment method requires a mandate
+			if ( $is_mandate ) {
+				$request = self::add_mandate_data( $request, $order );
+			}
+		} catch ( \Exception $e ) {
+			// Log Stripe Error Message.
+			Helper::log( 'StripeException on maybe_mandate_data_required: ' . $e->getMessage() );
+		}
+
+		return $request;
+	}
+
+	/**
+	 * Adds mandate data to the payment request.
+	 *
+	 * @param array $request The payment request array, passed by reference.
+	 *
+	 * @return array|mixed
+	 */
+	public function add_mandate_data( $request, $order ) {
+		if ( ! is_array( $request ) ) {
+			return $request;
+		}
+		$ip_address = $order->get_customer_ip_address();
+		$user_agent = $order->get_customer_user_agent();
+		if ( ! $ip_address ) {
+			$ip_address = \WC_Geolocation::get_external_ip_address();
+		}
+		if ( ! $user_agent ) {
+			$user_agent = 'WordPress/' . get_bloginfo( 'version' ) . '; ' . get_bloginfo( 'url' );
+		}
+		$request['mandate_data'] = [
+			'customer_acceptance' => [
+				'type'   => 'online',
+				'online' => [
+					'ip_address' => $ip_address,
+					'user_agent' => $user_agent,
+				],
+			],
+		];
+
+		return $request;
 	}
 }
 

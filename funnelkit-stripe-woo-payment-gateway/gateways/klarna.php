@@ -154,7 +154,7 @@ class klarna extends LocalGateway {
 			return;
 		}
 
-		if ( ! $order instanceof \WC_Order || $order->get_payment_method() !== $this->id || $order->is_paid() || $order->has_status( 'wfocu-pri-order' ) ) {
+		if ( ! $order instanceof \WC_Order || $order->get_payment_method() !== $this->id || $order->is_paid() || ! is_null( $order->get_date_paid() ) || $order->has_status( 'wfocu-pri-order' ) ) {
 			return;
 		}
 

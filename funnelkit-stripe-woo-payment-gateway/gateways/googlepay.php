@@ -262,6 +262,19 @@ class GooglePay extends CreditCard {
 	}
 
 	public function enqueue_stripe_js() {
+
+		if ( ! $this->is_available() ) {
+			return;
+		}
+
+		/**
+		 * Check if selected location is not the current location
+		 * OR
+		 * Allow devs to enqueue assets
+		 */
+		if ( ! ( $this->is_selected_location() || ( apply_filters( 'fkwcs_enqueue_express_button_assets', false, $this ) ) ) ) {
+			return;
+		}
 		parent::enqueue_stripe_js();
 		wp_enqueue_style( 'fkwcs-style' );
 		wp_enqueue_script( 'fkwcs-stripe-external' );
@@ -275,9 +288,31 @@ class GooglePay extends CreditCard {
 		}
 	}
 
+	/**
+	 * Checks if current location is chosen to display express checkout button
+	 *
+	 * @return boolean
+	 */
+	private function is_selected_location() {
+		if ( $this->is_product() ) {
+			return true;
+		}
+
+		if ( is_cart() ) {
+			return true;
+		}
+
+		if ( is_checkout() ) {
+			return true;
+		}
+
+		return false;
+
+	}
+
 
 	public function localize_element_data( $data ) {
-        global $wp;
+		global $wp;
 		if ( ! $this->is_available() ) {
 			return $data;
 		}
@@ -467,7 +502,7 @@ class GooglePay extends CreditCard {
 		}
 		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', [] );
 		WC()->cart->calculate_totals();
-        $this->maybe_restore_recurring_chosen_shipping_methods($chosen_shipping_methods);
+		$this->maybe_restore_recurring_chosen_shipping_methods( $chosen_shipping_methods );
 		$currency = get_woocommerce_currency();
 		/** Set mandatory payment details */
 		$data = [
@@ -521,9 +556,9 @@ class GooglePay extends CreditCard {
 
 
 		return array(
-			'label'   => $label,
-			'type' => $type,
-			'price'  => (string) max( 0,  Helper::get_stripe_amount( $price, $order->get_currency(), 1 ) ),
+			'label' => $label,
+			'type'  => $type,
+			'price' => (string) max( 0, Helper::get_stripe_amount( $price, $order->get_currency(), 1 ) ),
 
 		);
 	}
@@ -549,10 +584,10 @@ class GooglePay extends CreditCard {
 			foreach ( $order->get_fees() as $fee ) {
 				$fee_total += $fee->get_total();
 			}
-			$items[] = $this->get_item_order( $fee_total, __( 'Fees', 'funnelkit-stripe-woo-payment-gateway' ), $order,'LINE_ITEM' );
+			$items[] = $this->get_item_order( $fee_total, __( 'Fees', 'funnelkit-stripe-woo-payment-gateway' ), $order, 'LINE_ITEM' );
 		}
 		if ( 0 < $order->get_total_tax() ) {
-			$items[] = $this->get_item_order( $order->get_total_tax(), __( 'Tax', 'woocommerce' ), $order,'TAX' );
+			$items[] = $this->get_item_order( $order->get_total_tax(), __( 'Tax', 'woocommerce' ), $order, 'TAX' );
 		}
 
 

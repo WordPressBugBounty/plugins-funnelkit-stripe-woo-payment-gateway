@@ -215,6 +215,7 @@ class Admin {
 			'fkwcs_stripe_bancontact' => __( 'Bancontact', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_p24'        => __( 'P24', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_sepa'       => __( 'SEPA', 'funnelkit-stripe-woo-payment-gateway' ),
+			'fkwcs_stripe_alipay'     => __( 'Alipay', 'funnelkit-stripe-woo-payment-gateway' ),
 
 		] );
 	}

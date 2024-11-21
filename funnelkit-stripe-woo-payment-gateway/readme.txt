@@ -2,9 +2,9 @@
 Contributors: amans2k, xlplugins, teamwoofunnels
 Tags: stripe, woocommerce, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
-Tested up to: 6.6.2
+Tested up to: 6.7.0
 Requires PHP: 7.0
-Stable tag: 1.9.1
+Stable tag: 1.10.1
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -217,6 +217,21 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 == Change log ==
 
+= 1.10.0 = 
+* Added: Integration with Alipay Gateway. (#575)
+* Added: Upsell Recovery feature allows new credit card form input when a transaction fails. (#544)
+* Added: Allow FunnelKit Upsells to show after a zero-dollar checkout by allowing credit card form input when users accept upsells. (#544)
+* Improved: Gateway logging improvements are made when an error occurs during order creation in express button payments. (#576) 
+* Improved: Move order to failed status in case of charge.failed webhook for credit card gateway. (#576)
+* Improved: Allow charge authorization for local gateways. (#578)
+* Improved: Google Pay gateway new direct integration was causing issues with shipping when no shipping methods were available with the customer's address. (#580)
+* Improved: Gateway title showing "Credit card" in case of express checkout payments. (#580)
+* Improved: Confirm Payment intent first during process checkout to avoid confirmation in Javascript. (#580)
+* Improved: Avoid adding login cookies in case of user logins, causing issues in a few specific setups. (#580)  
+* Improved: Pass mandate_data with link payments. (#584)
+* Fixed: Order Pay page payments were not working for guest orders. (#589)
+* Fixed: Handle malformed JSON scenarios during Express Buttons processing. (#576)
+ 
 = 1.9.1 =
 * Fixed: Google Pay and Apple Pay gateway title was not setting up when stripe is disconnected. (#489)
 * Improved: Express Checkout visibility conditions with FunnelKit Checkouts. (#476)

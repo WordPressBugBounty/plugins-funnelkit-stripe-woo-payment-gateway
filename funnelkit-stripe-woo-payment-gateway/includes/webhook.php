@@ -151,6 +151,7 @@ class Webhook {
 
 		if ( empty( trim( $endpoint_secret ) ) ) {
 			http_response_code( 400 );
+
 			exit();
 		}
 
@@ -171,19 +172,22 @@ class Webhook {
 			update_option( $error_at, time(), 'no' );
 			$error = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_ERROR' );
 			update_option( $error, $e->getMessage(), 'no' );
-			http_response_code( 400 );
+
+			wp_send_json_error( [ 'message' => $e->getMessage() ], 400 );
 			exit();
+
 		}
 
 		Helper::log( 'intent type: ' . $event->type );
 		$object = isset( $event->data->object ) ? $event->data->object : null;
 
 		if ( is_null( $object ) ) {
-			Helper::log( 'object is null: ' . $event->type );
-			http_response_code( 400 );
+
+			wp_send_json_error( [ 'message' => __( 'Stripe Object found to be null in payload', 'funnelkit-stripe-woo-payment-gateway' ) ], 400 );
+
 			exit;
 		}
-
+		Helper::set_mode( $this->mode );
 		http_response_code( 200 );
 
 		switch ( $event->type ) {
@@ -607,22 +611,17 @@ class Webhook {
 		}
 		$order   = wc_get_order( $order_id );
 		$gateway = $order->get_payment_method();
-		/**
-		 * Check if this transaction is happening or already done
-		 * If found to be the ongoing transaction, then stop here because the frontend code will handle if the charge fails.
-		 */
-		if ( '' === $order->get_transaction_id() && ! in_array( $gateway, [ 'fkwcs_stripe_affirm', 'fkwcs_stripe_afterpay', 'fkwcs_stripe_klarna' ], true ) ) {
+
+		if ( function_exists( 'wcs_order_contains_renewal' ) && wcs_order_contains_renewal( $order ) ) {
 			return;
-
 		}
-
-
 		/**
 		 * return if order is already paid
 		 */
 		if ( $order->is_paid() ) {
 			return;
 		}
+
 
 		if ( 'live' === $this->mode ) {
 			$client_secret = get_option( 'fkwcs_secret_key' );
@@ -651,12 +650,15 @@ class Webhook {
 
 
 		$error_message .= "\n\n" . $localized_message;
-
-
+		$error_message .= ' [via Stripe Webhook]';
 		if ( ! empty( $error_message ) ) {
 
 			if ( $order->has_status( 'failed' ) ) {
-				$order->add_order_note( $error_message );
+
+				if ( in_array( $gateway, [ 'fkwcs_stripe_affirm', 'fkwcs_stripe_afterpay', 'fkwcs_stripe_klarna' ], true ) ) {
+					$order->add_order_note( $error_message );
+				}
+
 			} else {
 				$order->update_status( 'failed', $error_message );
 			}

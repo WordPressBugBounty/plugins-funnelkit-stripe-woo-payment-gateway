@@ -20,6 +20,10 @@ class Client {
 	 * @var \Stripe\StripeClient
 	 */
 	private $stripe;
+	/**
+	 * @var \Stripe\ErrorObject
+	 */
+	private $stripe_last_error = [];
 
 	/**
 	 * Constructor
@@ -47,7 +51,7 @@ class Client {
 	 * @return array
 	 */
 	private function execute( $api, $method, $args ) {
-
+		$this->stripe_last_error = [];
 		if ( is_null( $this->stripe ) ) {
 			$error_message = __( 'Stripe not initialized', 'funnelkit-stripe-woo-payment-gateway' );
 
@@ -99,12 +103,13 @@ class Client {
 			];
 		} else {
 			Helper::log( 'Error during API call. ' . $error_message );
+			$this->stripe_last_error = ( isset( $e ) && $e instanceof \Stripe\Exception\ApiErrorException ) ? $e->getError() : new \stdClass();
 
 			return [
 				'success' => false,
 				'message' => $error_message,
 				'type'    => $error_type,
-				'error'   => ( isset( $e ) && $e instanceof \Stripe\Exception\ApiErrorException ) ? $e->getError() : new \stdClass(),
+				'error'   => $this->stripe_last_error,
 			];
 		}
 	}
@@ -264,5 +269,7 @@ class Client {
 
 	}
 
-
+	public function get_last_error() {
+		return $this->stripe_last_error;
+	}
 }

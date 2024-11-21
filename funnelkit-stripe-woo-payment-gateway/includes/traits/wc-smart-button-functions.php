@@ -834,6 +834,14 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		if ( class_exists( '\WC_Subscriptions_Cart' ) ) {
 			remove_action( 'woocommerce_after_checkout_validation', 'WC_Subscriptions_Cart::validate_recurring_shipping_methods' );
 		}
+
+
+
+		// Hook the custom function to the 'woocommerce_add_error' action
+		add_action( 'woocommerce_add_error', function ( $message ) {
+			Helper::log( 'WooCommerce Error recorded during order creation:: ' . $message ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+
+		}, 10 );
 		WC()->checkout()->process_checkout();
 		exit();
 	}

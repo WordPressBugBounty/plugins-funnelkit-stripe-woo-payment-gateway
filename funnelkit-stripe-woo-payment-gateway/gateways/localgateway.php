@@ -213,13 +213,17 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 			$order->add_order_note( __( 'Payment Status: ', 'funnelkit-stripe-woo-payment-gateway' ) . ucfirst( $response->status ) . ', ' . __( 'Source: Payment is Completed via ', 'funnelkit-stripe-woo-payment-gateway' ) . $response->payment_method_details->type );
 			$order->add_order_note( __( 'Charge ID ' . $response->id ) );
 		} else {
+			$order->set_transaction_id( $response->id );
+			$order->save();
+			
 			/* translators: transaction id */
 			$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization. Attempting to refund the order in part or in full will release the authorization and cancel the payment.', 'funnelkit-stripe-woo-payment-gateway' ), $response->id ) );
 			/* translators: transaction id */
 			Helper::log( sprintf( 'Charge authorized Order id - %1s', $order->get_id() ) );
 		}
-
-		WC()->cart->empty_cart();
+		if ( ! is_null( WC()->cart ) ) {
+			WC()->cart->empty_cart();
+		}
 		$return_url = $this->get_return_url( $order );
 		Helper::log( "Return URL: $return_url" );
 

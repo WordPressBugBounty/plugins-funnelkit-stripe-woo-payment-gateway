@@ -1,6 +1,8 @@
 <?php
 
 namespace FKWCS\Gateway\Stripe;
+use FKWCS\Gateway\Stripe;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -16,6 +18,8 @@ abstract class Helper {
 	const FKWCS_STRIPE_CURRENCY = '_fkwcs_stripe_currency';
 
 	public static $client = null;
+
+	private static $mode = '';
 	/**
 	 * Default gateway values
 	 *
@@ -551,6 +555,32 @@ abstract class Helper {
 
 
 	/**
+	 * Wrapper function for the HPOS compat get payment method
+	 *
+	 * @param int $order_id
+	 *
+	 * @return bool|array|string
+	 */
+	public static function get_payment_method( $order_id ) {
+
+
+
+		if ( true === self::is_hpos_enabled() ) {
+			global $wpdb;
+			$meta_value = $wpdb->get_var( $wpdb->prepare( "SELECT `payment_method` FROM `{$wpdb->prefix}wc_orders` WHERE `id`=%d", $order_id ) ); //phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery & WordPress.DB.DirectDatabaseQuery.NoCaching
+		} else {
+			$meta_value = get_post_meta( $order_id, '_payment_method', true );
+		}
+
+		if ( ! empty( $meta_value ) ) {
+			return maybe_unserialize( $meta_value );
+		}
+
+		return false;
+	}
+
+
+	/**
 	 * Checks if HPOS enabled
 	 *
 	 * @return bool
@@ -604,12 +634,18 @@ abstract class Helper {
 
 	public static function stripe_localize_data() {
 		global $wp;
+
+		$need_shipping = false;
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			$need_shipping = WC()->cart->needs_shipping();
+		}
+
 		return [
 			'is_product_page'         => is_product() || wc_post_content_has_shortcode( 'product_page' ),
 			'is_cart'                 => is_cart(),
 			'admin_ajax'              => admin_url( 'admin-ajax.php' ),
 			'fkwcs_nonce'             => wp_create_nonce( 'fkwcs_nonce' ),
-			'shipping_required'       => ! empty( $wp->query_vars['order-pay'] ) ? 'no' : wc_bool_to_string( WC()->cart->needs_shipping() ),
+			'shipping_required'       => ! empty( $wp->query_vars['order-pay'] ) ? 'no' : wc_bool_to_string( $need_shipping ),
 			'is_ssl'                  => is_ssl(),
 			'mode'                    => get_option( 'fkwcs_mode', 'test' ),
 			'js_nonce'                => wp_create_nonce( 'fkwcs_js_nonce' ),
@@ -673,7 +709,8 @@ abstract class Helper {
 					'color'    => '#32325d',
 					'fontSize' => '14px',
 				]
-			]
+			],
+			'shipping_error' => __('Shipping address is invalid or no shipping methods are available. Please update your address.','funnelkit-stripe-woo-payment-gateway'),
 		];
 	}
 
@@ -772,6 +809,14 @@ abstract class Helper {
 
 	public static function Admin_Field_Sanitize_Callback( $value ) {
 		return is_array( $value ) ? $value : array();
+	}
+
+	public static function get_mode() {
+		return self::$mode;
+	}
+
+	public static function set_mode( $mode ) {
+		self::$mode = $mode;
 	}
 
 
