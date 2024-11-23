@@ -216,6 +216,9 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+= 1.10.1 =
+* Improved: Dynamic settings up saved customer payment methods as WooCommerce Payment Tokens. (#529)
+* Fixed: PHP Notice regarding tex_domain coming in WP v6.7.1. (#589)
 
 = 1.10.0 = 
 * Added: Integration with Alipay Gateway. (#575)

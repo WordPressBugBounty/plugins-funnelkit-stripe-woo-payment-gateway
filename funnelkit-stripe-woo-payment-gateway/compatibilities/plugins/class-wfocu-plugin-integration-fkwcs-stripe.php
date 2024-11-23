@@ -358,8 +358,11 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		public function handle_api_error( $order_note, $log, $order, $create_failed_order_or_stripe_error = false ) {
 
 
+			/**
+			 * This case tells us that some stripe error occured during the charge process from the credit card popup
+			 */
 			if ( $create_failed_order_or_stripe_error instanceof \Stripe\ErrorObject ) {
-				$err_msg = 'Order #' . $order->get_id() . " - Upsell transaction Failed Showing Credit Card Form with Stripe Error Message: " . $create_failed_order_or_stripe_error->message;
+				$err_msg = 'Order #' . $order->get_id() . " - Upsell transaction Failed From the Credit Card Form. Failure Reason : " . $create_failed_order_or_stripe_error->message;
 				WFOCU_Core()->log->log( $err_msg ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 				$order->add_order_note( $err_msg );
 				wp_send_json( apply_filters( 'wfocu_modify_error_json_response', array(
@@ -368,7 +371,18 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 				), $order ) );
 			}
 
+			/**
+			 * This case tells we attempted payment through token and failed
+			 */
 			if ( 3 === $create_failed_order_or_stripe_error ) {
+				$order_note .= __( '</br> </br> Upsell recovery triggered - Showing Credit Card Form.', 'woofunnels-upstroke-one-click-upsell' );
+
+				if ( method_exists( $this, 'format_failed_note' ) ) {
+					$order_note = $this->format_failed_note( $order_note );
+
+				}
+
+
 				$order->add_order_note( $order_note );
 
 				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . " - Upsell transaction Failed Showing Credit Card Form" ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r

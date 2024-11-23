@@ -65,7 +65,7 @@ class Admin {
 
 	private function __construct() {
 		$this->get_option_settings();
-		$this->define_navigation();
+		$this->load_navigation();
 		$this->init();
 	}
 
@@ -197,11 +197,23 @@ class Admin {
 	}
 
 	/**
+	 * @return void
+	 */
+	private function load_navigation() {
+		if ( did_action( 'init' ) === 0 ) {
+			add_action( 'init', [ $this, 'define_navigation' ] );
+		} else {
+			$this->define_navigation();
+		}
+
+	}
+
+	/**
 	 * WC Payment tab settings
 	 *
 	 * @return void
 	 */
-	private function define_navigation() {
+	public function define_navigation() {
 		$this->navigation = apply_filters( 'fkwcs_settings_navigation', [
 			'fkwcs_api_settings'      => __( 'Stripe Settings', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe'            => __( 'Credit Cards', 'funnelkit-stripe-woo-payment-gateway' ),

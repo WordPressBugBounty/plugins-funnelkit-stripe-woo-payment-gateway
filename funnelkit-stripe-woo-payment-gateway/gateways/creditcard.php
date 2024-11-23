@@ -66,8 +66,13 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_stripe_js' ] );
 		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
+
+
+		add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_set_tokens_stripe' ], 8, 3 );
 		add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10, 3 );
 		add_action( 'fkwcs_webhook_event_intent_succeeded', [ $this, 'handle_webhook_intent_succeeded' ], 10, 2 );
+
+
 		add_filter( 'woocommerce_gateway_title', function ( $title ) {
 			global $theorder;
 
@@ -331,7 +336,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 			if ( $this->should_save_card( $order ) ) {
 				$data['setup_future_usage'] = 'off_session';
 			}
-			
+
 			$data['metadata'] = $this->add_metadata( $order );
 			$data             = $this->set_shipping_data( $data, $order );
 			$data             = $this->maybe_mandate_data_required( $data, $order );
@@ -345,26 +350,20 @@ class CreditCard extends Abstract_Payment_Gateway {
 				 * Order Pay page processing
 				 */
 				if ( did_action( 'woocommerce_before_pay_action' ) ) {
-					$return_url = false;
-					if ( 'requires_confirmation' === $intent_data->status ) {
-						$stripe_api = $this->get_client();
-						$c_intent   = $stripe_api->payment_intents( 'confirm', [ $intent_data->id ] );
-						$data       = $this->handle_client_response( $c_intent );
 
-						if ( $data->status === 'requires_action' ) {
-							$return_url = $this->get_return_url( $order );
 
-							return apply_filters( 'fkwcs_card_payment_return_intent_data', [
-								'result'              => 'success',
-								'fkwcs_redirect'      => $return_url,
-								'payment_method'      => $prepared_source->source,
-								'fkwcs_intent_secret' => $intent_data->client_secret,
-							] );
+					if ( $intent_data->status === 'requires_action' ) {
+						$return_url = $this->get_return_url( $order );
 
-						} else {
-							$return_url = $this->process_final_order( end( $data->charges->data ), $order );
-						}
+						return apply_filters( 'fkwcs_card_payment_return_intent_data', [
+							'result'              => 'success',
+							'fkwcs_redirect'      => $return_url,
+							'payment_method'      => $prepared_source->source,
+							'fkwcs_intent_secret' => $intent_data->client_secret,
+						] );
 
+					} else {
+						$return_url = $this->process_final_order( end( $intent_data->charges->data ), $order );
 					}
 
 
@@ -595,7 +594,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 				Helper::log( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, 'link' ) );
 
 			}
-			if ( property_exists( $response->payment_method_details, 'card' )  ) {
+			if ( property_exists( $response->payment_method_details, 'card' ) ) {
 				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s ending in %d', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
 				Helper::log( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s ending in %d', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
 
@@ -639,6 +638,8 @@ class CreditCard extends Abstract_Payment_Gateway {
 		if ( ! is_null( WC()->cart ) ) {
 			WC()->cart->empty_cart();
 		}
+
+
 		$return_url = $this->get_return_url( $order );
 
 		return $return_url;
@@ -1065,9 +1066,95 @@ class CreditCard extends Abstract_Payment_Gateway {
 		return [ $this->payment_method_types ];
 	}
 
+	/**
+	 * Maybe set tokens for Stripe payment gateway.
+	 *
+	 * @param array $tokens The existing payment tokens.
+	 * @param int $user_id The user ID.
+	 * @param string $gateway_id The gateway ID.
+	 *
+	 * @return array The updated payment tokens.
+	 */
+	public function maybe_set_tokens_stripe( $tokens, $user_id, $gateway_id ) {
+		if ( ! $this->is_available() ) {
+			return $tokens;
+		}
+
+
+		/**
+		 * in any case we are getting specific gateway ID, and it's not the gateway we could support then we must return tokens as it is.
+		 */
+		if ( ! empty( $gateway_id ) && ! in_array( $gateway_id, [ 'fkwcs_stripe' ], true ) ) {
+			return $tokens;
+		}
+
+
+		try {
+
+
+			$payment_methods = $this->get_payment_methods_customer( $user_id );
+
+
+			remove_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_set_tokens_stripe' ], 8 );
+			remove_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10 );
+
+			foreach ( $payment_methods as $payment_method ) {
+				if ( ! isset( $payment_method->type ) ) {
+					continue;
+				}
+
+
+				$token                      = Helper::create_payment_token_for_user( $user_id, $payment_method, $this->id, $payment_method->livemode );
+				$tokens[ $token->get_id() ] = $token;
+
+			}
+			add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_set_tokens_stripe' ], 8, 3 );
+			add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10, 3 );
+
+
+		} catch ( \Exception|\Error $e ) {
+			wc_add_notice( $e->getMessage(), 'error' );
+			Helper::log( 'Error: ' . $e->getMessage() );
+		}
+
+		return $tokens;
+	}
+
+	/**
+	 * Fetch all user tokens from users account directly from stripe
+	 *
+	 * @param int $user_id
+	 *
+	 * @return array|mixed
+	 */
+	public function get_payment_methods_customer( $user_id ) {
+		if ( ! $user_id ) {
+			return [];
+		}
+		$payment_methods = get_transient( 'fkwcs_user_tokens_' . $user_id );
+
+		if ( false === $payment_methods ) {
+
+
+			$client = $this->get_client();
+
+			$customer = get_user_option( '_stripe_customer_id', $user_id );
+			$response = $client->customers( 'allPaymentMethods', [ $customer, [ 'limit' => 100, 'type' => 'card' ] ] );
+			if ( ! empty( $response['error'] ) ) {
+				return [];
+			}
+
+			if ( ! empty( $response['data'] ) ) {
+				$payment_methods = $response['data'];
+			}
+			set_transient( 'fkwcs_user_tokens_' . $user_id, $payment_methods, DAY_IN_SECONDS );
+		}
+
+		return empty( $payment_methods ) ? [] : $payment_methods;
+	}
+
 
 }
-
 
 
 
