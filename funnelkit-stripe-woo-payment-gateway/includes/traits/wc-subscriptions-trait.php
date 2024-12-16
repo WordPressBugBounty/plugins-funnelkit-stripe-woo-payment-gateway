@@ -178,6 +178,7 @@ trait WC_Subscriptions_Trait {
 						'result'                    => 'success',
 						'fkwcs_redirect'            => $this->get_return_url( $subscription ),
 						'fkwcs_setup_intent_secret' => $intent_secret['client_secret'],
+					        'token_used' => $this->is_using_saved_payment_method() ? 'yes' : 'no',
 					];
 				}
 			}
@@ -339,6 +340,8 @@ trait WC_Subscriptions_Trait {
 				$this->save_intent_to_order( $renewal_order, $response->error->payment_intent );
 
 				$renewal_order->set_transaction_id( $id );
+				do_action( 'fkwcs_process_response', $charge, $renewal_order );
+
 				/* translators: %s is the charge Id */
 				$renewal_order->update_status( 'failed', sprintf( __( 'Stripe charge awaiting authentication by user: %s.', 'funnelkit-stripe-woo-payment-gateway' ), $id ) );
 				if ( is_callable( [ $renewal_order, 'save' ] ) ) {
@@ -354,6 +357,8 @@ trait WC_Subscriptions_Trait {
 				$renewal_order->update_status( 'pending' );
 				$renewal_order->update_meta_data( '_fkwcs_maybe_check_for_auth', 'yes' );
 				$this->save_intent_to_order( $renewal_order, $response->data );
+				$charge = end( $response->error->payment_intent->charges->data );
+				do_action( 'fkwcs_process_response', $charge, $renewal_order );
 				if ( is_callable( [ $renewal_order, 'save' ] ) ) {
 					$renewal_order->save();
 				}
@@ -374,7 +379,7 @@ trait WC_Subscriptions_Trait {
 
 					/** translators: transaction id, other info */
 					$renewal_order->update_status( 'on-hold', sprintf( __( 'Stripe charge awaiting payment: %1$s. %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $response->id, $others_info ) );
-
+					do_action( 'fkwcs_process_response', $this->get_latest_charge_from_intent( $response ), $renewal_order );
 				} else {
 
 					$this->save_intent_to_order( $renewal_order, $response );
@@ -393,6 +398,11 @@ trait WC_Subscriptions_Trait {
 			do_action( 'fkwcs_gateway_stripe_process_payment_error', $e, $renewal_order );
 			/* translators: error message */
 			$renewal_order->update_status( 'failed', 'Reason: ' . $e->getMessage() );
+			if ( ! empty( $response ) ) {
+				$charge = $this->get_latest_charge_from_intent( $response );
+				do_action( 'fkwcs_process_response', $charge, $renewal_order );
+
+			}
 		}
 	}
 
@@ -519,7 +529,6 @@ trait WC_Subscriptions_Trait {
 	 *
 	 */
 	public function add_subscription_payment_meta( $payment_meta, $subscription ) {
-		$subscription_id = $subscription->get_id();
 		$source_id       = Helper::get_meta( $subscription, '_fkwcs_source_id' );
 
 		// For BW compat will remove in future.
@@ -527,7 +536,7 @@ trait WC_Subscriptions_Trait {
 			$source_id = Helper::get_meta( $subscription, '_fkwcs_card_id' );
 
 			// Take this opportunity to update the key name.
-			$subscription->update_meta_data( $subscription_id, '_fkwcs_source_id', $source_id );
+			$subscription->update_meta_data( '_fkwcs_source_id', $source_id );
 			$subscription->delete_meta_data( '_fkwcs_card_id' );
 			$subscription->save_meta_data();
 		}

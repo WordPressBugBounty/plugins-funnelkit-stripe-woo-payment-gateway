@@ -819,5 +819,28 @@ abstract class Helper {
 		self::$mode = $mode;
 	}
 
+	/**
+	 * Get Last charge id by gateway
+	 *
+	 * @param $intent
+	 * @param $gateway_method
+	 *
+	 * @return false|mixed|void
+	 */
+	public static function get_latest_charge_from_intent_by_gateway( $intent, $gateway_method ) {
+		try {
+			$gateway = WC()->payment_gateways()->payment_gateways()[ $gateway_method ];
+			if ( $gateway instanceof Abstract_Payment_Gateway && method_exists( $gateway, 'get_latest_charge_from_intent' ) ) {
+				return $gateway->get_latest_charge_from_intent( $intent );
+			}
+
+		} catch ( \Exception $e ) {
+			Helper::log( 'StripeException delete webhook data when no webhook found : ' . $e->getMessage() );
+
+		}
+
+		return end( $intent->charges->data );
+	}
+
 
 }

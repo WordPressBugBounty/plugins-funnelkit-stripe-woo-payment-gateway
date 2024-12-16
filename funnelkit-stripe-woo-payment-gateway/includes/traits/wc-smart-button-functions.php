@@ -835,13 +835,12 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			remove_action( 'woocommerce_after_checkout_validation', 'WC_Subscriptions_Cart::validate_recurring_shipping_methods' );
 		}
 
-
-
 		// Hook the custom function to the 'woocommerce_add_error' action
-		add_action( 'woocommerce_add_error', function ( $message ) {
+		add_filter( 'woocommerce_add_error', function ( $message ) {
 			Helper::log( 'WooCommerce Error recorded during order creation:: ' . $message ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
-
+			return $message;
 		}, 10 );
+
 		WC()->checkout()->process_checkout();
 		exit();
 	}
@@ -858,12 +857,14 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		if ( ! isset( $fields['billing'] ) || empty( $fields['billing'] ) ) {
 			return $fields;
 		}
-		// List of billing fields to keep required
-		$required_fields = array( 'billing_country', 'billing_postcode' );
+
+		// List of billing fields
+		$required_fields = $this->get_wc_default_fields_fields();
+
 		// Loop through all billing fields
 		foreach ( $fields['billing'] as $key => $field ) {
-			// Unrequire fields that are not in the required list
-			if ( ! in_array( $key, $required_fields, true ) ) {
+			// Un-require fields that are in the default required list
+			if ( in_array( $key, $required_fields, true ) && isset( $fields['billing'][ $key ] ) && isset( $fields['billing'][ $key ]['required'] ) ) {
 				$fields['billing'][ $key ]['required'] = false;
 			}
 		}
@@ -1173,6 +1174,36 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		}
 
 		WC()->session->set( 'chosen_shipping_methods', $chosen_shipping_methods );
+	}
+
+
+	/**
+	 * prepare list for all woocommerce fields list for un-require expect 'billing_country', 'billing_postcode'
+	 * @return string[]
+	 */
+	public function get_wc_default_fields_fields() {
+		return array(
+			'billing_first_name',
+			'billing_last_name',
+			'billing_company',
+			'billing_address_1',
+			'billing_address_2',
+			'billing_city',
+			'billing_state',
+			'billing_email',
+			'billing_same_as_shipping',
+			'billing_phone',
+			'shipping_first_name',
+			'shipping_last_name',
+			'shipping_company',
+			'shipping_address_1',
+			'shipping_address_2',
+			'shipping_city',
+			'shipping_state',
+			'shipping_postcode',
+			'shipping_country',
+			'shipping_phone',
+		);
 	}
 
 

@@ -72,7 +72,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 		add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10, 3 );
 		add_action( 'fkwcs_webhook_event_intent_succeeded', [ $this, 'handle_webhook_intent_succeeded' ], 10, 2 );
 
-
+		add_action( 'woocommerce_payment_token_deleted', [ $this, 'detach_customer_token' ], 10, 2 );
 		add_filter( 'woocommerce_gateway_title', function ( $title ) {
 			global $theorder;
 
@@ -394,6 +394,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 					}
 					$redirect_url = $this->process_final_order( end( $intent_data->charges->data ), $order_id );
+					Helper::log( 'Redirect URL for ' . $order->get_id() . ' is ' . $redirect_url );
 
 					return [
 						'result'   => 'success',
@@ -436,6 +437,11 @@ class CreditCard extends Abstract_Payment_Gateway {
 			if ( ! empty( $order ) ) {
 				/* translators: error message */
 				$order->update_status( 'failed', 'Reason: ' . $e->getMessage() );
+				if ( ! empty( $intent_data ) ) {
+					$charge = $this->get_latest_charge_from_intent( $intent_data );
+					do_action( 'fkwcs_process_response', $charge, $order );
+
+				}
 			}
 			Helper::log( $e->getMessage() );
 
@@ -527,6 +533,11 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 			/* translators: error message */
 			$order->update_status( 'failed', 'Reason: ' . $e->getMessage() );
+			if ( ! empty( $intent ) ) {
+				$charge = $this->get_latest_charge_from_intent( $intent );
+				do_action( 'fkwcs_process_response', $charge, $order );
+
+			}
 
 			return [
 				'result'   => 'fail',
@@ -589,16 +600,16 @@ class CreditCard extends Abstract_Payment_Gateway {
 			/* translators: 1: Charge ID. 2: Brand name 3: last four digit */
 
 
-			if ( property_exists( $response->payment_method_details, 'link' ) ) {
+			if ( property_exists( $response->payment_method_details, 'link' ) || isset( $response->payment_method_details->link ) ) {
 				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, 'link' ) );
 				Helper::log( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, 'link' ) );
 
 			}
-			if ( property_exists( $response->payment_method_details, 'card' ) ) {
+			if ( property_exists( $response->payment_method_details, 'card' ) || isset( $response->payment_method_details->card ) ) {
 				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s ending in %d', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
 				Helper::log( sprintf( __( 'Order charge successful in Stripe%s. Charge: %s. Payment method: %s ending in %d', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
 
-				if ( property_exists( $response->payment_method_details->card, 'wallet' ) ) {
+				if ( property_exists( $response->payment_method_details->card, 'wallet' ) || isset( $response->payment_method_details->card->wallet ) ) {
 					$wallet_name = ( 'google_pay' === $response->payment_method_details->card->wallet->type ) ? 'Google Pay' : ( $response->payment_method_details->card->wallet->type === 'apple_pay' ? 'Apple Pay' : $response->payment_method_details->card->wallet->type );
 					$order->add_order_note( sprintf( __( 'Wallet Used %s', 'funnelkit-stripe-woo-payment-gateway' ), $wallet_name ) );
 					do_action( 'fkwcs_process_final_order_wallet_payment', $response, $order );
@@ -639,6 +650,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 			WC()->cart->empty_cart();
 		}
 
+		do_action( 'fkwcs_process_response', $response, $order );
 
 		$return_url = $this->get_return_url( $order );
 
@@ -1139,6 +1151,9 @@ class CreditCard extends Abstract_Payment_Gateway {
 			$client = $this->get_client();
 
 			$customer = get_user_option( '_stripe_customer_id', $user_id );
+			if ( empty( $customer ) ) {
+				return [];
+			}
 			$response = $client->customers( 'allPaymentMethods', [ $customer, [ 'limit' => 100, 'type' => 'card' ] ] );
 			if ( ! empty( $response['error'] ) ) {
 				return [];
@@ -1151,6 +1166,34 @@ class CreditCard extends Abstract_Payment_Gateway {
 		}
 
 		return empty( $payment_methods ) ? [] : $payment_methods;
+	}
+
+	/**
+	 * Deletes a token from Stripe.
+	 *
+	 * @param int $token_id The WooCommerce token ID.
+	 * @param \WC_Payment_Token $token The WC_Payment_Token object.
+	 *
+	 * @since 3.1.0
+	 * @version 4.0.0
+	 *
+	 */
+	public function detach_customer_token( $token_id, $token ) {
+		try {
+			if ( 'test' === $this->test_mode && is_admin() && 'production' !== wp_get_environment_type() ) {
+				return $token_id;
+			}
+			$client = $this->get_client();
+			$customer = get_user_option( '_stripe_customer_id', $token->get_user_id() );
+			if ( empty( $customer ) ) {
+				return [];
+			}
+			$client->payment_methods( 'detach', [ $token->get_token() ] );
+			delete_transient( 'fkwcs_user_tokens_' . $token->get_user_id() );
+		} catch ( \Exception|\Error $e ) {
+			wc_add_notice( $e->getMessage(), 'error' );
+			Helper::log( 'Error: ' . $e->getMessage() );
+		}
 	}
 
 

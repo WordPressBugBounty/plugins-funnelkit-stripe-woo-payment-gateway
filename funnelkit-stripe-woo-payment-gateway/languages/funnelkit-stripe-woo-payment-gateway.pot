@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Stripe Payment Gateway for WooCommerce 1.10.1\n"
+"Project-Id-Version: Stripe Payment Gateway for WooCommerce 1.11.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/funnelkit-stripe-woo-payment-gateway\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2024-11-23T20:34:44+05:30\n"
+"POT-Creation-Date: 2024-12-16T16:25:10+05:30\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.10.0\n"
 "X-Domain: funnelkit-stripe-woo-payment-gateway\n"
@@ -452,7 +452,7 @@ msgstr ""
 #: gateways/klarna.php:57
 #: gateways/localgateway.php:87
 #: gateways/sepa.php:131
-#: includes/abstract-payment-gateway.php:1446
+#: includes/abstract-payment-gateway.php:1450
 msgid "Title"
 msgstr ""
 
@@ -609,7 +609,7 @@ msgstr ""
 
 #: admin/admin.php:1328
 #: admin/admin.php:1375
-#: admin/admin.php:2055
+#: admin/admin.php:2060
 msgid "Manage API keys manually"
 msgstr ""
 
@@ -686,77 +686,77 @@ msgstr ""
 msgid "Domain verification failed. Please check logs for more info."
 msgstr ""
 
-#: admin/admin.php:1937
-#: admin/admin.php:1946
+#: admin/admin.php:1942
+#: admin/admin.php:1951
 msgid "Webhook Deleted successfully"
 msgstr ""
 
-#: admin/admin.php:1941
+#: admin/admin.php:1946
 msgid "Webhook could not be deleted"
 msgstr ""
 
-#: admin/admin.php:1964
-#: admin/admin.php:2025
+#: admin/admin.php:1969
+#: admin/admin.php:2030
 msgid "Test Mode:"
 msgstr ""
 
-#: admin/admin.php:1966
+#: admin/admin.php:1971
 msgid "Please enter secret key to test."
 msgstr ""
 
-#: admin/admin.php:1972
-#: admin/admin.php:2028
+#: admin/admin.php:1977
+#: admin/admin.php:2033
 msgid "Live Mode:"
 msgstr ""
 
-#: admin/admin.php:1974
+#: admin/admin.php:1979
 msgid "Please enter secret key to live."
 msgstr ""
 
-#: admin/admin.php:1978
+#: admin/admin.php:1983
 msgid "Error: Empty String provided for keys"
 msgstr ""
 
 #. translators: %1$1s mode
-#: admin/admin.php:1986
+#: admin/admin.php:1991
 msgid "My first %1s customer (created for API docs)"
 msgstr ""
 
-#: admin/admin.php:1990
+#: admin/admin.php:1995
 msgid "Connected to Stripe successfully"
 msgstr ""
 
-#: admin/admin.php:2108
+#: admin/admin.php:2113
 msgid "An Error occurred while creating webhook. Error: "
 msgstr ""
 
-#: admin/admin.php:2435
+#: admin/admin.php:2440
 msgid " Switch to classic cart/checkout"
 msgstr ""
 
-#: admin/admin.php:2435
+#: admin/admin.php:2440
 msgid "Dismiss"
 msgstr ""
 
-#: admin/admin.php:2442
+#: admin/admin.php:2447
 msgid "We noticed that you’re using the new Cart/Checkout experience in WooCommerce. Full compatibility is in the works with FunnelKit Stripe. We suggest switching to the Classic Checkout experience in the meantime, it’s well tested and 100% compatible with our plugin and others as well."
 msgstr ""
 
-#: admin/admin.php:2550
+#: admin/admin.php:2555
 msgid "Cards & Express Checkouts"
 msgstr ""
 
-#: admin/admin.php:2554
-#: admin/admin.php:2578
+#: admin/admin.php:2559
+#: admin/admin.php:2583
 msgid "Transaction"
 msgstr ""
 
-#: admin/admin.php:2555
-#: admin/admin.php:2579
+#: admin/admin.php:2560
+#: admin/admin.php:2584
 msgid "Amount"
 msgstr ""
 
-#: admin/admin.php:2574
+#: admin/admin.php:2579
 msgid "All payment methods"
 msgstr ""
 
@@ -948,26 +948,26 @@ msgid "Begin processing payment with %s for order %s for the amount of %s"
 msgstr ""
 
 #: compatibilities/plugins/class-abstract-wfocu-bnpl.php:231
-#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:837
-#: includes/abstract-payment-gateway.php:439
-#: includes/abstract-payment-gateway.php:440
-#: includes/abstract-payment-gateway.php:448
+#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:850
+#: includes/abstract-payment-gateway.php:443
+#: includes/abstract-payment-gateway.php:444
+#: includes/abstract-payment-gateway.php:452
 #: includes/webhook.php:409
 msgid "Reason : "
 msgstr ""
 
 #: compatibilities/plugins/class-abstract-wfocu-bnpl.php:231
-#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:837
-#: includes/abstract-payment-gateway.php:439
-#: includes/abstract-payment-gateway.php:440
-#: includes/abstract-payment-gateway.php:448
+#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:850
+#: includes/abstract-payment-gateway.php:443
+#: includes/abstract-payment-gateway.php:444
+#: includes/abstract-payment-gateway.php:452
 #: includes/webhook.php:409
 msgid "Amount : "
 msgstr ""
 
 #: compatibilities/plugins/class-abstract-wfocu-bnpl.php:231
-#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:837
-#: includes/abstract-payment-gateway.php:448
+#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:850
+#: includes/abstract-payment-gateway.php:452
 msgid " Status : Failed "
 msgstr ""
 
@@ -979,7 +979,7 @@ msgstr ""
 #. translators: 1) amount (including currency symbol)
 #: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-sepa.php:194
 #: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:143
-#: includes/abstract-payment-gateway.php:493
+#: includes/abstract-payment-gateway.php:497
 msgid "Sorry, the minimum allowed order total is %1$s to use this payment method."
 msgstr ""
 
@@ -992,23 +992,23 @@ msgid "customer_email"
 msgstr ""
 
 #: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-sepa.php:602
-#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:448
+#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:461
 msgid "Offer payment failed. Reason: Intent secret missing from auth"
 msgstr ""
 
 #: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-sepa.php:610
-#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:456
+#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:469
 msgid "Offer payment failed. Reason: Unable to find matching ID for the secret"
 msgstr ""
 
 #: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-sepa.php:627
-#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:477
+#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:490
 msgid "Offer payment failed. Reason: Intent was not authenticated properly."
 msgstr ""
 
 #: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-sepa.php:639
-#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:493
-#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:604
+#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:506
+#: compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe.php:617
 msgid "Offer payment failed. Reason: "
 msgstr ""
 
@@ -1056,7 +1056,7 @@ msgstr ""
 #: gateways/klarna.php:64
 #: gateways/localgateway.php:95
 #: gateways/sepa.php:138
-#: includes/abstract-payment-gateway.php:1454
+#: includes/abstract-payment-gateway.php:1458
 msgid "Description"
 msgstr ""
 
@@ -1080,7 +1080,7 @@ msgstr ""
 #. translators: gateway title
 #: gateways/affirm.php:93
 #: gateways/afterpay.php:74
-#: includes/abstract-payment-gateway.php:1485
+#: includes/abstract-payment-gateway.php:1489
 msgid "This option lets you limit the %1$s to which countries you are willing to sell to."
 msgstr ""
 
@@ -1201,14 +1201,14 @@ msgstr ""
 #: gateways/bancontact.php:203
 #: gateways/localgateway.php:299
 #: gateways/sepa.php:422
-#: includes/abstract-payment-gateway.php:1919
+#: includes/abstract-payment-gateway.php:1925
 msgid "Invalid Order Key."
 msgstr ""
 
 #. translators: Error message text
 #: gateways/bancontact.php:209
 #: gateways/localgateway.php:305
-#: includes/abstract-payment-gateway.php:1925
+#: includes/abstract-payment-gateway.php:1931
 msgid "Payment verification error: %s"
 msgstr ""
 
@@ -1347,60 +1347,60 @@ msgid "Error: Unable to get payment method from the browser, please check for br
 msgstr ""
 
 #. translators: 1) The error message that was received from Stripe.
-#: gateways/creditcard.php:407
+#: gateways/creditcard.php:408
 #: gateways/localgateway.php:359
 #: gateways/sepa.php:475
-#: includes/abstract-payment-gateway.php:2006
+#: includes/abstract-payment-gateway.php:2012
 msgid "Stripe SCA authentication failed. Reason: %s"
 msgstr ""
 
 #. translators: 1) The error message that was received from Stripe.
-#: gateways/creditcard.php:407
+#: gateways/creditcard.php:408
 #: gateways/localgateway.php:359
 #: gateways/sepa.php:475
-#: includes/abstract-payment-gateway.php:2006
+#: includes/abstract-payment-gateway.php:2012
 msgid "Stripe SCA authentication failed."
 msgstr ""
 
-#: gateways/creditcard.php:468
+#: gateways/creditcard.php:474
 msgid "We are unable to process payments using the selected method. Please choose a different payment method."
 msgstr ""
 
-#: gateways/creditcard.php:593
-#: gateways/creditcard.php:594
+#: gateways/creditcard.php:604
+#: gateways/creditcard.php:605
 msgid "Order charge successful in Stripe%s. Charge: %s. Payment method: %s"
 msgstr ""
 
-#: gateways/creditcard.php:598
-#: gateways/creditcard.php:599
+#: gateways/creditcard.php:609
+#: gateways/creditcard.php:610
 msgid "Order charge successful in Stripe%s. Charge: %s. Payment method: %s ending in %d"
 msgstr ""
 
-#: gateways/creditcard.php:603
+#: gateways/creditcard.php:614
 msgid "Wallet Used %s"
 msgstr ""
 
 #. translators: transaction id
-#: gateways/creditcard.php:632
+#: gateways/creditcard.php:643
 msgid "Charge authorized (Charge ID: %s). Press an eye icon below Transaction Data / Actions to Capture/Void the charge."
 msgstr ""
 
-#: gateways/creditcard.php:701
+#: gateways/creditcard.php:713
 #: gateways/sepa.php:615
 msgid "There was a problem adding the payment method."
 msgstr ""
 
-#: gateways/creditcard.php:717
+#: gateways/creditcard.php:729
 #: gateways/sepa.php:632
 msgid "Invalid stripe source"
 msgstr ""
 
-#: gateways/creditcard.php:733
+#: gateways/creditcard.php:745
 #: gateways/sepa.php:651
 msgid "Unable to attach payment method to customer"
 msgstr ""
 
-#: gateways/creditcard.php:852
+#: gateways/creditcard.php:864
 msgid "%1$1s Test Mode Enabled:%2$2s Use demo card 4242424242424242 with any future date and CVV. Check more %3$3sdemo cards%4$4s"
 msgstr ""
 
@@ -1524,13 +1524,13 @@ msgstr ""
 #: gateways/smart-buttons.php:480
 #: includes/traits/wc-smart-button-functions.php:104
 #: includes/traits/wc-smart-button-functions.php:170
-#: includes/traits/wc-smart-button-functions.php:1074
+#: includes/traits/wc-smart-button-functions.php:1075
 msgid "Total"
 msgstr ""
 
 #: gateways/googlepay.php:404
 #: includes/traits/wc-smart-button-functions.php:419
-#: includes/traits/wc-smart-button-functions.php:1123
+#: includes/traits/wc-smart-button-functions.php:1124
 msgid "Your shipping address is not serviceable."
 msgstr ""
 
@@ -1633,7 +1633,7 @@ msgstr ""
 
 #: gateways/localgateway.php:344
 #: gateways/sepa.php:463
-#: includes/abstract-payment-gateway.php:1994
+#: includes/abstract-payment-gateway.php:2000
 msgid "Unable to process this payment, please try again or use alternative method."
 msgstr ""
 
@@ -1730,15 +1730,15 @@ msgid "Begin processing payment with SEPA for order %1$1s for the amount of %2$2
 msgstr ""
 
 #: gateways/sepa.php:489
-#: includes/traits/wc-subscriptions-trait.php:373
-#: includes/webhook.php:838
+#: includes/traits/wc-subscriptions-trait.php:378
+#: includes/webhook.php:841
 msgid "Payment will be completed once payment_intent.succeeded webhook received from Stripe."
 msgstr ""
 
 #. translators: transaction id, other info
 #: gateways/sepa.php:492
-#: includes/traits/wc-subscriptions-trait.php:376
-#: includes/webhook.php:841
+#: includes/traits/wc-subscriptions-trait.php:381
+#: includes/webhook.php:844
 msgid "Stripe charge awaiting payment: %1$s. %2$s"
 msgstr ""
 
@@ -1771,102 +1771,102 @@ msgstr ""
 msgid "Pending"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:394
+#: includes/abstract-payment-gateway.php:398
 msgid "Stripe is not configured properly."
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:426
+#: includes/abstract-payment-gateway.php:430
 msgid "Refund by user : "
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:439
-#: includes/abstract-payment-gateway.php:440
+#: includes/abstract-payment-gateway.php:443
+#: includes/abstract-payment-gateway.php:444
 #: includes/webhook.php:409
 msgid "Status : "
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:439
-#: includes/abstract-payment-gateway.php:440
+#: includes/abstract-payment-gateway.php:443
+#: includes/abstract-payment-gateway.php:444
 #: includes/webhook.php:409
 msgid "Transaction ID : "
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:440
+#: includes/abstract-payment-gateway.php:444
 msgid "Refund initiated: "
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:445
+#: includes/abstract-payment-gateway.php:449
 msgid "Your refund process is "
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:703
+#: includes/abstract-payment-gateway.php:707
 msgid "Customer for Order #"
 msgstr ""
 
 #. translators: %1$s First name, %2$s Second name, %3$s Username.
-#: includes/abstract-payment-gateway.php:733
+#: includes/abstract-payment-gateway.php:737
 msgid "Name: %1$s %2$s, Username: %3$s"
 msgstr ""
 
 #. translators: %s: supported currency.
-#: includes/abstract-payment-gateway.php:1423
+#: includes/abstract-payment-gateway.php:1427
 msgid "This gateway supports the following currencies only : <strong>%s</strong>."
 msgstr ""
 
 #. translators: %s: Method title.
-#: includes/abstract-payment-gateway.php:1442
+#: includes/abstract-payment-gateway.php:1446
 msgid "Enable %s"
 msgstr ""
 
 #. translators: %s: Method title.
-#: includes/abstract-payment-gateway.php:1449
+#: includes/abstract-payment-gateway.php:1453
 msgid "Title of the %s gateway."
 msgstr ""
 
 #. translators: gateway title
-#: includes/abstract-payment-gateway.php:1458
+#: includes/abstract-payment-gateway.php:1462
 msgid "Description of the %1s gateway."
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:1478
+#: includes/abstract-payment-gateway.php:1482
 msgid "Selling location(s)"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:1487
+#: includes/abstract-payment-gateway.php:1491
 msgid "Sell to all countries"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:1488
-#: includes/abstract-payment-gateway.php:1493
+#: includes/abstract-payment-gateway.php:1492
+#: includes/abstract-payment-gateway.php:1497
 msgid "Sell to all countries, except for&hellip;"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:1489
-#: includes/abstract-payment-gateway.php:1504
+#: includes/abstract-payment-gateway.php:1493
+#: includes/abstract-payment-gateway.php:1508
 msgid "Sell to specific countries"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:1500
+#: includes/abstract-payment-gateway.php:1504
 msgid "If any of the selected countries matches with the customer's billing country, then this payment method will not be visible on the checkout page."
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:1511
+#: includes/abstract-payment-gateway.php:1515
 msgid "If any of the selected countries matches with the customer's billing country, then this payment method will be visible on the checkout page."
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:2130
+#: includes/abstract-payment-gateway.php:2136
 msgid "Choose countries / regions&hellip;"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:2131
+#: includes/abstract-payment-gateway.php:2137
 msgid "Country / Region"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:2142
+#: includes/abstract-payment-gateway.php:2148
 msgid "Select all"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:2143
+#: includes/abstract-payment-gateway.php:2149
 msgid "Select none"
 msgstr ""
 
@@ -1875,7 +1875,7 @@ msgid "invalid nonce"
 msgstr ""
 
 #: includes/ajax.php:132
-#: includes/webhook.php:647
+#: includes/webhook.php:650
 msgid "Intent ID"
 msgstr ""
 
@@ -2203,51 +2203,51 @@ msgstr ""
 msgid "Update the Payment Method used for all of my active subscriptions."
 msgstr ""
 
-#: includes/traits/wc-subscriptions-trait.php:320
+#: includes/traits/wc-subscriptions-trait.php:321
 msgid "Sorry, we are unable to process your payment at this time. Please retry later."
 msgstr ""
 
-#: includes/traits/wc-subscriptions-trait.php:334
+#: includes/traits/wc-subscriptions-trait.php:335
 msgid "This transaction requires authentication."
 msgstr ""
 
 #. translators: %s is the charge Id
 #. translators: %s is the stripe charge Id
-#: includes/traits/wc-subscriptions-trait.php:343
-#: includes/traits/wc-subscriptions-trait.php:707
+#: includes/traits/wc-subscriptions-trait.php:346
+#: includes/traits/wc-subscriptions-trait.php:716
 msgid "Stripe charge awaiting authentication by user: %s."
 msgstr ""
 
 #. translators: 1) a date in the format yyyy-mm-dd, e.g. 2021-09-21; 2) time in the 24-hour format HH:mm, e.g. 23:04
-#: includes/traits/wc-subscriptions-trait.php:352
+#: includes/traits/wc-subscriptions-trait.php:355
 msgid "The customer must authorize this payment via the pre-debit notification sent to them by their card issuing bank, before %1$s at %2$s, when the charge will be attempted."
 msgstr ""
 
-#: includes/traits/wc-subscriptions-trait.php:587
+#: includes/traits/wc-subscriptions-trait.php:596
 msgid "A \"Stripe Customer ID\" value is required."
 msgstr ""
 
-#: includes/traits/wc-subscriptions-trait.php:590
+#: includes/traits/wc-subscriptions-trait.php:599
 msgid "Invalid customer ID. A valid \"Stripe Customer ID\" must begin with \"cus_\"."
 msgstr ""
 
-#: includes/traits/wc-subscriptions-trait.php:610
+#: includes/traits/wc-subscriptions-trait.php:619
 msgid "Invalid source ID. A valid source \"Stripe Source ID\" must begin with \"src_\", \"pm_\", or \"card_\"."
 msgstr ""
 
 #. translators: 1) card brand 2) last 4 digits
-#: includes/traits/wc-subscriptions-trait.php:651
-#: includes/traits/wc-subscriptions-trait.php:665
+#: includes/traits/wc-subscriptions-trait.php:660
+#: includes/traits/wc-subscriptions-trait.php:674
 msgid "N/A"
 msgstr ""
 
 #. translators: 1) card brand 2) last 4 digits
-#: includes/traits/wc-subscriptions-trait.php:665
+#: includes/traits/wc-subscriptions-trait.php:674
 msgid "Via %1$s card ending in %2$s"
 msgstr ""
 
 #. translators: 1) last 4 digits of SEPA Direct Debit
-#: includes/traits/wc-subscriptions-trait.php:668
+#: includes/traits/wc-subscriptions-trait.php:677
 msgid "Via SEPA Direct Debit ending in %1$s"
 msgstr ""
 
@@ -2292,7 +2292,7 @@ msgstr ""
 
 #. translators: transaction id
 #: includes/webhook.php:299
-#: includes/webhook.php:849
+#: includes/webhook.php:852
 msgid "Stripe charge complete (Charge ID: %s)"
 msgstr ""
 
@@ -2329,26 +2329,26 @@ msgstr ""
 msgid "The inquiry or retrieval closed."
 msgstr ""
 
-#: includes/webhook.php:689
+#: includes/webhook.php:692
 msgid "This order is under review. Please respond via stripe dashboard."
 msgstr ""
 
 #. translators: Review reason from Stripe
-#: includes/webhook.php:713
+#: includes/webhook.php:716
 msgid "Review for this order has been resolved. Reason: %s"
 msgstr ""
 
-#: includes/webhook.php:855
+#: includes/webhook.php:858
 msgid "Payment processing failed. Please retry."
 msgstr ""
 
 #. translators: transaction id
-#: includes/webhook.php:867
+#: includes/webhook.php:870
 msgid "Stripe charge awaiting payment: %1$s. Payment will be completed once payment_intent.succeeded webhook received from Stripe."
 msgstr ""
 
 #. translators: transaction id
-#: includes/webhook.php:867
+#: includes/webhook.php:870
 msgid "Stripe charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization. Attempting to refund the order in part or in full will release the authorization and cancel the payment."
 msgstr ""
 

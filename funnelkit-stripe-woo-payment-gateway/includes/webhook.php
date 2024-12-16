@@ -533,7 +533,10 @@ class Webhook {
 			$order->update_meta_data( '_fkwcs_customer_id', $intent->customer );
 			$order->save_meta_data();
 
-			$charge = end( $intent->charges->data );
+			/**
+			 * Get last charge
+			 */
+			$charge = Helper::get_latest_charge_from_intent_by_gateway( $intent, $order->get_payment_method() );
 			/* translators: transaction id, order id */
 			Helper::log( "Webhook: Stripe PaymentIntent $charge->id succeeded for order $order_id" );
 			$this->process_response( $charge, $order );

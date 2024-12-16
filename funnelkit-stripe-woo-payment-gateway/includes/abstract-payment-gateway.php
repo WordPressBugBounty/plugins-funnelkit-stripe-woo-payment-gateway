@@ -333,12 +333,16 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function get_current_user_billing_details_for_order() {
 
-
 		if ( ! is_wc_endpoint_url( 'order-pay' ) ) {
 			return [];
 		}
+
 		global $wp;
 		$order_id = $wp->query_vars['order-pay'];
+
+		if ( empty( $order_id ) ) {
+			return [];
+		}
 
 		$order              = wc_get_order( $order_id );
 		$details            = [];
@@ -1816,7 +1820,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		if ( isset( $result['token'] ) ) {
 			unset( $output['save_card'] );
 		}
-		$is_token_used = isset( $result['token_used'] ) ? 'yes' : 'no';
+		$is_token_used = isset( $result['token_used']  ) && $result['token_used'] === 'yes' ? 'yes' : 'no';
 
 
 		// Put the final thank you page redirect into the verification URL.
@@ -1869,9 +1873,11 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public function get_latest_charge_from_intent( $intent ) {
 		if ( ! empty( $intent->charges->data ) ) {
 			return end( $intent->charges->data );
-		} else {
+		} elseif ( ! empty( $intent->latest_charge ) ) {
 			return $this->get_charge_object( $intent->latest_charge );
 		}
+
+		return '';
 	}
 
 
@@ -2042,7 +2048,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$user  = $order->get_id() ? $order->get_user() : wp_get_current_user();
 		if ( $user instanceof \WP_User ) {
 			$user_id = $user->ID;
-			$token   = Helper::create_payment_token_for_user( $user_id, $payment_method, $intent->livemode );
+			$token   = Helper::create_payment_token_for_user( $user_id, $payment_method, $this->id, $intent->livemode );
 
 			Helper::log( sprintf( 'Payment method tokenized for Order id - %1$1s with token id - %2$2s', $order->get_id(), $token->get_id() ) );
 		}
@@ -2260,8 +2266,9 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * create a mandate to acknowledge that terms have been shown to the customer.
 	 * This adds mandate data required for deferred intent UPE payment.
 	 *
-	 * @param array  $request       The payment request array.
+	 * @param array $request The payment request array.
 	 * @param $order \WC_Order
+	 *
 	 * @return array|mixed
 	 */
 	public function maybe_mandate_data_required( $request, $order ) {

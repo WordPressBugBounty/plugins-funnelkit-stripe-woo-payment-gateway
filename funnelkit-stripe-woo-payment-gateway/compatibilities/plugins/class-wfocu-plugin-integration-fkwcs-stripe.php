@@ -217,7 +217,20 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 			$gateway    = $this->get_wc_gateway();
 			$stripe_api = $gateway->get_client();
-			$c_intent   = (object) $stripe_api->payment_intents( 'confirm', [ $intent->data->id ] );
+
+			/**
+			 * Check may mandate data required in confirm call
+			 */
+			$mandate_data = array();
+			if ( method_exists( $gateway, 'maybe_mandate_data_required' ) ) {
+				$mandate_data = $gateway->maybe_mandate_data_required( array(), $order );
+			}
+
+			if ( is_array( $mandate_data ) && count( $mandate_data ) > 0 ) {
+				$c_intent = (object) $stripe_api->payment_intents( 'confirm', [ $intent->data->id, $mandate_data ] );
+			} else {
+				$c_intent = (object) $stripe_api->payment_intents( 'confirm', [ $intent->data->id ] );
+			}
 
 			if ( false === $c_intent->success ) {
 				return $c_intent;

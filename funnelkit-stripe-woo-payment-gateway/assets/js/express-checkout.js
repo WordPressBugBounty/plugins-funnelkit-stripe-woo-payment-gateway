@@ -616,6 +616,7 @@
             confirmPaymentIntent(event, hash) {
                 let hashpartials = hash.match(/^#?fkwcs-confirm-(pi|si)-([^:]+):(.+):(.+):(.+):(.+)$/);
                 if (!hashpartials || 5 > hashpartials.length) {
+                    window.location.redirect = hash;
                     return false;
                 }
                 let type = hashpartials[1];
@@ -1663,9 +1664,9 @@
 
                             // Parse the JSON from response text
                             const response = parseJSONFromResponse(responseText);
-
                             // Proceed only if valid JSON was parsed
                             if (response && response.result === 'success') {
+
                                 this.confirmPaymentIntent(result, response.redirect);
                             } else {
                                 $('body').unblock();
@@ -1766,11 +1767,13 @@
 
             /**
              * Cb to handle response from the AJAX request on payment method
+             * @param event
              * @param hash
              */
             confirmPaymentIntent(event, hash) {
                 let hashpartials = hash.match(/^#?fkwcs-confirm-(pi|si)-([^:]+):(.+):(.+):(.+):(.+)$/);
                 if (!hashpartials || 5 > hashpartials.length) {
+                    window.location.redirect = hash;
                     $('body').unblock();
                     return false;
                 }

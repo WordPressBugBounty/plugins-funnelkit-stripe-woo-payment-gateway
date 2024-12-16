@@ -1917,12 +1917,17 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 				$webhook_data = $this->get_api_option( $option_name );
 
-				$params = [ 'secret_key' => $secret_key, 'webhook_secret' => $webhook_secret, 'webhook_id' => $webhook_data['id'] ];
-
-				$response = $this->delete_webhook( $params );
-				if ( ! empty( $response ) && true === $response['deleted'] ) {
+				if ( ! is_array( $webhook_data ) || ! isset( $webhook_data['id'] ) ) {
 					delete_option( $option_name );
 					delete_option( 'fkwcs_' . $mode . '_webhook_secret' );
+				} else {
+					$params   = [ 'secret_key' => $secret_key, 'webhook_secret' => $webhook_secret, 'webhook_id' => $webhook_data['id'] ];
+                    $response = $this->delete_webhook( $params );
+
+					if ( ! empty( $response ) && true === $response['deleted'] ) {
+						delete_option( $option_name );
+						delete_option( 'fkwcs_' . $mode . '_webhook_secret' );
+					}
 				}
 			}
 		} catch ( \Exception $e ) {

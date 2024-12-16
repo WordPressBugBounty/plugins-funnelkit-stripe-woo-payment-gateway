@@ -309,8 +309,14 @@ class Stripe {
 
 		add_filter( 'woocommerce_order_get_payment_method', array( $this, 'change_payment_method' ), 99, 2 );
 		add_filter( 'woocommerce_subscription_get_payment_method', array( $this, 'change_payment_method' ), 99, 2 );
+			
+		add_action( 'wp', function () {
+			global $wp;
 
-
+			if ( isset( $wp->query_vars['delete-payment-method'] ) ) {
+				WC()->payment_gateways();
+			}
+		}, 19 );
 	}
 
 

@@ -2,9 +2,9 @@
 Contributors: amans2k, xlplugins, teamwoofunnels
 Tags: stripe, woocommerce, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
-Tested up to: 6.7.0
+Tested up to: 6.7.1
 Requires PHP: 7.0
-Stable tag: 1.10.1
+Stable tag: 1.11.1
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -216,9 +216,23 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+
+= 1.11.1 =
+* Fixed: Typo in confirmStripePayment method causing javascript error.
+
+= 1.11.0 =
+* Added: Introduced a new action hook, `fkwcs_process_response`, to enhance control and flexibility when processing Stripe payment request responses. (#529)
+* Improved: Payments in upsells now include `mandate_data`, improving the handling of 3DS cases for a smoother and more secure payment process for link. (#598)
+* Fixed: Refined the functionality for deleting payment methods in "My Account" to ensure a seamless and reliable experience. (#529)
+* Fixed: Enhanced validation for Express button payments to prevent checkout errors and ensure a hassle-free purchase experience. (#606)
+* Fixed: Corrected the meta-key for non-Stripe subscriptions, ensuring data accuracy and consistency. (#604)
+* Fixed: Resolved a rare PHP error that could occur during the disconnect webhook admin operation, providing a smoother administrative workflow. (#610)
+* Fixed: Optimized compatibility for zero-dollar free trial cases in UPE mode, enabling saved payment methods to work flawlessly. (#611)
+
+
 = 1.10.1 =
 * Improved: Dynamic settings up saved customer payment methods as WooCommerce Payment Tokens. (#529)
-* Fixed: PHP Notice regarding tex_domain coming in WP v6.7.1. (#589)
+* Fixed: PHP Notice regarding text_domain coming in WP v6.7.1. (#589)
 
 = 1.10.0 = 
 * Added: Integration with Alipay Gateway. (#575)

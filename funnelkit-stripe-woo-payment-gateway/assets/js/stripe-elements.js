@@ -860,9 +860,9 @@ jQuery(function ($) {
             if (response.paymentMethod) {
                 this.appendMethodId(response.paymentMethod.id);
                 if ($('form#order_review').length && 'yes' === fkwcs_data.is_change_payment_page) {
-                    this.create_setup_intent(response.paymentMethod.id, $('form#order_review'));
+                    this.create_setup_intent(response.paymentMethod.id, $('form#order_review'), response.paymentMethod.type);
                 } else if ($('form#add_payment_method').length) {
-                    this.create_setup_intent(response.paymentMethod.id, $('form#add_payment_method'));
+                    this.create_setup_intent(response.paymentMethod.id, $('form#add_payment_method'), response.paymentMethod.type);
                 } else {
                     if ($('form#order_review').length > 0) {
                         $('form#order_review').trigger('submit');
@@ -874,43 +874,73 @@ jQuery(function ($) {
             }
         }
 
-        create_setup_intent(payment_method, form_el) {
-            let process_data = {
-                'action': 'fkwcs_create_setup_intent', 'fkwcs_nonce': fkwcs_data.fkwcs_nonce, 'fkwcs_source': payment_method
+        create_setup_intent(payment_method, form_el, type) {
+            const {fkwcs_nonce, admin_ajax} = fkwcs_data;
+            const process_data = {
+                action: 'fkwcs_create_setup_intent',
+                fkwcs_nonce,
+                fkwcs_source: payment_method
             };
 
+            // Bind the function to preserve `this` context when used within the callback
+            const _this = this;
+
             $.ajax({
-                type: 'POST', dataType: 'json', url: fkwcs_data.admin_ajax, data: process_data, beforeSend: () => {
+                type: 'POST',
+                dataType: 'json',
+                url: admin_ajax,
+                data: process_data,
+                beforeSend: () => {
                     $('body').css('cursor', 'progress');
-                }, success: (response) => {
-                    if (response.status === 'success') {
-                        const clientSecret = response.data.client_secret;
-                        let confirmSetup = this.stripe.confirmCardSetup(clientSecret, {payment_method: payment_method});
-                        confirmSetup.then((resp) => {
-                            if (resp.hasOwnProperty('error')) {
-                                form_el.unblock();
-                                this.showNotice(resp.error);
-
-                                return;
-                            }
-
-                            form_el.trigger('submit');
-                        });
-                        confirmSetup.catch((error) => {
-                            form_el.unblock();
-                            console.log('error', error);
-
-                        });
-
-                    } else if (response.status === false) {
+                },
+                success(response) {
+                    if (response.status !== 'success') {
+                        $('body').css('cursor', 'default');
                         return false;
                     }
-                    $('body').css('cursor', 'default');
-                }, error() {
+
+                    const {client_secret: clientSecret} = response.data;
+                    const confirm_data = {
+                        elements: _this.elements,
+                        clientSecret,
+                        confirmParams: {
+                            return_url: homeURL,
+                        },
+                        redirect: 'if_required',
+                    };
+
+                    // Call the appropriate confirmation based on type
+                    const confirmSetup = (type === 'link') ? _this.stripe.confirmSetup(confirm_data) : _this.stripe.confirmCardSetup(clientSecret, {payment_method});
+
+                    // Handle the confirmation using async function
+                    _this.handleConfirmation(confirmSetup, form_el);
+                },
+                error() {
                     $('body').css('cursor', 'default');
                     alert('Something went wrong!');
                 },
+                complete() {
+                    $('body').css('cursor', 'default');
+                }
             });
+        }
+
+// New helper method for handling confirmation and form submission
+        async handleConfirmation(confirmSetup, form_el) {
+            try {
+                const resp = await confirmSetup;
+
+                if (resp.error) {
+                    form_el.unblock();
+                    this.showNotice(resp.error);
+                    return;
+                }
+
+                form_el.trigger('submit');
+            } catch (error) {
+                form_el.unblock();
+                console.error('Error in handleConfirmation:', error);
+            }
         }
 
 
@@ -1163,7 +1193,7 @@ jQuery(function ($) {
 
 
         updatableElementKeys() {
-            return [ 'mode', 'currency', 'amount', 'setup_future_usage', 'capture_method', 'payment_method_types', 'appearance', 'on_behalf_of'];
+            return ['mode', 'currency', 'amount', 'setup_future_usage', 'capture_method', 'payment_method_types', 'appearance', 'on_behalf_of'];
         }
 
         update_fragment_data(fragments) {
@@ -2577,6 +2607,7 @@ jQuery(function ($) {
         }
 
     }
+
     class FKWCS_AliPay extends LocalGateway {
         constructor(stripe, gateway_id) {
             super(stripe, gateway_id);
