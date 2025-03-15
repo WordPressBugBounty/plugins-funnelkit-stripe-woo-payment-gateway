@@ -470,6 +470,9 @@ class Stripe {
 
 	private function maybe_prevent_change_method() {
 
+		if ( current_action() === 'woocommerce_scheduled_subscription_payment' && ! WC()->payment_gateways()->payment_gateways()['fkwcs_stripe']->is_configured() ) {
+			return true;
+		}
 		if ( isset( $_GET['wc-ajax'] ) && 'wc_stripe_frontend_request' === wc_clean( $_GET['wc-ajax'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 			return true;

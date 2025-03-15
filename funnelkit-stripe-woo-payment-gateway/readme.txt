@@ -1,6 +1,6 @@
-=== Stripe Payment Gateway for WooCommerce ===
+=== FunnelKit Payment Gateway for Stripe WooCommerce ===
 Contributors: amans2k, xlplugins, teamwoofunnels
-Tags: stripe, woocommerce, apple pay, google pay, WooCommerce Stripe
+Tags: stripe, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
 Tested up to: 6.7.1
 Requires PHP: 7.0
@@ -8,10 +8,10 @@ Stable tag: 1.11.1
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
-Stripe Payment Gateway for WooCommerce is an integrated solution that lets you accept payments on your online store for web and mobile.
+FunnelKit Payment Gateway for Stripe WooCommerce is an integrated solution that lets you accept payments on your online store for web and mobile.
 
 == Description ==
-Stripe Payment Gateway for WooCommerce is an integrated solution that lets you **accept payments on your online store for web and mobile.**
+FunnelKit Payment Gateway for Stripe WooCommerce is an integrated solution that lets you **accept payments on your online store for web and mobile.**
 
 It delivers a simple, quick, secure payment gateway to your WooCommerce website.
 

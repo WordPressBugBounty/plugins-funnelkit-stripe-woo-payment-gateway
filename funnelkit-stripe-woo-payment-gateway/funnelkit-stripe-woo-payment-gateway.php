@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Plugin Name: Stripe Payment Gateway for WooCommerce
+ * Plugin Name: FunnelKit Payment Gateway for Stripe WooCommerce
  * Plugin URI: https://www.funnelkit.com/
  * Description: Effortlessly accepts payments via Stripe on your WooCommerce Store.
  * Version: 1.11.1
@@ -16,12 +16,12 @@
  * Tested up to: 6.7.1
  * Requires PHP: 7.4
  *
- * Stripe Payment Gateway for WooCommerce is free software.
+ * FunnelKit Payment Gateway for Stripe WooCommerce is free software.
  * You can redistribute it and/or modify it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * any later version.
  *
- * Stripe Payment Gateway for WooCommerce is distributed in the hope that it will be useful,
+ * FunnelKit Payment Gateway for Stripe WooCommerce is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
