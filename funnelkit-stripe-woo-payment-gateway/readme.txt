@@ -2,9 +2,9 @@
 Contributors: amans2k, xlplugins, teamwoofunnels
 Tags: stripe, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
-Tested up to: 6.7.1
+Tested up to: 6.8.1
 Requires PHP: 7.0
-Stable tag: 1.11.1
+Stable tag: 1.12.0
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -217,6 +217,33 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 == Change log ==
 
+= 1.12.0 =
+* Added: MobilePay, a new gateway is added. (#677)
+* Added: Compatibility with Funnelkit upsells to allow showing upsell offers for zero dollar checkout. (#620)
+* Added: Local gateways now support the Order Pay Page for a smoother checkout experience. (#615)
+* Added: Charge Type option added for BNPL gateways, allowing automatic or manual selection for better flexibility. (#617)
+* Added: Admin menu navigation under settings updated to be fully compatible with WC v9.8.0. (#719)
+* Added: New REST API endpoint added. `capture_terminal_payment`, to handle terminal payments more effectively. (#691)
+* Improved: Enhanced syncing for all available card payment methods with Stripe, ensuring removed cards are cleaned up. (#646)
+* Improved: Better syncing of default card between WooCommerce and Stripe. (#652)
+* Improved: JS error handling for promise errors in upsell credit card popups for smoother functionality. (#686)
+* Improved: UX is improved for standard credit card element in case of validation errors, smooth scrolling to the element added. (#731)
+* Improved: Payment element initialization now handles slow network conditions more reliably. (#722)
+* Improved: Compatibility with early renewals through the modal popup for a smoother renewal process. (#678)
+* Improved: Webhook listener works correctly for p24 gateway transactions, ensuring accurate tracking. (#670)
+* Improved: Prevented overriding automatic renewals when the gateway is not configured, ensuring reliable renewals. (#625)
+* Improved: Affirm & AfterPay works smoothly, when no address is provided. (#687)
+* Fixed: A rare case with Google Pay button functioning inside FunnelKit cart. (#618)
+* Fixed: Deeper compatibility for WooCommerce subscription to ensure gateway ID is updated during subscription actions. (#630)
+* Fixed: Smoother testing experience, handled balance update for administrator during testing. (#641)
+* Fixed: Resolved a JavaScript error on the Order Pay page when the selected gateway wasn't credit card. (#666)
+* Fixed: Removed generic position class from smart buttons HTML to prevent CSS conflicts and improve styling. (#669)
+* Fixed: Enhanced failed transaction order note to include a link to the Stripe dashboard for easier troubleshooting. (#680)
+* Fixed: Resolved redirection issue to the thank-you page when using the BNPL gateway and third-party plugin hooks on `wp_redirect`. (#719)
+* Fixed: Handled retry scenarios when no card is saved, in case of the "This card does not support this type of purchase" error. (#721)
+* Fixed: Addressed a rare case of PHP error, when shipping rate or tax values are returned as blank strings instead of decimals. (#726)
+* Fixed: Some cases with Google Pay where first name and last name were not working correctly. (#661)
+
 = 1.11.1 =
 * Fixed: Typo in confirmStripePayment method causing javascript error.
 
@@ -229,26 +256,25 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 * Fixed: Resolved a rare PHP error that could occur during the disconnect webhook admin operation, providing a smoother administrative workflow. (#610)
 * Fixed: Optimized compatibility for zero-dollar free trial cases in UPE mode, enabling saved payment methods to work flawlessly. (#611)
 
-
 = 1.10.1 =
 * Improved: Dynamic settings up saved customer payment methods as WooCommerce Payment Tokens. (#529)
 * Fixed: PHP Notice regarding text_domain coming in WP v6.7.1. (#589)
 
-= 1.10.0 = 
+= 1.10.0 =
 * Added: Integration with Alipay Gateway. (#575)
 * Added: Upsell Recovery feature allows new credit card form input when a transaction fails. (#544)
 * Added: Allow FunnelKit Upsells to show after a zero-dollar checkout by allowing credit card form input when users accept upsells. (#544)
-* Improved: Gateway logging improvements are made when an error occurs during order creation in express button payments. (#576) 
+* Improved: Gateway logging improvements are made when an error occurs during order creation in express button payments. (#576)
 * Improved: Move order to failed status in case of charge.failed webhook for credit card gateway. (#576)
 * Improved: Allow charge authorization for local gateways. (#578)
 * Improved: Google Pay gateway new direct integration was causing issues with shipping when no shipping methods were available with the customer's address. (#580)
 * Improved: Gateway title showing "Credit card" in case of express checkout payments. (#580)
 * Improved: Confirm Payment intent first during process checkout to avoid confirmation in Javascript. (#580)
-* Improved: Avoid adding login cookies in case of user logins, causing issues in a few specific setups. (#580)  
+* Improved: Avoid adding login cookies in case of user logins, causing issues in a few specific setups. (#580)
 * Improved: Pass mandate_data with link payments. (#584)
 * Fixed: Order Pay page payments were not working for guest orders. (#589)
 * Fixed: Handle malformed JSON scenarios during Express Buttons processing. (#576)
- 
+
 = 1.9.1 =
 * Fixed: Google Pay and Apple Pay gateway title was not setting up when stripe is disconnected. (#489)
 * Improved: Express Checkout visibility conditions with FunnelKit Checkouts. (#476)
@@ -295,7 +321,6 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 = 1.8.1 =
 * Improved: Card Payments for Stripe merchant accounts that belongs to country where Link method is not supported. (#452)
 * Fixed: Order note after confirmed payments was not adding since last update. (#452)
-
 
 = 1.8.0 =
 * Added: Compatibility with WordPress 6.5.0.

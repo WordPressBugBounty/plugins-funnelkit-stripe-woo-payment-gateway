@@ -1,6 +1,7 @@
 <?php
 
 namespace FKWCS\Gateway\Stripe;
+
 use FKWCS\Gateway\Stripe;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -60,26 +61,28 @@ abstract class Helper {
 	];
 
 	/**
-	 * Get Stripe amount to pay
-	 *
 	 * @param float $total Amount due.
 	 * @param string $currency Accepted currency.
+	 * @param $multiplier
+	 * @param $is_float
 	 *
 	 * @return float|int
 	 */
-	public static function get_stripe_amount( $total, $currency = '', $multiplier = 100 ) {
+	public static function get_stripe_amount( $total, $currency = '', $multiplier = 100, $is_float = false ) {
 		if ( ! $currency ) {
 			$currency = get_woocommerce_currency();
 		}
 
 		$multiplier = absint( $multiplier );
 		if ( in_array( strtolower( $currency ), self::no_decimal_currencies(), true ) ) {
-			return absint( $total );
+			$total_amt = $total;
 		} elseif ( in_array( strtolower( $currency ), self::get_1000_multiplier_currencies(), true ) ) {
-			return absint( wc_format_decimal( ( (float) $total * 1000 ), wc_get_price_decimals() ) ); // In cents.
+			$total_amt = wc_format_decimal( ( (float) $total * 1000 ), wc_get_price_decimals() ); // In cents.
 		} else {
-			return absint( wc_format_decimal( ( (float) $total * $multiplier ), wc_get_price_decimals() ) ); // In cents.
+			$total_amt = wc_format_decimal( ( (float) $total * $multiplier ), wc_get_price_decimals() ); // In cents.
 		}
+
+		return ( $is_float ) ? floatval( $total_amt ) : absint( $total_amt );
 	}
 
 	public static function get_gateway_settings( $gateway = 'fkwcs_stripe' ) {
@@ -249,15 +252,18 @@ abstract class Helper {
 	 *
 	 * @param array|\stdClass $payment_intent
 	 * @param \WC_Order $order
+	 * @param $gateway_mode
 	 */
-	public static function add_payment_intent_to_order( $payment_intent, $order ) {
-
-
+	public static function add_payment_intent_to_order( $payment_intent, $order, $gateway_mode = '' ) {
 		$order->add_order_note( sprintf( /* translators: %1$s payment intent ID */ __( 'The customer has initiated and payment intent created with ID %1$s. The customer had not completed the payment yet.', 'funnelkit-stripe-woo-payment-gateway' ), $payment_intent->id ) );
 		$order->update_meta_data( '_fkwcs_intent_id', [
 			'id'            => $payment_intent->id,
 			'client_secret' => $payment_intent->client_secret,
 		] );
+		if ( ! empty( $gateway_mode ) ) {
+			$order->update_meta_data( '_fkwcs_payment_mode', $gateway_mode );
+		}
+
 		$order->save();
 	}
 
@@ -368,17 +374,15 @@ abstract class Helper {
 	 */
 	public static function update_balance( $order, $transaction_id, $is_refund_transaction = false ) {
 
-		$test_mode       = get_option( 'fkwcs_mode', 'test' );
-		$test_secret_key = get_option( 'fkwcs_test_secret_key', '' );
-		$live_secret_key = get_option( 'fkwcs_secret_key', '' );
+		/**
+		 * Here we are trying to get the payment mode from the order meta, if not found we will get it from the settings
+		 */
+		$get_payment_mode = Helper::get_meta( $order, '_fkwcs_payment_mode' );
+		$test_mode        = ! empty( $get_payment_mode ) ? $get_payment_mode : ( Helper::get_mode() === '' ? ( get_option( 'fkwcs_mode', 'test' ) === 'test_admin_only' && is_super_admin() ? 'test' : get_option( 'fkwcs_mode', 'test' ) ) : Helper::get_mode() );
 
-		if ( 'test' === $test_mode ) {
-			$client_secret = $test_secret_key;
-		} else {
-			$client_secret = $live_secret_key;
-		}
+		$client_secret = ( $test_mode === 'test' ) ? get_option( 'fkwcs_test_secret_key', '' ) : get_option( 'fkwcs_secret_key', '' );
 
-		$stripe   = self::get_new_client( $client_secret );
+		$stripe   = self::get_new_client( $client_secret, true );
 		$response = $stripe->balance_transactions( 'retrieve', [ $transaction_id ] );
 		$balance  = $response['success'] ? $response['data'] : false;
 
@@ -564,7 +568,6 @@ abstract class Helper {
 	public static function get_payment_method( $order_id ) {
 
 
-
 		if ( true === self::is_hpos_enabled() ) {
 			global $wpdb;
 			$meta_value = $wpdb->get_var( $wpdb->prepare( "SELECT `payment_method` FROM `{$wpdb->prefix}wc_orders` WHERE `id`=%d", $order_id ) ); //phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery & WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -622,9 +625,9 @@ abstract class Helper {
 	 *
 	 * @return Client|null
 	 */
-	public static function get_new_client( $client_secret ) {
+	public static function get_new_client( $client_secret, $force = false ) {
 
-		if ( ! is_null( self::$client ) ) {
+		if ( ( ! is_null( self::$client ) ) && ( false === $force ) ) {
 			return self::$client;
 		}
 		self::$client = new Client( apply_filters( 'fkwcs_api_client_secret', $client_secret ) );
@@ -710,7 +713,7 @@ abstract class Helper {
 					'fontSize' => '14px',
 				]
 			],
-			'shipping_error' => __('Shipping address is invalid or no shipping methods are available. Please update your address.','funnelkit-stripe-woo-payment-gateway'),
+			'shipping_error'          => __( 'Shipping address is invalid or no shipping methods are available. Please update your address.', 'funnelkit-stripe-woo-payment-gateway' ),
 		];
 	}
 
@@ -777,7 +780,7 @@ abstract class Helper {
 	/**
 	 * Tokenize card payment
 	 *
-	 * @param int $user_id id of current user placing .
+	 * @param int $user_id id of current user placing.
 	 * @param object $payment_method payment method object.
 	 *
 	 * @return object token object.
@@ -786,10 +789,15 @@ abstract class Helper {
 		global $wpdb;
 		$token_exists = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_payment_tokens where token =%s", $payment_method->id ), ARRAY_A );
 		if ( ! empty( $token_exists ) ) {
-			$token_obj = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
-			if ( ! is_null( $token_obj ) ) {
-				return $token_obj;
-			}
+
+			$token = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
+			$token->set_gateway_id( $gateway_id );
+			$token->update_meta_data( 'mode', ( $is_live ) ? 'live' : 'test' );
+			$token->save_meta_data();
+			$token->save();
+
+			return $token;
+
 		}
 
 		$token = new \WC_Payment_Token_CC();

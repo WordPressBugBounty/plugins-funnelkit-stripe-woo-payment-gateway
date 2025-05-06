@@ -58,7 +58,6 @@ class Sepa extends Abstract_Payment_Gateway {
 		$this->description        = $this->get_option( 'description' );
 		$this->enabled            = $this->get_option( 'enabled' );
 		$this->enable_saved_cards = $this->get_option( 'enable_saved_cards' );
-		$this->capture_method     = $this->get_option( 'charge_type' );
 		$this->allowed_cards      = empty( $this->get_option( 'allowed_cards' ) ) ? [ 'mastercard', 'visa', 'diners', 'discover', 'amex', 'jcb', 'unionpay' ] : $this->get_option( 'allowed_cards' );
 
 		$this->payment_conform = true;
@@ -248,13 +247,13 @@ class Sepa extends Abstract_Payment_Gateway {
 	 *
 	 * @param $order_id Int Order ID
 	 * @param $retry
-	 * @param $force_save_source
+	 * @param $force_prevent_source_creation
 	 * @param $previous_error
 	 * @param $use_order_source
 	 *
 	 * @return array|mixed|string[]|void|null
 	 */
-	public function process_payment( $order_id, $retry = true, $force_save_source = false, $previous_error = false, $use_order_source = false ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis
+	public function process_payment( $order_id, $retry = true, $force_prevent_source_creation = false, $previous_error = false, $use_order_source = false ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis
 		do_action( 'fkwcs_before_process_payment', $order_id );
 
 		$force_save_source = false;
@@ -397,7 +396,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			wc_add_notice( $e->getMessage(), 'error' );
 
 			/* translators: error message */
-			$order->update_status( 'failed' );
+			$this->mark_order_failed( $order, $e->getMessage() );
 
 			return [
 				'result'   => 'fail',
@@ -473,7 +472,7 @@ class Sepa extends Abstract_Payment_Gateway {
 
 			// Load the right message and update the status.
 			$status_message = isset( $intent->last_payment_error ) /* translators: 1) The error message that was received from Stripe. */ ? sprintf( __( 'Stripe SCA authentication failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->last_payment_error->message ) : __( 'Stripe SCA authentication failed.', 'funnelkit-stripe-woo-payment-gateway' );
-			$order->update_status( 'failed', $status_message );
+			$this->mark_order_failed( $order, $status_message );
 
 		}
 
@@ -491,7 +490,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			/** translators: transaction id, other info */
 			$order->update_status( 'on-hold', sprintf( __( 'Stripe charge awaiting payment: %1$s. %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id, $others_info ) );
 
-			do_action( 'fkwcs_sepa_before_redirect', $order_id );
+			do_action( 'fkwcs_'.$this->id.'_before_redirect', $order_id );
 
 			$redirect_to = $this->get_return_url( $order );
 			Helper::log( "Redirecting to :" . $redirect_to );
@@ -535,7 +534,7 @@ class Sepa extends Abstract_Payment_Gateway {
 		if ( ! is_null( WC()->cart ) ) {
 			WC()->cart->empty_cart();
 		}
-		do_action( 'fkwcs_sepa_before_redirect', $order_id );
+		do_action( 'fkwcs_'.$this->id.'_before_redirect', $order_id );
 		$return_url = $this->get_return_url( $order );
 		Helper::log( "Return URL3: $return_url" );
 
@@ -664,7 +663,33 @@ class Sepa extends Abstract_Payment_Gateway {
 			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
 		];
 	}
+	/**
+	 * After verify intent got called its time to save payment method to the order
+	 *
+	 * @param $order
+	 * @param $intent
+	 *
+	 * @return void
+	 */
+	public function save_payment_method( $order, $intent ) {
 
+
+		$payment_method = $intent->payment_method;
+		$response       = $this->get_client()->payment_methods( 'retrieve', [ $payment_method ] );
+		$payment_method = $response['success'] ? $response['data'] : false;
+
+		$token = null;
+		$user  = $order->get_id() ? $order->get_user() : wp_get_current_user();
+		if ( $user instanceof \WP_User ) {
+			$user_id = $user->ID;
+			$token   = $this->create_payment_token_for_user( $user_id, $payment_method, $this->id, $intent->livemode );
+
+			Helper::log( sprintf( 'Payment method tokenized for Order id - %1$1s with token id - %2$2s', $order->get_id(), $token->get_id() ) );
+		}
+
+		$prepared_payment_method = Helper::prepare_payment_method( $payment_method, $token );
+		$this->save_payment_method_to_order( $order, $prepared_payment_method );
+	}
 	/**
 	 * Tokenize card payment
 	 *
@@ -675,6 +700,17 @@ class Sepa extends Abstract_Payment_Gateway {
 	 *
 	 */
 	public function create_payment_token_for_user( $user_id, $payment_method, $is_live ) {
+		global $wpdb;
+		$token_exists = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_payment_tokens where token =%s", $payment_method->id ), ARRAY_A );
+		if ( ! empty( $token_exists ) ) {
+
+			$token_obj = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
+			$token_obj->set_gateway_id($this->id );
+			$token_obj->save();
+			if ( ! is_null( $token_obj ) ) {
+				return $token_obj;
+			}
+		}
 		$token = new Token();
 		$token->set_last4( $payment_method->sepa_debit->last4 );
 		$token->set_gateway_id( $this->id );
@@ -697,14 +733,11 @@ class Sepa extends Abstract_Payment_Gateway {
 	}
 
 	public function get_tokens() {
-		$gateways = WC()->payment_gateways()->payment_gateways();
-		remove_action( 'woocommerce_get_customer_payment_tokens', array( $gateways['fkwcs_stripe'], 'filter_saved_tokens' ) );
 		$tokens = [];
 
 		if ( is_user_logged_in() && $this->supports( 'tokenization' ) ) {
 			$tokens = WC_Payment_Tokens::get_customer_tokens( get_current_user_id(), $this->id );
 		}
-		add_action( 'woocommerce_get_customer_payment_tokens', array( $gateways['fkwcs_stripe'], 'filter_saved_tokens' ), 10, 2 );
 
 		return $tokens;
 	}

@@ -246,7 +246,6 @@ class SmartButtons extends CreditCard {
 		$options = $this->local_settings;
 
 		$separator_below     = true;
-		$position_class      = 'above';
 		$alignment_class     = '';
 		$button_width        = '';
 		$container_max_width = '';
@@ -288,10 +287,10 @@ class SmartButtons extends CreditCard {
 		$button_theme    = ! empty( $this->local_settings['express_checkout_button_theme'] ) ? wc_clean( $this->local_settings['express_checkout_button_theme'] ) : 'dark';
 		$button_theme    = "fkwcs_ec_payment_button-" . $button_theme;
 		$only_buttons    = apply_filters( 'fkwcs_express_buttons_is_only_buttons', false );
-		$container_class = '';
+
 		?>
         <div id="fkwcs_stripe_smart_button_wrapper" class="<?php echo esc_attr( implode( ' ', $sec_classes ) ); ?>">
-            <div id="fkwcs_stripe_smart_button" class="<?php echo esc_attr( $container_class . ' ' . $position_class ); ?>" style="<?php esc_attr_e( ! empty( $alignment_class ) ? "text-align:" . ( $alignment_class ) . ';' : '' ); ?><?php echo esc_attr( $container_max_width ); ?>">
+            <div id="fkwcs_stripe_smart_button" style="<?php esc_attr_e( ! empty( $alignment_class ) ? "text-align:" . ( $alignment_class ) . ';' : '' ); ?><?php echo esc_attr( $container_max_width ); ?>">
 				<?php
 				if ( ! $separator_below && false === $only_buttons ) {
 					$this->payment_request_button_separator();

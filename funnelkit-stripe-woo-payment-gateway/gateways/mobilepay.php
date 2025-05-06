@@ -2,33 +2,17 @@
 
 namespace FKWCS\Gateway\Stripe;
 #[\AllowDynamicProperties]
-class Affirm extends LocalGateway {
+class mobilepay extends LocalGateway {
+
 	/**
 	 * Gateway id
 	 *
 	 * @var string
 	 */
-	public $id = 'fkwcs_stripe_affirm';
-	public $payment_method_types = 'affirm';
+	public $id = 'fkwcs_stripe_mobilepay';
+	public $payment_method_types = 'mobilepay';
 	protected $payment_element = true;
-	protected $paylater_message_service = true;
-
-	protected $min_amount = 5000;
-	public $max_amount = 300000;
-	private static $instance = null;
-
-	/**
-	 * @return self;
-	 */
-	public static function get_instance() {
-
-		if ( is_null( self::$instance ) ) {
-			self::$instance = new self();
-		}
-
-		return self::$instance;
-
-	}
+	protected $shipping_address_required = true;
 
 	/**
 	 * Setup general properties and settings
@@ -36,32 +20,29 @@ class Affirm extends LocalGateway {
 	 * @return void
 	 */
 	protected function init() {
-		$this->method_title       = __( 'Affirm', 'funnelkit-stripe-woo-payment-gateway' );
-		$this->method_description = __( 'Accepts payments via Affirm. The gateway should be enabled in your Stripe Account. Log into your Stripe account to review the <a href="https://dashboard.stripe.com/account/payments/settings" target="_blank">available gateways</a> <br/>Supported Currency: <strong>USD,CAD</strong>', 'funnelkit-stripe-woo-payment-gateway' );
-		$this->subtitle           = __( 'affirm is an online banking payment method that enables your customers in e-commerce to make an online purchase', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->method_title       = __( 'MobilePay Gateway', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->method_description = __( 'Accepts payments via MobilePay. The gateway should be enabled in your Stripe Account. Log into your Stripe account to review the <a href="https://dashboard.stripe.com/account/payments/settings" target="_blank">available gateways</a> <br/>Supported Currency: <strong>DKK,NOK,SEK,EUR</strong>', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->subtitle           = __( 'MobilePay is an online banking payment method that enables your customers in e-commerce to make an online purchase', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->init_form_fields();
 		$this->init_settings();
 		$this->title       = $this->get_option( 'title' );
 		$this->description = $this->get_option( 'description' );
 		$this->enabled     = $this->get_option( 'enabled' );
 		$this->capture_method        = $this->get_option( 'charge_type' );
-
 	}
 
 	protected function override_defaults() {
-		$this->supported_currency          = [ 'USD', 'CAD' ];
-		$this->specific_country            = [ 'US', 'CA' ];
-		$this->country_type                = 'specific';
+		$this->supported_currency          = [ 'DKK', 'EUR', 'NOK', 'SEK' ];
+		$this->specific_country            = [ 'DK', 'FI' ];
 		$this->except_country              = [];
-		$this->setting_enable_label        = __( 'Enable Affirm Gateway', 'funnelkit-stripe-woo-payment-gateway' );
-		$this->setting_title_default       = __( 'Affirm - Pay Over Time', 'funnelkit-stripe-woo-payment-gateway' );
-		$this->setting_description_default = __( 'After clicking "Complete order", you will be redirected to Affirm <br> - Pay Over Time to complete your purchase securely', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->setting_enable_label        = __( 'Enable MobilePay Gateway', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->setting_title_default       = __( 'MobilePay - Pay Over Time', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->setting_description_default = __( 'After clicking "Complete order", you will be redirected to MobilePay to <br> complete your purchase securely', 'funnelkit-stripe-woo-payment-gateway' );
 	}
-
 
 	public function init_form_fields() {
 
-		$settings = [
+		$settings                = [
 			'enabled'          => [
 				'label'   => ' ',
 				'type'    => 'checkbox',
@@ -93,22 +74,7 @@ class Affirm extends LocalGateway {
 					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
 				],
 				'desc_tip'    => true,
-			],
-			'paylater_section' => [
-				'title'       => __( 'Affirm Message Location', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => [ 'cart' ],
-				'type'        => 'multiselect',
-				'class'       => 'wc-enhanced-select',
-				'css'         => 'min-width: 350px;',
-				'desc_tip'    => true,
-				/* translators: gateway title */
-				'description' => sprintf( __( 'This option lets you limit the %1$s to which countries you are willing to sell to.', 'funnelkit-stripe-woo-payment-gateway' ), $this->method_title ),
-				'options'     => array(
-					'product' => __( 'Product Page', 'funnelkit-stripe-woo-payment-gateway' ),
-					'cart'    => __( 'Cart Page', 'funnelkit-stripe-woo-payment-gateway' ),
-					'shop'    => __( 'Shop/Categories Page', 'funnelkit-stripe-woo-payment-gateway' ),
-				),
-			],
+			]
 		];
 		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', [] );
 
@@ -119,15 +85,15 @@ class Affirm extends LocalGateway {
 		} else {
 			$this->specific_country = [];
 		}
-
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
-		if (isset($countries_fields['allowed_countries']['options']['all'])) {
-			unset($countries_fields['allowed_countries']['options']['all']);
+		if ( isset( $countries_fields['allowed_countries']['options']['all'] ) ) {
+			unset( $countries_fields['allowed_countries']['options']['all'] );
 		}
 
-		if (isset($countries_fields['allowed_countries']['options']['all_except'])) {
-			unset($countries_fields['allowed_countries']['options']['all_except']);
+		if ( isset( $countries_fields['allowed_countries']['options']['all_except'] ) ) {
+			unset( $countries_fields['allowed_countries']['options']['all_except'] );
 		}
+
 		if ( isset( $countries_fields['except_countries'] ) ) {
 			unset( $countries_fields['except_countries'] );
 		}

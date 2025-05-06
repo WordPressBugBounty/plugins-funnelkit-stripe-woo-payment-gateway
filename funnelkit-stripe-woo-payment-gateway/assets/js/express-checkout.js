@@ -10,7 +10,6 @@
                 this.is_product_page = false;
                 this.style_value = fkwcs_data.style;
                 this.request_data = {};
-                this.product_request_data = {};
                 this.cart_request_data = {};
                 this.add_to_cart_end_point = 'fkwcs_add_to_cart';
                 this.is_google_ready_to_pay = false;//This variable is used to determine if native Google Pay integration is available.;
@@ -1397,7 +1396,10 @@
             }
 
             startExpressCartGpayPayment() {
-                this.update_transaction_data(fkwcs_data.gpay_cart_data);
+                const gpayData = fkwcs_data.gpay_cart_data || fkwcs_data.gpay_single_product;
+                if (gpayData) {
+                    this.update_transaction_data(gpayData);
+                }
                 this.startSingleProductGpayPayment();
             }
 
@@ -1471,7 +1473,6 @@
                 return new Promise((resolve) => {
                     let response = this.update_payment_data(data);
                     response.then((response) => {
-                        resolve(response.paymentRequestUpdate);
 
                         if (response.result === 'fail') {
                             // Reject with an error message to show in Google Pay popup
@@ -1667,7 +1668,9 @@
                             // Proceed only if valid JSON was parsed
                             if (response && response.result === 'success') {
 
-                                this.confirmPaymentIntent(result, response.redirect);
+                                if (false === this.confirmPaymentIntent(result, response.redirect)) {
+                                    window.location = response.redirect;
+                                }
                             } else {
                                 $('body').unblock();
                                 window.location.reload();

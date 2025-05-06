@@ -26,6 +26,11 @@ class Client {
 	private $stripe_last_error = [];
 
 	/**
+	 * @var \Stripe\ErrorObject
+	 */
+	public $request_log_url = '';
+
+	/**
 	 * Constructor
 	 *
 	 */
@@ -102,9 +107,16 @@ class Client {
 				'message' => '',
 			];
 		} else {
+
+
+
 			Helper::log( 'Error during API call. ' . $error_message );
 			$this->stripe_last_error = ( isset( $e ) && $e instanceof \Stripe\Exception\ApiErrorException ) ? $e->getError() : new \stdClass();
-
+			if ( isset( $this->stripe_last_error )  ) {
+				if ( isset( $this->stripe_last_error['request_log_url'] ) ) {
+					$this->request_log_url = $this->stripe_last_error['request_log_url'];
+				}
+			}
 			return [
 				'success' => false,
 				'message' => $error_message,

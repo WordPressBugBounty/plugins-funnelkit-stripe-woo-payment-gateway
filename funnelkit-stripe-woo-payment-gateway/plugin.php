@@ -104,6 +104,7 @@ class Stripe {
 		$methods['fkwcs_googlepay']  = 'FKWCS\Gateway\Stripe\GooglePay';
 		$methods['fkwcs_applepay']   = 'FKWCS\Gateway\Stripe\ApplePay';
 		$methods['fkwcs_alipay']     = 'FKWCS\Gateway\Stripe\Alipay';
+		$methods['fkwcs_mobilepay']  = 'FKWCS\Gateway\Stripe\Mobilepay';
 
 
 		return $methods;
@@ -145,6 +146,7 @@ class Stripe {
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/applepay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/alipay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/includes/paylater.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/mobilepay.php';
 
 		do_action( 'fkwcs_gateways_included' );
 
@@ -309,7 +311,7 @@ class Stripe {
 
 		add_filter( 'woocommerce_order_get_payment_method', array( $this, 'change_payment_method' ), 99, 2 );
 		add_filter( 'woocommerce_subscription_get_payment_method', array( $this, 'change_payment_method' ), 99, 2 );
-			
+
 		add_action( 'wp', function () {
 			global $wp;
 
@@ -422,7 +424,7 @@ class Stripe {
 
 
 		if ( current_action() === 'woocommerce_api_wc_stripe' ) {
-			if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || ( 'POST' !== $_SERVER['REQUEST_METHOD'] ) || ! isset( $_GET['wc-api'] ) || ( 'wc_stripe' !== $_GET['wc-api'] ) ) { //  phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || ( 'POST' !== $_SERVER['REQUEST_METHOD'] ) || ! isset( $_GET['wc-api'] ) || ( 'wc_stripe' !== $_GET['wc-api'] && 'wt_stripe' !== $_GET['wc-api'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				return;
 			}
 		}

@@ -30,6 +30,7 @@ class klarna extends LocalGateway {
 		$this->title       = $this->get_option( 'title' );
 		$this->description = $this->get_option( 'description' );
 		$this->enabled     = $this->get_option( 'enabled' );
+		$this->capture_method        = $this->get_option( 'charge_type' );
 		add_action( 'fkwcs_webhook_event_intent_succeeded', [ $this, 'handle_webhook_intent_succeeded' ], 10, 2 );
 
 
@@ -66,6 +67,17 @@ class klarna extends LocalGateway {
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_description_default,
+				'desc_tip'    => true,
+			],
+			'charge_type'           => [
+				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
+				'type'        => 'select',
+				'description' => __( 'Select how to charge Order', 'funnelkit-stripe-woo-payment-gateway' ),
+				'default'     => 'automatic',
+				'options'     => [
+					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
+					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
+				],
 				'desc_tip'    => true,
 			],
 			'paylater_section' => [

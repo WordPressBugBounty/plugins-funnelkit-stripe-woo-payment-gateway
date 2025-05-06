@@ -136,7 +136,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function register_stripe_js() {
 
-		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], false, true );
+		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], false, [ 'in_footer' => false ] );
 		wp_register_script( 'fkwcs-stripe-js', FKWCS_URL . 'assets/js/stripe-elements' . Helper::is_min_suffix() . '.js', [
 			'jquery',
 			'jquery-payment',
@@ -152,7 +152,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function is_page_supported() {
 
-		return is_checkout() || isset( $_GET['pay_for_order'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return is_checkout() || isset( $_GET['pay_for_order'] ) || is_account_page(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -244,6 +244,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return void
 	 */
 	public function enqueue_stripe_js() {
+
 		if ( ! $this->is_page_supported() || ( is_order_received_page() ) ) {
 			return;
 		}
@@ -264,6 +265,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			return;
 		}
 		$this->tokenization_script();
+		wp_enqueue_script( 'fkwcs-stripe-external' );
 		wp_enqueue_script( 'fkwcs-stripe-js' );
 		wp_localize_script( 'fkwcs-stripe-js', 'fkwcs_data', $this->localize_data() );
 		add_action( 'wp_head', [ $this, 'enqueue_cc_css' ] );
@@ -286,6 +288,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			'wc_endpoints'                   => self::get_public_endpoints(),
 			'current_user_billing'           => $this->get_current_user_billing_details(),
 			'current_user_billing_for_order' => $this->get_current_user_billing_details_for_order(),
+			'nonce'                          => wp_create_nonce( 'fkwcs_nonce' ),
+			'ajax_url'                       => admin_url( 'admin-ajax.php' )
 		] );
 
 
@@ -346,6 +350,9 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 		$order              = wc_get_order( $order_id );
 		$details            = [];
+		$details['name']    = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
+		$details['email']   = $order->get_billing_email();
+		$details['phone']   = $order->get_billing_phone();
 		$details['address'] = [
 			'country'     => ! empty( $order->get_billing_country() ) ? $order->get_billing_country() : null,
 			'city'        => ! empty( $order->get_billing_city() ) ? $order->get_billing_city() : null,
@@ -372,7 +379,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$statement_descriptor = wp_strip_all_tags( $statement_descriptor );
 
 		/** Strip any HTML entities */
-		// Props https://stackoverflow.com/questions/657643/how-to-remove-html-special-chars .
 		$statement_descriptor = preg_replace( '/&#?[a-z0-9]{2,8};/i', '', $statement_descriptor );
 
 		/** Next, remove any remaining disallowed characters */
@@ -550,7 +556,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @throws \Exception
 	 */
 	public function get_payment_intent( $order, $idempotency_key, $args ) {
-		$stripe_api    = $this->get_client();
+		$stripe_api    = $this->set_client_by_order_payment_mode( $order );
 		$intent_secret = Helper::get_meta( $order, '_fkwcs_intent_id' );
 		$retry_count   = Helper::get_meta( $order, '_fkwcs_retry_count' );
 		if ( ! empty( $intent_secret ) ) {
@@ -627,7 +633,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 
 		if ( empty( $absolute_customer_id ) ) {
-			$customer_id = get_user_option( '_fkwcs_customer_id', $user_id );
+			$customer_id = $this->filter_customer_id( get_user_option( '_fkwcs_customer_id', $user_id ) );
 			if ( $customer_id ) {
 				$absolute_customer_id = $customer_id;
 			}
@@ -638,7 +644,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		 * Try and get stripe customer ID from the WooCommerce stripe
 		 */
 		if ( empty( $absolute_customer_id ) ) {
-			$customer_id = get_user_option( '_stripe_customer_id', $user_id );
+			$customer_id = $this->filter_customer_id( get_user_option( '_stripe_customer_id', $user_id ) );
 			if ( $customer_id ) {
 				$absolute_customer_id = $customer_id;
 			}
@@ -780,7 +786,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return boolean
 	 */
 	public function should_save_card( $order ) {  //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
-		return $this->supports( 'tokenization' );
+		return apply_filters('fkwcs_should_save_card', $this->supports( 'tokenization' ),$order);
 	}
 
 
@@ -808,15 +814,21 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return mixed
 	 * @throws \Exception
 	 */
-	public function create_setup_intent( $source, $customer_id = '', $order = false, $type = 'card' ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+	public function create_setup_intent( $source, $customer_id = '', $order = false ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		$customer_id = ! empty( $customer_id ) ? $customer_id : $this->get_customer_id();
 		$client      = $this->get_client();
-		$response    = apply_filters( 'fkwcs_payment_intent_data', [
-			'payment_method_types' => $this->get_payment_method_types(),
-			'payment_method'       => $source,
-			'customer'             => $customer_id
-		], $order, true );
-
+		if ( ! empty( $source ) ) {
+			$response = apply_filters( 'fkwcs_payment_intent_data', [
+				'payment_method_types' => $this->get_payment_method_types(),
+				'payment_method'       => $source,
+				'customer'             => $customer_id
+			], $order, true );
+		} else {
+			$response = apply_filters( 'fkwcs_payment_intent_data', [
+				'payment_method_types' => $this->get_payment_method_types(),
+				'customer'             => $customer_id
+			], $order, true );
+		}
 		$response = $client->setup_intents( 'create', [ $response ] );
 		$obj      = $this->handle_client_response( $response );
 
@@ -1096,7 +1108,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function save_intent_to_order( $order, $intent ) {
 		if ( 'payment_intent' === $intent->object ) {
-			Helper::add_payment_intent_to_order( $intent, $order );
+			Helper::add_payment_intent_to_order( $intent, $order, $this->get_gateway_mode() );
 		} elseif ( 'setup_intent' === $intent->object ) {
 			$order->update_meta_data( '_fkwcs_setup_intent', $intent->id );
 		}
@@ -1191,7 +1203,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				if ( $response['success'] ) {
 					$source_object = $response['data'];
 				} else {
-					throw new \Exception( $response['message'] ); //phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped,WordPress.Security.EscapeOutput.OutputNotEscaped
+					$error_message = $response['message'];
+					throw new \Exception( $error_message ); //phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped,WordPress.Security.EscapeOutput.OutputNotEscaped
 				}
 			}
 		}
@@ -1226,7 +1239,10 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return array|\WP_Error
 	 */
 	public function create_refund_request( $order, $amount, $reason, $intent_or_charge ) {
-		$client_details = $this->get_client()->get_clients_details();
+		$get_client = $this->set_client_by_order_payment_mode( $order );
+
+
+		$client_details = $get_client->get_clients_details();
 		$refund_params  = [
 			'reason'   => 'requested_by_customer',
 			'metadata' => [
@@ -1240,14 +1256,14 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		if ( 0 === strpos( $intent_or_charge, 'pi_' ) ) {
 
 			$refund_params['payment_intent'] = $intent_or_charge;
-			$response                        = $this->get_client()->payment_intents( 'retrieve', [ $intent_or_charge ] );
+			$response                        = $get_client->payment_intents( 'retrieve', [ $intent_or_charge ] );
 
 			$intent_response = $response['data'];
 			$currency        = $intent_response->currency;
 		} else {
 
 			$refund_params['charge'] = $intent_or_charge;
-			$response                = $this->get_client()->charges( 'retrieve', [ $intent_or_charge ] );
+			$response                = $get_client->charges( 'retrieve', [ $intent_or_charge ] );
 
 			$intent_response = $response['data'];
 			$currency        = $intent_response->currency;
@@ -1255,7 +1271,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$refund_params['amount'] = Helper::get_stripe_amount( $amount, $currency );
 		$refund_params           = apply_filters( 'fkwcs_refund_request_args', $refund_params );
 
-		return $this->execute_refunds( $refund_params );
+		return $this->execute_refunds( $refund_params, $get_client );
 	}
 
 	/**
@@ -1266,8 +1282,10 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 *
 	 * @return array
 	 */
-	public function execute_refunds( $params ) {
-		return $this->get_client()->refunds( 'create', [ $params ] );
+	public function execute_refunds( $params, $get_client = '' ) {
+		$get_client = ! empty( $get_client ) ? $get_client : $this->get_client();
+
+		return $get_client->refunds( 'create', [ $params ] );
 	}
 
 	/**
@@ -1339,6 +1357,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			'affirm'            => '<img src="' . FKWCS_URL . 'assets/icons/affirm.svg" class="stripe-affirm-icon stripe-icon" alt="affirm"  />',
 			'klarna'            => '<img src="' . FKWCS_URL . 'assets/icons/klarna.svg" class="stripe-klarna-icon stripe-icon" alt="klarna" />',
 			'afterpay_clearpay' => '<img src="' . FKWCS_URL . 'assets/icons/afterpay.png" class="stripe-afterpay-icon stripe-icon" alt="afterpay" style="width:auto;height:24px" />',
+			'mobilepay'         => '<img src="' . FKWCS_URL . 'assets/icons/mobilepay.svg" class="stripe-afterpay-icon stripe-icon" alt="mobilepay" style="width:auto;height:24px" />',
 		] );
 	}
 
@@ -1820,7 +1839,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		if ( isset( $result['token'] ) ) {
 			unset( $output['save_card'] );
 		}
-		$is_token_used = isset( $result['token_used']  ) && $result['token_used'] === 'yes' ? 'yes' : 'no';
+		$is_token_used = isset( $result['token_used'] ) && $result['token_used'] === 'yes' ? 'yes' : 'no';
 
 
 		// Put the final thank you page redirect into the verification URL.
@@ -2010,7 +2029,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 				// Load the right message and update the status.
 				$status_message = isset( $intent->last_payment_error ) /* translators: 1) The error message that was received from Stripe. */ ? sprintf( __( 'Stripe SCA authentication failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->last_payment_error->message ) : __( 'Stripe SCA authentication failed.', 'funnelkit-stripe-woo-payment-gateway' );
-				$order->update_status( 'failed', $status_message );
+				$this->mark_order_failed( $order, $status_message );
 
 			}
 
@@ -2127,14 +2146,14 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 		asort( $countries );
 		?>
-        <tr valign="top">
-            <th scope="row" class="titledesc">
-                <label for="<?php echo esc_attr( $data['id'] ); ?>"><?php echo esc_html( $data['title'] ); ?><?php echo $this->get_tooltip_html( $data ); //phpcs:ignore ?></label>
-            </th>
-            <td class="forminp">
-                <select multiple="multiple" name="<?php echo esc_attr( $data['id'] ); ?>[]" style="width:350px"
-                        data-placeholder="<?php esc_attr_e( 'Choose countries / regions&hellip;', 'funnelkit-stripe-woo-payment-gateway' ); ?>"
-                        aria-label="<?php esc_attr_e( 'Country / Region', 'funnelkit-stripe-woo-payment-gateway' ); ?>" class="wc-enhanced-select <?php esc_attr_e( $data['class'] ) ?>">
+		<tr valign="top">
+			<th scope="row" class="titledesc">
+				<label for="<?php echo esc_attr( $data['id'] ); ?>"><?php echo esc_html( $data['title'] ); ?><?php echo $this->get_tooltip_html( $data ); //phpcs:ignore ?></label>
+			</th>
+			<td class="forminp">
+				<select multiple="multiple" name="<?php echo esc_attr( $data['id'] ); ?>[]" style="width:350px"
+				        data-placeholder="<?php esc_attr_e( 'Choose countries / regions&hellip;', 'funnelkit-stripe-woo-payment-gateway' ); ?>"
+				        aria-label="<?php esc_attr_e( 'Country / Region', 'funnelkit-stripe-woo-payment-gateway' ); ?>" class="wc-enhanced-select <?php esc_attr_e( $data['class'] ) ?>">
 					<?php
 					if ( ! empty( $countries ) ) {
 						foreach ( $countries as $key => $val ) {
@@ -2142,13 +2161,13 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 						}
 					}
 					?>
-                </select>
+				</select>
 				<?php echo $this->get_description_html( $data ); //phpcs:ignore ?>
-                <br/>
-                <a class="select_all button" href="#"><?php esc_html_e( 'Select all', 'funnelkit-stripe-woo-payment-gateway' ); ?></a>
-                <a class="select_none button" href="#"><?php esc_html_e( 'Select none', 'funnelkit-stripe-woo-payment-gateway' ); ?></a>
-            </td>
-        </tr>
+				<br/>
+				<a class="select_all button" href="#"><?php esc_html_e( 'Select all', 'funnelkit-stripe-woo-payment-gateway' ); ?></a>
+				<a class="select_none button" href="#"><?php esc_html_e( 'Select none', 'funnelkit-stripe-woo-payment-gateway' ); ?></a>
+			</td>
+		</tr>
 		<?php
 		return ob_get_clean();
 	}
@@ -2322,6 +2341,144 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		];
 
 		return $request;
+	}
+
+	/**
+	 * Set client environment based on order payment mode
+	 * and run a refund process for same environment
+	 *
+	 * @param $order
+	 *
+	 * @return Client|null
+	 */
+	public function set_client_by_order_payment_mode( $order ) {
+		$client           = $this->get_client();
+		$get_payment_mode = Helper::get_meta( $order, '_fkwcs_payment_mode' );
+		if ( ! empty( $get_payment_mode ) && $this->test_mode !== $get_payment_mode ) {
+			$this->test_mode = $get_payment_mode;
+			if ( 'test' === $get_payment_mode ) {
+				$client = Helper::get_new_client( $this->test_secret_key, true );
+			} elseif ( 'live' === $get_payment_mode ) {
+				$client = Helper::get_new_client( $this->live_secret_key, true );
+			}
+		}
+
+		return $client;
+	}
+
+
+	/**
+	 * @param string|array $customer_id
+	 *
+	 * @return mixed
+	 */
+	public function filter_customer_id( $customer_id ) {
+		if ( is_array( $customer_id ) && isset( $customer_id['customer_id'] ) ) {
+			return $customer_id['customer_id'];
+		}
+
+		return $customer_id;
+	}
+
+	public function get_payment_element_options() {
+
+		$element_options = $this->get_element_options();
+		if ( $this->if_amount_required() ) {
+			unset( $element_options['amount'] );
+			$element_options['mode'] = 'setup';
+		}
+
+		return $element_options;
+	}
+
+	public function if_amount_required() {
+		if ( is_add_payment_method_page() ) {
+			return true;
+		}
+
+		if ( class_exists( '\WC_Subscriptions_Change_Payment_Gateway' ) && \WC_Subscriptions_Change_Payment_Gateway::$is_request_to_change_payment ) {
+			return true;
+		}
+		if ( WC()->cart ) {
+			return is_checkout() && ! is_checkout_pay_page() && class_exists( 'WC_Subscriptions_Cart' ) && method_exists( 'WC_Subscriptions_Cart', 'cart_contains_free_trial' ) && \WC_Subscriptions_Cart::cart_contains_free_trial() && WC()->cart->total == 0; //phpcs:ignore WordPress.PHP.StrictComparisons.LooseComparison,Universal.Operators.StrictComparisons.LooseEqual
+		}
+
+		if ( is_checkout_pay_page() ) {
+			global $wp;
+			$order = wc_get_order( absint( $wp->query_vars['order-pay'] ) );
+
+			return $order && wcs_order_contains_subscription( $order ) && $order->get_total() == 0; //phpcs:ignore WordPress.PHP.StrictComparisons.LooseComparison,Universal.Operators.StrictComparisons.LooseEqual
+		}
+
+		return false;
+	}
+
+	/**
+	 * Marks the order as failed and adds a note with the reason.
+	 *
+	 * @param \WC_Order $order The WooCommerce order object.
+	 * @param string $message The failure reason message.
+	 *
+	 * @return void
+	 */
+	public function mark_order_failed( $order, $message ) {
+
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		try {
+
+			if ( $order->has_status( 'failed' ) ) {
+
+				if ( empty( $this->get_client()->request_log_url ) ) {
+					$order->add_order_note( 'Reason: ' . $message );
+				} else {
+					$error_message = sprintf( '%s <br/><a href="%s" target="_blank">%s</a>', $message, $this->get_client()->request_log_url, __( 'View this in Stripe dashboard', 'funnelkit-stripe-woo-payment-gateway' ) );
+					$order->add_order_note( 'Reason: ' . $error_message );
+
+				}
+
+			} else {
+				add_filter( 'woocommerce_new_order_note_data', array( $this, 'add_transition_suffix_in_note' ), 9999 );
+				$order->update_status( 'failed', 'Reason: ' . $message );
+				remove_filter( 'woocommerce_new_order_note_data', array( $this, 'add_transition_suffix_in_note' ), 9999 );
+
+			}
+			do_action( 'fkwcs_order_failed', $order->get_id(), $message );
+		} catch ( \Exception $e ) {
+			/* translators: error message */
+			Helper::log( 'Error in mark_order_failed: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Adds a Stripe dashboard link to the order note content.
+	 *
+	 * Appends a link to view the transaction in Stripe dashboard to the order note content.
+	 * The link is only added if a request log URL is available.
+	 * Removes itself from the filter after processing to prevent duplicate links.
+	 *
+	 * @param array $note The order note data containing comment content
+	 *
+	 * @return array Modified note data with dashboard link appended to comment_content
+	 * @since 1.0.0
+	 */
+	public function add_transition_suffix_in_note( $note ) {
+		try {
+			if ( empty( $this->get_client()->request_log_url ) ) {
+				return $note;
+			}
+
+			$html            = '<br/><a href="%s" target="_blank">%s</a>';
+			$transition_note = sprintf( $html, $this->get_client()->request_log_url, __( 'View this in Stripe dashboard', 'funnelkit-stripe-woo-payment-gateway' ) );
+
+			$note['comment_content'] = $note['comment_content'] . $transition_note;
+			remove_filter( 'woocommerce_new_order_note_data', array( $this, 'add_transition_suffix_in_note' ), 9999 );
+		} catch ( \Exception|\Error $e ) {
+
+		}
+
+		return $note;
 	}
 }
 

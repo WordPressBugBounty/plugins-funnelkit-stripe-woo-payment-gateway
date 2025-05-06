@@ -472,7 +472,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		}
 		foreach ( $packages as $i => $package ) {
 			foreach ( $package['rates'] as $rate ) {
-				$price     = $incl_tax ? $rate->cost + $rate->get_shipping_tax() : $rate->cost;
+				$price     = $incl_tax ? (float) $rate->cost + (float) $rate->get_shipping_tax() : (float) $rate->cost;
 				$methods[] = $this->get_formatted_shipping_method( $price, $rate, $i, $package, $incl_tax );
 			}
 		}

@@ -18,12 +18,11 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 
 		public function __construct() {
 			parent::__construct();
-			add_action( 'fkwcs_sepa_before_redirect', array( $this, 'maybe_setup_upsell_on_sepa' ), 99, 1 );
+			add_action( 'fkwcs_'.$this->key.'_before_redirect', array( $this, 'maybe_setup_upsell_on_sepa' ), 99, 1 );
 
 			add_filter( 'wc_stripe_sepa_display_save_payment_method_checkbox', array( $this, 'maybe_hide_save_payment' ), 999 );
 
 			add_filter( 'wc_stripe_3ds_source', array( $this, 'maybe_modify_3ds_prams' ), 10, 2 );
-			add_action( 'wc_gateway_stripe_process_response', array( $this, 'maybe_handle_redirection_fkwcs_stripe' ), 10, 2 );
 			add_action( 'wfocu_offer_new_order_created_stripe', array( $this, 'add_stripe_payouts_to_new_order' ), 10, 2 );
 			add_filter( 'woocommerce_payment_successful_result', array( $this, 'maybe_flag_has_intent_secret' ), 9999, 2 );
 			add_filter( 'woocommerce_payment_successful_result', array( $this, 'modify_successful_payment_result_for_upstroke' ), 999910, 2 );
@@ -184,7 +183,6 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 		protected function generate_payment_request( $order, $source ) {
 			$get_package = WFOCU_Core()->data->get( '_upsell_package' );
 
-			$gateway               = new Sepa();
 			$post_data             = array();
 			$post_data['currency'] = strtolower( $order->get_currency() );
 			$total                 = Helper::get_stripe_amount( $get_package['total'], $post_data['currency'] );
@@ -195,7 +193,6 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			}
 			$post_data['amount']      = $total;
 			$post_data['description'] = sprintf( __( '%1$s - Order %2$s - 1 click upsell: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), $order->get_order_number(), WFOCU_Core()->data->get( 'current_offer' ) );
-			$post_data['capture']     = $gateway->capture_method ? 'true' : 'false';
 			$billing_first_name       = $order->get_billing_first_name();
 			$billing_last_name        = $order->get_billing_last_name();
 			$billing_email            = $order->get_billing_email();
@@ -729,31 +726,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			return $threads_data;
 		}
 
-		/**
-		 * Maybe Handle PayPal Redirection for 3DS Checkout
-		 * Let our hooks modify the order received url and redirect user to offer page.
-		 *
-		 * @param $response
-		 * @param WC_Order $order
-		 */
-		public function maybe_handle_redirection_fkwcs_stripe( $response, $order ) {
-			WFOCU_Core()->log->log( 'maybe_handle_redirection_fkwcs_stripe' );
-			if ( false === $this->is_enabled() ) {
-				WFOCU_Core()->log->log( 'Do not initiate redirection for stripe: Stripe is disabled' );
 
-			}
-
-			/**
-			 * Validate if its a redirect checkout call for the stripe
-			 * Validate if funnel initiation happened.
-			 */
-			if ( 1 === did_action( 'wfocu_front_init_funnel_hooks' ) && 1 === did_action( 'wc_gateway_fkwcs_stripe_process_redirect_payment' ) ) {
-				$get_url = $order->get_checkout_order_received_url();
-				wp_redirect( $get_url );
-				exit();
-			}
-
-		}
 
 		/**
 		 * @param WC_Order $order

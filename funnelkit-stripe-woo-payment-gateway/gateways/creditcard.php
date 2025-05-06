@@ -24,6 +24,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 	protected $payment_element = true;
 	private static $instance = null;
 	public $supports_success_webhook = true;
+	public $is_recursion = false;
 
 	public function __construct() {
 		parent::__construct();
@@ -68,20 +69,22 @@ class CreditCard extends Abstract_Payment_Gateway {
 		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
 
 
-		add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_set_tokens_stripe' ], 8, 3 );
-		add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10, 3 );
+		add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_sync_gateway_tokens' ], 8, 3 );
 		add_action( 'fkwcs_webhook_event_intent_succeeded', [ $this, 'handle_webhook_intent_succeeded' ], 10, 2 );
 
 		add_action( 'woocommerce_payment_token_deleted', [ $this, 'detach_customer_token' ], 10, 2 );
 		add_filter( 'woocommerce_gateway_title', function ( $title ) {
 			global $theorder;
 
-			if ( $theorder instanceof \WC_Order && $theorder->get_payment_method() === 'fkwcs_stripe' && ! empty( $theorder->get_payment_method_title() ) ) {
+			if ( $theorder instanceof \WC_Order && $theorder->get_payment_method() === 'fkwcs_stripe' && ! empty( $theorder->get_payment_method_title() ) && !did_action('woocommerce_admin_order_data_after_payment_info') ) {
 				$title = $theorder->get_payment_method_title();
 			}
 
 			return $title;
 		} );
+		add_action( 'woocommerce_payment_token_set_default', [ $this, 'woocommerce_payment_token_set_default' ] );
+
+
 	}
 
 	/**
@@ -115,7 +118,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 * @return boolean
 	 */
 	public function is_page_supported() {
-		return is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page() || is_account_page(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -265,14 +268,14 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 *
 	 * @param $order_id Int Order ID
 	 * @param $retry  Boolean
-	 * @param $force_save_source  Boolean
+	 * @param $force_prevent_source_creation  Boolean
 	 * @param $previous_error
 	 * @param $use_order_source
 	 *
 	 * @return array|mixed|string[]|\WP_Error|null
 	 * @throws \Exception
 	 */
-	public function process_payment( $order_id, $retry = true, $force_save_source = false, $previous_error = false, $use_order_source = false ) {
+	public function process_payment( $order_id, $retry = true, $force_prevent_source_creation = false, $previous_error = false, $use_order_source = false ) {
 		do_action( 'fkwcs_before_process_payment', $order_id );
 		Helper::log( 'Entering::' . __FUNCTION__ );
 
@@ -280,9 +283,15 @@ class CreditCard extends Abstract_Payment_Gateway {
 			return $this->process_change_subscription_payment_method( $order_id, true );
 		}
 		$order = wc_get_order( $order_id );
-		if ( $this->should_save_card( $order ) && $this->validate_country_for_save_card() ) {
-			$force_save_source = true;
+		/**
+		 * If save a source and not a valid country found make it false
+		 */
+		if ( false === $force_prevent_source_creation && true === $this->should_save_card( $order ) && $this->validate_country_for_save_card() ) {
+			$save_source = true;
+		} else {
+			$save_source = false;
 		}
+
 
 		if ( 0 >= $order->get_total() ) {
 			return $this->process_change_subscription_payment_method( $order_id );
@@ -300,16 +309,15 @@ class CreditCard extends Abstract_Payment_Gateway {
 				 */
 				$prepared_source = $this->prepare_order_source( $order );
 			} else {
-				$prepared_source = $this->prepare_source( $order, $force_save_source );
+				$prepared_source = $this->prepare_source( $order, $save_source );
 			}
 
 			if ( is_object( $prepared_source ) && empty( $prepared_source->source ) ) {
 				if ( ! empty( $order ) ) {
 					/* translators: error message */
-					$order->update_status( 'failed', 'Reason: ' . __( 'Error: Unable to get payment method from the browser, please check for browser console error. ', 'funnelkit-stripe-woo-payment-gateway' ) );
+					$this->mark_order_failed( $order, __( 'Error: Unable to get payment method from the browser, please check for browser console error. ', 'funnelkit-stripe-woo-payment-gateway' ) );
 					throw new \Exception( __( 'Payment processing failed. Please retry.' ), 200 );
 				}
-
 
 			}
 			$this->save_payment_method_to_order( $order, $prepared_source );
@@ -333,7 +341,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 			if ( Helper::should_customize_statement_descriptor() ) {
 				$data['statement_descriptor_suffix'] = $this->clean_statement_descriptor( Helper::get_gateway_descriptor_suffix( $order ) );
 			}
-			if ( $this->should_save_card( $order ) ) {
+			if ( $save_source ) {
 				$data['setup_future_usage'] = 'off_session';
 			}
 
@@ -376,7 +384,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 				if ( 'succeeded' === $intent_data->status || 'requires_capture' === $intent_data->status ) {
 
-					if ( $this->should_save_card( $order ) || 'off_session' === $intent_data->setup_future_usage ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					if ( $save_source || 'off_session' === $intent_data->setup_future_usage ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 						$this->save_payment_method( $order, $intent_data );
 
 
@@ -425,7 +433,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 					'fkwcs_redirect'      => $return_url,
 					'payment_method'      => $prepared_source->source,
 					'fkwcs_intent_secret' => $intent_data->client_secret,
-					'save_card'           => $this->should_save_card( $order ),
+					'save_card'           => $save_source,
 				] );
 			} else {
 				return [
@@ -434,19 +442,46 @@ class CreditCard extends Abstract_Payment_Gateway {
 				];
 			}
 		} catch ( \Exception $e ) {
+				//Check if there could be a retry without tokenization
+				if ( $this->should_retry_without_tokenization( $e, $order ) ) {
+
+				$this->is_recursion = true;
+
+				Helper::log( 'Card does not support this type of purchase. Retrying payment without saving source.' );
+				$this->process_payment( $order_id, $retry, true, $e->getMessage(), $use_order_source );
+			}
+
 			if ( ! empty( $order ) ) {
-				/* translators: error message */
-				$order->update_status( 'failed', 'Reason: ' . $e->getMessage() );
+				$this->mark_order_failed( $order, $e->getMessage() );
+
 				if ( ! empty( $intent_data ) ) {
 					$charge = $this->get_latest_charge_from_intent( $intent_data );
 					do_action( 'fkwcs_process_response', $charge, $order );
-
 				}
 			}
+
 			Helper::log( $e->getMessage() );
 
 			throw new \Exception( $e->getMessage(), 200 ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
+
+
+	}
+
+	/**
+	 * Determines if a retry without tokenization should be attempted.
+	 *
+	 * This method checks if the current payment attempt is not recursive,
+	 * the order does not have a subscription, and the exception message
+	 * indicates that the card does not support the type of purchase.
+	 *
+	 * @param \Exception $e The exception thrown during the payment process.
+	 * @param \WC_Order $order The WooCommerce order object.
+	 *
+	 * @return bool True if a retry without tokenization should be attempted, false otherwise.
+	 */
+	public function should_retry_without_tokenization( $e, $order ) {
+		return apply_filters( 'fkwcs_should_retry_without_tokenization', ( $this->is_recursion === false && ! $this->has_subscription( $order->get_id() ) && strpos( $e->getMessage(), 'Your card does not support this type of purchase.' ) !== false ) );
 	}
 
 	/**
@@ -532,7 +567,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 			wc_add_notice( $e->getMessage(), 'error' );
 
 			/* translators: error message */
-			$order->update_status( 'failed', 'Reason: ' . $e->getMessage() );
+			$this->mark_order_failed( $order, $e->getMessage() );
 			if ( ! empty( $intent ) ) {
 				$charge = $this->get_latest_charge_from_intent( $intent );
 				do_action( 'fkwcs_process_response', $charge, $order );
@@ -568,6 +603,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 				$user_id = $user->ID;
 				$token   = Helper::create_payment_token_for_user( $user_id, $payment_method, $this->id, $intent->livemode );
 				Helper::log( sprintf( 'Payment method tokenized for Order id - %1$1s with token id - %2$2s', $order->get_id(), $token->get_id() ) );
+				delete_transient( 'fkwcs_user_tokens_' . $user_id );
 			}
 		}
 
@@ -757,6 +793,8 @@ class CreditCard extends Abstract_Payment_Gateway {
 		if ( 'link' !== $source_object->type ) {
 			Helper::create_payment_token_for_user( $user_id, $source_object, $this->id, $is_live );
 		}
+		delete_transient( 'fkwcs_user_tokens_' . $user_id );
+
 		do_action( 'fkwcs_add_payment_method_' . ( isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : '' ) . '_success', $source_id, $source_object ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
 
 		Helper::log( 'New payment method added successfully' );
@@ -804,54 +842,6 @@ class CreditCard extends Abstract_Payment_Gateway {
 		$icons .= '</span>';
 
 		return apply_filters( 'woocommerce_gateway_icon', $icons, $this->id );
-	}
-
-
-	/**
-	 * Filter saved card to show saved card saved from other gateways too
-	 * we are handling only checkout case here as payment method page works by default in woocommerce
-	 *
-	 * @param WC_Payment_Tokens[] $tokens
-	 * @param string $customer_id
-	 *
-	 * @return array|\WC_Payment_Token[]
-	 */
-	public function filter_saved_tokens( $tokens, $customer_id, $gateway_id = null ) {
-		if ( ! $this->is_available() ) {
-			return $tokens;
-		}
-
-
-		/**
-		 * in any case we are getting specific gateway ID, and it's not the gateway we could support then we must return tokens as it is.
-		 */
-		if ( ! empty( $gateway_id ) && ! in_array( $gateway_id, [ 'stripe', 'fkwcs_stripe' ], true ) ) {
-			return $tokens;
-		}
-
-		if ( is_user_logged_in() && $this->supports( 'tokenization' ) ) {
-			/*
-			 * removing this filter will make sure this would not result in infinite loop
-			 */
-			remove_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ] );
-			$tokens_stripe = WC_Payment_Tokens::get_customer_tokens( $customer_id, 'stripe' );
-			add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10, 3 );
-
-			$tokens = array_replace( $tokens_stripe, $tokens );
-			if ( count( $tokens ) > 0 ) {
-				foreach ( $tokens as $key => $token ) {
-					$mode = $token->get_meta( 'mode' );
-					if ( ! empty( $mode ) && $this->test_mode !== $mode ) {
-						unset( $tokens[ $key ] );
-					}
-
-				}
-			}
-
-		}
-
-		return $tokens;
-
 	}
 
 
@@ -911,16 +901,6 @@ class CreditCard extends Abstract_Payment_Gateway {
 		);
 	}
 
-	public function get_payment_element_options() {
-
-		$element_options = $this->get_element_options();
-		if ( $this->if_amount_required() ) {
-			unset( $element_options['amount'] );
-			$element_options['mode'] = 'setup';
-		}
-
-		return $element_options;
-	}
 
 	public function payment_element_data() {
 
@@ -943,28 +923,6 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		return apply_filters( 'fkwcs_stripe_payment_element_data', [ 'element_data' => $data, 'element_options' => $options ], $this );
 
-	}
-
-	public function if_amount_required() {
-		if ( is_add_payment_method_page() ) {
-			return true;
-		}
-
-		if ( class_exists( '\WC_Subscriptions_Change_Payment_Gateway' ) && \WC_Subscriptions_Change_Payment_Gateway::$is_request_to_change_payment ) {
-			return true;
-		}
-		if ( WC()->cart ) {
-			return is_checkout() && ! is_checkout_pay_page() && class_exists( 'WC_Subscriptions_Cart' ) && method_exists( 'WC_Subscriptions_Cart', 'cart_contains_free_trial' ) && \WC_Subscriptions_Cart::cart_contains_free_trial() && WC()->cart->total == 0; //phpcs:ignore WordPress.PHP.StrictComparisons.LooseComparison,Universal.Operators.StrictComparisons.LooseEqual
-		}
-
-		if ( is_checkout_pay_page() ) {
-			global $wp;
-			$order = wc_get_order( absint( $wp->query_vars['order-pay'] ) );
-
-			return $order && wcs_order_contains_subscription( $order ) && $order->get_total() == 0; //phpcs:ignore WordPress.PHP.StrictComparisons.LooseComparison,Universal.Operators.StrictComparisons.LooseEqual
-		}
-
-		return false;
 	}
 
 
@@ -1087,50 +1045,91 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 *
 	 * @return array The updated payment tokens.
 	 */
-	public function maybe_set_tokens_stripe( $tokens, $user_id, $gateway_id ) {
+	public function maybe_sync_gateway_tokens( $tokens, $user_id, $gateway_id ) {
+		return $this->sync_gateway_tokens( $tokens, $user_id, $gateway_id );
+	}
+
+
+	/**
+	 * Sync gateway tokens from the API, generic method that handled cache detection too
+	 * This method will check for existing tokens and then will sync them with the stripe API
+	 * Any methods which are not found in the stripe API will be removed from the tokens
+	 *
+	 * @param $tokens
+	 * @param $user_id
+	 * @param $gateway_id
+	 * @param $skip_cache
+	 *
+	 * @return mixed
+	 */
+	public function sync_gateway_tokens( $tokens, $user_id, $gateway_id, $skip_cache = false ) {
 		if ( ! $this->is_available() ) {
+			Helper::log( 'Gateway is not available.' );
+
 			return $tokens;
 		}
 
-
-		/**
-		 * in any case we are getting specific gateway ID, and it's not the gateway we could support then we must return tokens as it is.
-		 */
 		if ( ! empty( $gateway_id ) && ! in_array( $gateway_id, [ 'fkwcs_stripe' ], true ) ) {
+			Helper::log( 'Gateway ID not supported: ' . $gateway_id );
+
 			return $tokens;
 		}
 
+		$stored_tokens = [];
+		if ( ! empty( $tokens ) ) {
+			foreach ( $tokens as $token ) {
+				if ( method_exists( $token, 'get_token' ) && ! empty( $token->get_token() ) ) {
+					$stored_tokens[ $token->get_token() ] = $token;
+				}
+			}
+		}
 
 		try {
+			$payment_methods = $this->get_payment_methods_customer( $user_id, $skip_cache );
 
-
-			$payment_methods = $this->get_payment_methods_customer( $user_id );
-
-
-			remove_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_set_tokens_stripe' ], 8 );
-			remove_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10 );
+			remove_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_sync_gateway_tokens' ], 8 );
 
 			foreach ( $payment_methods as $payment_method ) {
 				if ( ! isset( $payment_method->type ) ) {
 					continue;
 				}
 
-
 				$token                      = Helper::create_payment_token_for_user( $user_id, $payment_method, $this->id, $payment_method->livemode );
 				$tokens[ $token->get_id() ] = $token;
 
+				if ( isset( $stored_tokens[ $token->get_token() ] ) ) {
+					unset( $stored_tokens[ $token->get_token() ] );
+				}
 			}
-			add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_set_tokens_stripe' ], 8, 3 );
-			add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'filter_saved_tokens' ], 10, 3 );
 
+			if ( ! empty( $tokens ) && ! empty( $gateway_id ) ) {
+				foreach ( $tokens as $key => $token ) {
+					if ( $this->id !== $token->get_gateway_id() || $this->test_mode !== $token->get_meta( 'mode' ) ) {
+						unset( $tokens[ $key ] );
+					}
+				}
+
+				remove_action( 'woocommerce_payment_token_deleted', [ $this, 'detach_customer_token' ], 10, 2 );
+
+				foreach ( $stored_tokens as $token ) {
+					unset( $tokens[ $token->get_id() ] );
+					$token->delete();
+					Helper::log( 'Deleted stored token ID: ' . $token->get_id() );
+				}
+				add_action( 'woocommerce_payment_token_deleted', [ $this, 'detach_customer_token' ], 10, 2 );
+			}
+			add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_sync_gateway_tokens' ], 8, 3 );
 
 		} catch ( \Exception|\Error $e ) {
-			wc_add_notice( $e->getMessage(), 'error' );
 			Helper::log( 'Error: ' . $e->getMessage() );
+		} finally {
+			add_action( 'woocommerce_payment_token_deleted', [ $this, 'detach_customer_token' ], 10, 2 );
+			add_action( 'woocommerce_get_customer_payment_tokens', [ $this, 'maybe_sync_gateway_tokens' ], 8, 3 );
 		}
 
 		return $tokens;
 	}
+
 
 	/**
 	 * Fetch all user tokens from users account directly from stripe
@@ -1139,26 +1138,43 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 *
 	 * @return array|mixed
 	 */
-	public function get_payment_methods_customer( $user_id ) {
+	public function get_payment_methods_customer( $user_id, $skip_cache = false ) {
 		if ( ! $user_id ) {
 			return [];
 		}
-		$payment_methods = get_transient( 'fkwcs_user_tokens_' . $user_id );
 
+		if ( $skip_cache ) {
+			$payment_methods = false;
+		} else {
+			$payment_methods = get_transient( 'fkwcs_user_tokens_' . $user_id );
+
+		}
 		if ( false === $payment_methods ) {
 
 
 			$client = $this->get_client();
 
-			$customer = get_user_option( '_stripe_customer_id', $user_id );
+			$customer = $this->filter_customer_id( get_user_option( '_fkwcs_customer_id', $user_id ) );
 			if ( empty( $customer ) ) {
-				return [];
+				$compatibility_keys = Helper::get_compatibility_keys( '_fkwcs_customer_id' );
+				if ( ! empty( $compatibility_keys ) ) {
+					foreach ( $compatibility_keys as $key ) {
+						$customer = $this->filter_customer_id( get_user_option( $key, $user_id ) );
+						if ( ! empty( $customer ) ) {
+							break;
+						}
+					}
+				}
+
+				if ( empty( $customer ) ) {
+					return [];
+				}
+
 			}
 			$response = $client->customers( 'allPaymentMethods', [ $customer, [ 'limit' => 100, 'type' => 'card' ] ] );
 			if ( ! empty( $response['error'] ) ) {
 				return [];
 			}
-
 			if ( ! empty( $response['data'] ) ) {
 				$payment_methods = $response['data'];
 			}
@@ -1184,16 +1200,57 @@ class CreditCard extends Abstract_Payment_Gateway {
 				return $token_id;
 			}
 			$client = $this->get_client();
-			$customer = get_user_option( '_stripe_customer_id', $token->get_user_id() );
+
+			$customer = $this->filter_customer_id( get_user_option( '_fkwcs_customer_id', $token->get_user_id() ) );
+			if ( empty( $customer ) ) {
+				$compatibility_keys = Helper::get_compatibility_keys( '_fkwcs_customer_id' );
+				if ( ! empty( $compatibility_keys ) ) {
+					foreach ( $compatibility_keys as $key ) {
+						$customer = $this->filter_customer_id( get_user_option( $key, $token->get_user_id() ) );
+						if ( ! empty( $customer ) ) {
+							break;
+						}
+					}
+				}
+
+				if ( empty( $customer ) ) {
+					return [];
+				}
+
+			}
+
 			if ( empty( $customer ) ) {
 				return [];
 			}
 			$client->payment_methods( 'detach', [ $token->get_token() ] );
 			delete_transient( 'fkwcs_user_tokens_' . $token->get_user_id() );
 		} catch ( \Exception|\Error $e ) {
-			wc_add_notice( $e->getMessage(), 'error' );
 			Helper::log( 'Error: ' . $e->getMessage() );
 		}
+	}
+
+	/**
+	 * Set as default in Stripe.
+	 *
+	 * @since 3.1.0
+	 * @version 4.0.0
+	 */
+	public function woocommerce_payment_token_set_default( $token_id ) {
+
+
+		try {
+			$token    = WC_Payment_Tokens::get( $token_id );
+			$client   = $this->get_client();
+			$customer = $this->filter_customer_id( get_user_option( '_fkwcs_customer_id', get_current_user_id() ) );
+			if ( empty( $customer ) ) {
+				return [];
+			}
+			$client->customers( 'update', [ $customer, [ 'invoice_settings' => [ 'default_payment_method' => sanitize_text_field( $token->get_token() ) ] ] ] );
+		} catch ( \Exception|\Error $e ) {
+			Helper::log( 'Error: ' . $e->getMessage() );
+		}
+
+
 	}
 
 

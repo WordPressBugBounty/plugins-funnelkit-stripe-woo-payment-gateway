@@ -17,6 +17,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 	public $paylater_message_position = 'description';
 	public $has_fields = true;
 	private static $fragment_sent = false;
+	public $capture_method = 'automatic';
 
 
 	public function __construct() {
@@ -133,14 +134,12 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 	 * Process the payment
 	 *
 	 * @param int $order_id Reference.
-	 * @param bool $retry Should we retry on fail.
-	 * @param bool $force_save_source Force payment source to be saved.
 	 *
 	 * @return array|void
 	 * @throws \Exception If payment will not be accepted.
 	 *
 	 */
-	public function process_payment( $order_id, $retry = true, $force_save_source = false, $previous_error = false, $use_order_source = false ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+	public function process_payment( $order_id) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		try {
 			$order = wc_get_order( $order_id );
 
@@ -155,7 +154,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 				'metadata'             => $this->get_metadata( $order_id ),
 				'payment_method_types' => [ $this->payment_method_types ],
 				'customer'             => $customer_id,
-				'capture_method'       => 'automatic',
+				'capture_method'       => $this->capture_method,
 			];
 			$data['metadata'] = $this->add_metadata( $order );
 			$data             = $this->set_shipping_data( $data, $order, $this->shipping_address_required );
@@ -357,7 +356,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 
 				// Load the right message and update the status.
 				$status_message = isset( $intent->last_payment_error ) /* translators: 1) The error message that was received from Stripe. */ ? sprintf( __( 'Stripe SCA authentication failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->last_payment_error->message ) : __( 'Stripe SCA authentication failed.', 'funnelkit-stripe-woo-payment-gateway' );
-				$order->update_status( 'failed', $status_message );
+				$this->mark_order_failed( $order, $status_message );
 
 			}
 			Helper::log( "Redirecting to :" . $redirect_url );
@@ -365,6 +364,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 			$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 			wc_add_notice( esc_html( $e->getMessage() ), 'error' );
 		}
+		remove_all_actions( 'wp_redirect' );
 		wp_safe_redirect( $redirect_url );
 		exit;
 	}
@@ -393,11 +393,25 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 			return $data;
 		}
 		$order_total                 = WC()->cart->get_total( false );
-		$data['fkwcs_paylater_data'] = [
-			'currency' => strtolower( get_woocommerce_currency() ),
-			'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
-		];
-		return $data;
+		if ( is_wc_endpoint_url( 'order-pay' ) ) {
+			$order_id                    = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( $_GET['key'] ) ) : 0; // @codingStandardsIgnoreLine
+			$order                       = wc_get_order( $order_id );
+			$fkwcs_order_total           = $order->get_total();
+			$data['fkwcs_paylater_data'] = [
+				'currency' => strtolower( get_woocommerce_currency() ),
+				'amount'   => $fkwcs_order_total * 100
+			];
+
+			return $data;
+		} else {
+			$order_total                 = WC()->cart->get_total( false );
+			$data['fkwcs_paylater_data'] = [
+				'currency' => strtolower( get_woocommerce_currency() ),
+				'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
+			];
+
+			return $data;
+		}
 	}
 
 

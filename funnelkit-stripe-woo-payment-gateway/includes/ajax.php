@@ -42,14 +42,18 @@ class AJAX {
 
 	public function create_intent() {
 
-		if ( empty( wc_clean( $_POST['fkwcs_source'] ) ) || empty( wc_clean( $_POST['fkwcs_nonce'] ) ) || ! wp_verify_nonce( wc_clean( $_POST['fkwcs_nonce'] ), 'fkwcs_nonce' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( empty( wc_clean( $_POST['fkwcs_nonce'] ) ) || ! wp_verify_nonce( wc_clean( $_POST['fkwcs_nonce'] ), 'fkwcs_nonce' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
 			wp_send_json( [ 'status' => false, 'message' => 'Something went wrong' ] );
 		}
 		Helper::log( 'Entering::' . __FUNCTION__ );
 
-		$source = htmlspecialchars( wc_clean( $_POST['fkwcs_source'] ) );
-
-		$response = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe']->create_setup_intent( $source );
+		if ( ! empty( $_POST['fkwcs_source'] ) ) {
+			$source = htmlspecialchars( sanitize_text_field( $_POST['fkwcs_source'] ) );
+		}
+		if ( ! empty( $_POST['gateway_id'] ) ) {
+			$gateway_id = sanitize_text_field( $_POST['gateway_id'] );
+		}
+		$response = WC()->payment_gateways()->payment_gateways()[ $gateway_id ]->create_setup_intent( $source );
 
 		$resp = [ 'status' => 'success', 'data' => $response ];
 
@@ -112,7 +116,7 @@ class AJAX {
 	 */
 	public function log_frontend_error() {
 		$_security = wc_clean( filter_input( INPUT_POST, '_security' ) );
-		$str   = "====Frontend Js Error Log start=== \n\n ".print_r($_POST,true)." \n\n ====End==="; //phpcs:ignore
+		$str       = "====Frontend Js Error Log start=== \n\n " . print_r( $_POST, true ) . " \n\n ====End==="; //phpcs:ignore
 
 		Helper::log( $str, 'info' );
 		if ( is_null( $_security ) || ! wp_verify_nonce( $_security, 'fkwcs_js_nonce' ) ) {
@@ -150,7 +154,6 @@ class AJAX {
 
 		wp_send_json( [ 'status' => 'true' ] );
 	}
-
 
 
 }

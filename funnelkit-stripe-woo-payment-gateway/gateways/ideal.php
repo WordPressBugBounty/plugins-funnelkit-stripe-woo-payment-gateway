@@ -147,14 +147,12 @@ class Ideal extends Abstract_Payment_Gateway {
 	 * Process the payment
 	 *
 	 * @param int $order_id Reference.
-	 * @param bool $retry Should we retry on fail.
-	 * @param bool $force_save_source Force payment source to be saved.
 	 *
 	 * @return array|void
 	 * @throws \Exception If payment will not be accepted.
 	 *
 	 */
-	public function process_payment( $order_id, $retry = true, $force_save_source = false, $previous_error = false, $use_order_source = false ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+	public function process_payment( $order_id  ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		try {
 			$order = wc_get_order( $order_id );
 

@@ -119,8 +119,8 @@ class GooglePay extends CreditCard {
 		$this->btn_color            = $this->get_option( 'button_color' );
 		$this->btn_theme            = $this->get_option( 'button_theme' );
 
-		$this->capture_method = 'automatic';
-		if ( false === $this->is_configured() ) {
+		$this->capture_method        = $this->get_option( 'charge_type' );
+        if ( false === $this->is_configured() ) {
 			return;
 		}
 		add_action( 'wp_enqueue_scripts', [ $this, 'register_stripe_js' ] );
@@ -207,6 +207,17 @@ class GooglePay extends CreditCard {
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => __( 'Pay with your Google Pay', 'funnelkit-stripe-woo-payment-gateway' ),
+				'desc_tip'    => true,
+			],
+			'charge_type'           => [
+				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
+				'type'        => 'select',
+				'description' => __( 'Select how to charge Order', 'funnelkit-stripe-woo-payment-gateway' ),
+				'default'     => 'automatic',
+				'options'     => [
+					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
+					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
+				],
 				'desc_tip'    => true,
 			],
 			'icon_type'            => [
@@ -322,7 +333,7 @@ class GooglePay extends CreditCard {
 			$data['gpay_single_product'] = $this->get_product_data();
 		}
 
-		if ( $this->is_cart() || $this->is_checkout() ) {
+		if ( $this->is_cart() || $this->is_checkout() || ($this->is_product() && !WC()->cart->is_empty()) ) {
 			$data['gpay_cart_data'] = $this->ajax_get_cart_details( true );
 		}
 
@@ -485,7 +496,7 @@ class GooglePay extends CreditCard {
 		return [
 			'label' => $name,
 			'type'  => $type,
-			'price' => (string) Helper::get_stripe_amount( $amount, '', 1 ),
+			'price' => (string) Helper::get_stripe_amount( $amount, '', 1, true ),
 		];
 	}
 
@@ -558,7 +569,7 @@ class GooglePay extends CreditCard {
 		return array(
 			'label' => $label,
 			'type'  => $type,
-			'price' => (string) max( 0, Helper::get_stripe_amount( $price, $order->get_currency(), 1 ) ),
+			'price' => (string) max( 0, Helper::get_stripe_amount( $price, $order->get_currency(), 1, true ) ),
 
 		);
 	}
@@ -652,7 +663,7 @@ class GooglePay extends CreditCard {
 
 		$totals = $this->get_smart_button_line_totals( [
 			'label'   => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
-			'amount'  => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_stripe_amount( $order_total, '', 1 ), $order_total, WC()->cart ) ),
+			'amount'  => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_stripe_amount( $order_total, '', 1, true ), $order_total, WC()->cart ) ),
 			'pending' => false,
 		], $order_total );
 

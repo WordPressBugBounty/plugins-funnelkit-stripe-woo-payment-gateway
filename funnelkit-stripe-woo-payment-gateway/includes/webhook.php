@@ -137,7 +137,9 @@ class Webhook {
 	 * @throws Exception
 	 */
 	public function webhook_listener() {
-
+		if ( class_exists( 'WFOCU_Core' ) ) {
+			remove_action( 'woocommerce_pre_payment_complete', [ WFOCU_Core()->public, 'maybe_setup_upsell' ], 99 );
+		}
 
 		$payload = file_get_contents( 'php://input' ); //phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsRemoteFile
 
@@ -230,7 +232,8 @@ class Webhook {
 			case 'payment_intent.requires_action':
 				$this->require_action( $object );
 				break;
-
+			default:
+				do_action( 'fkwcs_webhook_event_' . $event->type, $event );
 		}
 		$success = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_SUCCESS_AT' );
 		update_option( $success, time(), 'no' );
@@ -515,8 +518,7 @@ class Webhook {
 				'fkwcs_stripe',
 				'fkwcs_stripe_afterpay',
 				'fkwcs_stripe_affirm',
-				'fkwcs_stripe_klarna',
-				'fkwcs_stripe_p24'
+				'fkwcs_stripe_klarna'
 			], true ) && '' === Helper::get_meta( $order, '_fkwcs_maybe_check_for_auth' ) ) {
 			return;
 		}

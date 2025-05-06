@@ -809,7 +809,8 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 			$order_currency = WFOCU_WC_Compatibility::get_order_currency( $order );
 
-			$client_details = $this->get_wc_gateway()->get_client()->get_clients_details();
+			$get_client     = $this->get_wc_gateway()->set_client_by_order_payment_mode( $order );
+			$client_details = $get_client->get_clients_details();
 
 
 			$refund_data = [
@@ -833,7 +834,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			}
 			$refund_params = apply_filters( 'fkwcs_refund_request_args', $refund_data );
 
-			$response = $this->get_wc_gateway()->execute_refunds( $refund_params );
+			$response = $this->get_wc_gateway()->execute_refunds( $refund_params, $get_client );
 
 
 			$refund_response = $response['success'] ? $response['data'] : false;
@@ -959,8 +960,10 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                                 /**
                                  * Check if we need to mark inoffer transaction to prevent default behavior of page
                                  */
-                                Bucket.inOfferTransaction = true;
-                                this.initCharge();
+                                if (0 !== Bucket.getTotal()) {
+                                    Bucket.inOfferTransaction = true;
+                                    this.initCharge();
+                                }
                             });
 
                             $(document).on('wfocuBucketConfirmationRendered', (e, Bucket) => {
@@ -1113,6 +1116,10 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                         processPayment() {
                             this.process_submit_card.then((payment_method) => {
                                 this.create_intent(payment_method, this.bucket.getBucketSendData());
+                            }).catch((error) => {
+                                if (error) {
+                                   console.log(error);
+                                }
                             });
                         }
 
@@ -1127,19 +1134,23 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                                         }
                                     }).then((result) => {
                                         if (result.error) {
-                                            this.reject();
-                                            reject(result.error)
+                                            this.reject(result.error); // Pass error to this.reject()
+                                            reject(result.error);  // Ensure the error is propagated
                                             return;
                                         }
 
                                         resolve(result.paymentMethod.id);
-
                                     }).catch((error) => {
-                                        this.reject();
+                                        this.reject(error); // Pass error to this.reject()
+                                        reject(error);  // Ensure the error is propagated
                                     });
+                                }).catch((error) => {
+                                    this.reject(error);  // Catch any errors from payment_submit
+                                    reject(error);
                                 });
-                            })
+                            });
                         }
+
 
                         /**
                          * this method triggered when intent setup using Payment Elements
@@ -1177,7 +1188,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                          * @param data
                          */
                         confirmCardPayments(data) {
-                            let handle_card = wfocuStripe.handleCardPayment(data.intent_secret);
+                            let handle_card = wfocuStripe.confirmCardPayment(data.intent_secret);
                             handle_card.then(function (response) {
                                 if (response.error) {
                                     throw response.error;
@@ -1186,7 +1197,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                                     return;
                                 }
                                 $(document).trigger('wfocuStripeOnAuthentication', [response, true]);
-                            })
+                            });
                             handle_card.catch(function (error) {
                                 $(document).trigger('wfocuStripeOnAuthentication', [false, false]);
 
@@ -1309,7 +1320,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                                         this.showCreditCard(this.bucket, true);
                                         return;
                                     }
-                                    Bucket.swal.show({'html': Bucket.warningMessage});
+                                    this.bucket.swal.show({'html': this.bucket.warningMessage});
                                     /** move to order received page */
                                     if (typeof wfocu_vars.order_received_url !== 'undefined') {
                                         this.mayBeRedirect(wfocu_vars.order_received_url + '&ec=stripe_error', 0);

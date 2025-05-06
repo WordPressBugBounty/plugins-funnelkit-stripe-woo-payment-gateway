@@ -21,13 +21,14 @@ class AfterPay extends LocalGateway {
 	 */
 	protected function init() {
 		$this->method_title       = __( 'AfterPay Gateway', 'funnelkit-stripe-woo-payment-gateway' );
-		$this->method_description = __( 'Accepts payments via AfterPay. The gateway should be enabled in your Stripe Account. Log into your Stripe account to review the <a href="https://dashboard.stripe.com/account/payments/settings" target="_blank">available gateways</a> <br/>Supported Currency: <strong>USD,CAD,AUD,NZD,GBP,EUR</strong>', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->method_description = __( 'Accepts payments via AfterPay. The gateway should be enabled in your Stripe Account. Log into your Stripe account to review the <a href="https://dashboard.stripe.com/account/payments/settings" target="_blank">available gateways</a> <br/>Supported Currency: <strong>USD,CAD,AUD,NZD,GBP</strong>', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->subtitle           = __( 'AfterPay is an online banking payment method that enables your customers in e-commerce to make an online purchase', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->init_form_fields();
 		$this->init_settings();
 		$this->title       = $this->get_option( 'title' );
 		$this->description = $this->get_option( 'description' );
 		$this->enabled     = $this->get_option( 'enabled' );
+		$this->capture_method        = $this->get_option( 'charge_type' );
 	}
 
 	protected function override_defaults() {
@@ -61,6 +62,17 @@ class AfterPay extends LocalGateway {
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_description_default,
+				'desc_tip'    => true,
+			],
+			'charge_type'           => [
+				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
+				'type'        => 'select',
+				'description' => __( 'Select how to charge Order', 'funnelkit-stripe-woo-payment-gateway' ),
+				'default'     => 'automatic',
+				'options'     => [
+					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
+					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
+				],
 				'desc_tip'    => true,
 			],
 			'paylater_section' => [

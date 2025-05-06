@@ -806,7 +806,7 @@
         const fkwcsMode = $('#fkwcs_mode');
         const appendDescription = () => {
             if (fkwcsMode.val() === 'test_admin_only') {
-                fkwcsMode.parent().append('<p class="fkwcs_test_admin_only_desc description">' + fkwcs_admin_data.test_mode_admin_only + '</p>');
+                fkwcsMode.parent().append('<div class="fkwcs_test_admin_only_desc">' + fkwcs_admin_data.test_mode_admin_only_html + '</div>');
             }
         };
 

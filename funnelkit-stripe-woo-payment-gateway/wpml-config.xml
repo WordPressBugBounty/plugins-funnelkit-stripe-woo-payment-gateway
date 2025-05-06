@@ -18,6 +18,10 @@
             <key name="title"/>
             <key name="description"/>
         </key>
+        <key name="woocommerce_fkwcs_stripe_mobilepay_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
         <key name="woocommerce_fkwcs_stripe_bancontact_settings">
             <key name="title"/>
             <key name="description"/>

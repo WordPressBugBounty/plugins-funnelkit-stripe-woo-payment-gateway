@@ -117,7 +117,7 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 				'description'          => sprintf( __( '%1$s - Order %2$s - 1 click upsell: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), $order->get_order_number(), WFOCU_Core()->data->get( 'current_offer' ) ),
 				'payment_method_types' => [ $this->payment_method_type ],
 				'customer'             => $customer_id,
-				'capture_method'       => 'automatic',
+				'capture_method'       => $gateway->capture_method,
 			];
 
 			$data        = $gateway->set_shipping_data( $data, $order, $this->need_shipping_address );
@@ -190,7 +190,8 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 
 			$order_currency = WFOCU_WC_Compatibility::get_order_currency( $order );
 
-			$client_details = $this->get_wc_gateway()->get_client()->get_clients_details();
+			$get_client     = $this->get_wc_gateway()->set_client_by_order_payment_mode( $order );
+			$client_details = $get_client->get_clients_details();
 
 
 			$refund_data = [
@@ -214,7 +215,7 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 			}
 			$refund_params = apply_filters( 'fkwcs_refund_request_args', $refund_data );
 
-			$response = $this->get_wc_gateway()->execute_refunds( $refund_params );
+			$response = $this->get_wc_gateway()->execute_refunds( $refund_params, $get_client );
 
 
 			$refund_response = $response['success'] ? $response['data'] : false;
@@ -256,8 +257,8 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 			if ( isset( $balance_transaction ) && isset( $balance_transaction->fee ) ) {
 
 
-				$fee      = ! empty( $balance_transaction->fee ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->fee ) : 0;
-				$net      = ! empty( $balance_transaction->net ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->net ) : 0;
+				$fee = ! empty( $balance_transaction->fee ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->fee ) : 0;
+				$net = ! empty( $balance_transaction->net ) ? Helper::format_amount( $order->get_currency(), $balance_transaction->net ) : 0;
 
 				/**
 				 * Handling for Stripe Fees
@@ -268,8 +269,8 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 				$data = [];
 				if ( ( 'yes' === get_option( 'fkwcs_currency_fee', 'no' ) && ! empty( $balance_transaction->exchange_rate ) ) ) {
 					$data['currency'] = $order->get_currency();
-					$fee = $fee / $balance_transaction->exchange_rate;
-					$net = $net / $balance_transaction->exchange_rate;
+					$fee              = $fee / $balance_transaction->exchange_rate;
+					$net              = $net / $balance_transaction->exchange_rate;
 
 				} else {
 					$data['currency'] = ! empty( $balance_transaction->currency ) ? strtoupper( $balance_transaction->currency ) : null;
@@ -307,7 +308,10 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 				 */
 				add_filter( 'wfocu_valid_state_for_data_setup', '__return_true' );
 				WFOCU_Core()->template_loader->set_offer_id( WFOCU_Core()->data->get_current_offer() );
-
+				$offer = WFOCU_Core()->data->get_current_offer();
+				if ( empty( $offer ) ) {
+					throw new Exception( 'Offer not found' );
+				}
 				WFOCU_Core()->template_loader->maybe_setup_offer();
 
 				$existing_package = WFOCU_Core()->data->get( 'upsell_package', '', 'gateway' );

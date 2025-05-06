@@ -96,8 +96,7 @@ class PayLater_Helper {
 			$country = substr( get_option( 'woocommerce_default_country' ), 0, 2 );
 		}
 		$data['country_code'] = $country;
-
-		return $data;
+		return apply_filters( 'fkwcs_paylater_localized_data', $data );
 	}
 
 	public function prepare_paylater_gateway() {

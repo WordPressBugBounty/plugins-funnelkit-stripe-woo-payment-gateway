@@ -40,7 +40,7 @@ label[for="fkwcs_express_checkout_preview"] {
     font-size: 15px;
 }
 
-#fkwcs-payment-request-wrapper.checkout.fkwcs-classic .fkwcs-payment-request-button-wrapper, .fkwcs_express_checkout_preview_wrapper.fkwcs-classic {
+ .fkwcs_express_checkout_preview_wrapper.fkwcs-classic {
     display: flex;
     align-items: flex-start;
     flex-wrap: wrap;
@@ -67,7 +67,7 @@ label[for="fkwcs_express_checkout_preview"] {
     max-width: 380px !important;
 }
 
-#fkwcs-payment-request-wrapper.checkout.fkwcs-classic #fkwcs-payment-request-title, .fkwcs_express_checkout_preview_wrapper.fkwcs-classic .fkwcs_preview_title {
+ .fkwcs_express_checkout_preview_wrapper.fkwcs-classic .fkwcs_preview_title {
     font-size: 14px;
     margin: 0;
     position: absolute;
@@ -85,33 +85,8 @@ label[for="fkwcs_express_checkout_preview"] {
     background: #f0f0f1;
 }
 
-#fkwcs-payment-request-wrapper.checkout.fkwcs-classic #fkwcs-payment-request-separator::before, #fkwcs-payment-request-wrapper.checkout.fkwcs-classic #fkwcs-payment-request-separator::after {
-    content: "";
-    display: block;
-    position: absolute;
-    top: 50%;
-    left: 0;
-    z-index: 2;
-    height: 1px;
-    background: #e6e6e6;
-    width: 48%;
-}
 
-#fkwcs-payment-request-wrapper.checkout.fkwcs-classic #fkwcs-payment-request-custom-button {
-    width: 100%;
-}
 
-#fkwcs-payment-request-wrapper.checkout.fkwcs-classic #fkwcs-payment-request-separator::after {
-    right: 0;
-    left: auto;
-}
-
-#fkwcs-payment-request-wrapper.checkout.fkwcs-classic #fkwcs-payment-request-separator {
-    text-transform: none;
-    white-space: nowrap;
-    padding: 0.5em 1em;
-    position: relative;
-}
 
 /* Custom express checkout button style */
 .fkwcs-payment-request-custom-button-render {
@@ -350,41 +325,7 @@ label[for="fkwcs_express_checkout_preview"] {
     width: 40px;
 }
 
-#fkwcs-payment-request-wrapper .fkwcs-express-apple_pay .fkwcs-express-checkout-button-icon, #fkwcs-payment-request-wrapper .fkwcs-express-google_pay .fkwcs-express-checkout-button-icon {
-    margin: 0 -1px -3px 7px;
-}
 
-#fkwcs-payment-request-wrapper.cart .fkwcs-express-google_pay .fkwcs-express-checkout-button-icon {
-    margin: 0 -1px -5px 7px;
-}
-
-.fkwcs-payment-request-custom-button-admin .fkwcs-payment-request-custom-button-render, #fkwcs-payment-request-wrapper.cart, #fkwcs-payment-request-wrapper.cart .fkwcs-payment-request-custom-button-render, #fkwcs-payment-request-wrapper.checkout {
-    width: 100%;
-}
-
-#fkwcs-payment-request-wrapper.fkwcs-product.below, #fkwcs-payment-request-wrapper.fkwcs-product.above, #fkwcs-payment-request-wrapper.fkwcs-product.below .fkwcs-payment-request-button-wrapper, #fkwcs-payment-request-wrapper.fkwcs-product.above .fkwcs-payment-request-separator {
-    float: left;
-    overflow: visible;
-}
-
-#fkwcs-payment-request-wrapper.fkwcs-product.inline {
-    overflow: visible;
-}
-
-#fkwcs-payment-request-wrapper.checkout.center #fkwcs-payment-request-custom-button {
-    text-align: center;
-}
-
-#fkwcs-payment-request-wrapper.fkwcs-product.above::after, #fkwcs-payment-request-wrapper.fkwcs-product.above .fkwcs-payment-request-button-wrapper::after {
-    content: "";
-    display: table;
-    clear: both;
-}
-
-#fkwcs-payment-request-wrapper .fkwcs-payment-request-custom-button-render {
-    margin-top: 0;
-    margin-bottom: 0;
-}
 
 div.fkwcs_test_visibility {
     margin: 11px 0;
@@ -507,9 +448,6 @@ form.cart button.single_add_to_cart_button {
     flex: initial;
 }
 
-.theme-blocksy form.cart #fkwcs-payment-request-wrapper.fkwcs-product.below, .theme-blocksy form.cart #fkwcs-payment-request-wrapper.fkwcs-product.below .fkwcs-payment-request-button-wrapper, .theme-blocksy form.cart #fkwcs-payment-request-wrapper.fkwcs-product.below .fkwcs-payment-request-custom-button-render {
-    width: 100% !important;
-}
 
 @keyframes fkwcs_shine {
     0% {
@@ -520,20 +458,7 @@ form.cart button.single_add_to_cart_button {
     }
 }
 
-@media only screen and (max-width: 600px) {
-    #fkwcs-payment-request-wrapper.fkwcs-product.sticky .fkwcs-payment-request-custom-button-render, #fkwcs-payment-request-wrapper.fkwcs-product.sticky .fkwcs-payment-request-button-wrapper {
-        width: 100% !important;
-    }
 
-    #fkwcs-payment-request-wrapper.fkwcs-product.sticky #fkwcs-payment-request-separator {
-        display: none !important;
-    }
-
-    #fkwcs-payment-request-wrapper.sticky .fkwcs-payment-request-custom-button-render {
-        margin-top: 0 !important;
-        margin-bottom: 0 !important;
-    }
-}
 
 .wc-connect-stripe-help {
     margin-top: 10px;

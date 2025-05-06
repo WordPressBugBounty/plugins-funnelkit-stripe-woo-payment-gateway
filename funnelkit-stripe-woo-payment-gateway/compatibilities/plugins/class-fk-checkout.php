@@ -127,6 +127,7 @@ if ( ! class_exists( 'FKWCS_Compat_FK_Checkout' ) ) {
 
 			echo "<style>";
 
+			echo '#wfacp_smart_buttons .fkwcs_google_pay_wrapper{margin: 0}';
 			echo esc_html( $bodyClass ) . " #payment ul.payment_methods li .card-brand-icons img{position: absolute;}";
 
 			echo "</style>";

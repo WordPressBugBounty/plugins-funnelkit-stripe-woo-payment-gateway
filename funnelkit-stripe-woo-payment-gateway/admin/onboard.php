@@ -121,8 +121,8 @@ class Onboard {
 			return;
 		}
 
-		$fkwcs_hide_notice   = filter_input( INPUT_GET, 'fkwcs-hide-notice', FILTER_SANITIZE_STRING );
-		$_fkwcs_notice_nonce = filter_input( INPUT_GET, '_fkwcs_notice_nonce', FILTER_SANITIZE_STRING );
+		$fkwcs_hide_notice   = filter_input( INPUT_GET, 'fkwcs-hide-notice' );
+		$_fkwcs_notice_nonce = filter_input( INPUT_GET, '_fkwcs_notice_nonce' );
 
 		if ( $fkwcs_hide_notice && $_fkwcs_notice_nonce && wp_verify_nonce( sanitize_text_field( wp_unslash( $_fkwcs_notice_nonce ) ), 'fkwcs_hide_notices_nonce' ) ) {
 			$this->update_connect_with_stripe_status( 'skipped' );

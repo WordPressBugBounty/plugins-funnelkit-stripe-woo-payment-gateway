@@ -4,18 +4,22 @@
  */
 jQuery(function ($) {
     const style = fkwcs_data.common_style;
+    window.fkwcsIsDomLoaded = false;
     const available_gateways = {};
     let current_upe_gateway = 'card';
     let wcCheckoutForm = $('form.woocommerce-checkout');
     const homeURL = fkwcs_data.get_home_url;
     const stripeLocalized = fkwcs_data.stripe_localized;
 
-    function scrollToDiv(id) {
+    function scrollToDiv(id, offset) {
+        if(typeof offset === 'undefined') {
+            offset = 0;
+        }
         if (jQuery(id).length === 0) {
             return;
         }
         jQuery('html, body').animate({
-            scrollTop: jQuery(id).offset().top
+            scrollTop: jQuery(id).offset().top - offset
         }, 500);
     }
 
@@ -50,8 +54,6 @@ jQuery(function ($) {
         }
 
         wc_events() {
-
-
             let self = this;
             let token_radio = $(`input[name='wc-${self.gateway_id}-payment-token']:checked`);
 
@@ -98,21 +100,28 @@ jQuery(function ($) {
 
             });
 
-            if (document.readyState === 'complete' || document.readyState === 'loading') {
-                $(document).ready(function () {
-                    if (self.gateway_id === self.selectedGateway()) {
-                        self.mountGateway();
-                    }
-                    self.ready();
-                });
-            } else {
-                $(window).on('load', function () {
-                    if (self.gateway_id === self.selectedGateway()) {
-                        self.mountGateway();
-                    }
-                    self.ready();
-                });
-            }
+
+            $(document).ready(function () {
+                if (self.gateway_id === self.selectedGateway()) {
+                    self.mountGateway();
+                }
+                self.ready();
+                self.handleOrderPayPageAndChangePaymentPage();
+                window.fkwcsIsDomLoaded = true;
+
+            });
+
+            $(window).on('load', function () {
+                if(window.fkwcsIsDomLoaded) {
+                    return;
+                }
+                if (self.gateway_id === self.selectedGateway()) {
+                    self.mountGateway();
+                }
+                self.ready();
+                self.handleOrderPayPageAndChangePaymentPage();
+            });
+
 
             let fkwcs_gateway = $('#payment_method_' + this.gateway_id);
             if (fkwcs_gateway.length > 0 && fkwcs_gateway.is(":checked")) {
@@ -140,9 +149,43 @@ jQuery(function ($) {
                 }
             });
 
+
             $(document.body).trigger('wc-credit-card-form-init');
 
 
+        }
+
+        handleOrderPayPageAndChangePaymentPage() {
+            /**
+             * If this is the change payment or a pay page we need to trigger the tokenization form
+             */
+            if ('yes' === fkwcs_data.is_change_payment_page || 'yes' === fkwcs_data.is_pay_for_order_page) {
+
+                /**
+                 * IN case of SCA payments we need to trigger confirmStripePayment as hash change will not fire auto
+                 * @type {RegExpMatchArray}
+                 */
+                let partials = window.location.hash.match(/^#?fkwcs-confirm-(pi|si)-([^:]+):(.+):(.+):(.+):(.+)$/);
+                if (null == partials) {
+                    partials = window.location.hash.match(/^#?fkwcs-confirm-(pi|si)-([^:]+):(.+)$/);
+                }
+                if (partials) {
+                    const type = partials[1];
+                    const intentClientSecret = partials[2];
+                    const redirectURL = decodeURIComponent(partials[3]);
+                    const order_id = decodeURIComponent(partials[4]);
+
+
+                    const payment_method = decodeURIComponent(partials[5]);
+                    // Cleanup the URL
+                    if (this.gateway_id === payment_method) {
+                        $('input[name="payment_method"][value="' + payment_method + '"]').prop('checked', true).trigger('click');
+                        this.confirmStripePayment(intentClientSecret, redirectURL, type, order_id);
+                    }
+                }
+
+
+            }
         }
 
         ready() {
@@ -159,11 +202,13 @@ jQuery(function ($) {
 
         showPlaceOrder() {
             $('#place_order')?.show();
+            $('#place_order')?.removeClass('fkwcs_hidden');
             this.hideGatewayWallets();
         }
 
         hidePlaceOrder() {
             $('#place_order')?.hide();
+            $('#place_order')?.addClass('fkwcs_hidden');
         }
 
         hideGatewayWallets() {
@@ -260,7 +305,9 @@ jQuery(function ($) {
                     address[prop] = null;
                 }
             }
-
+            if (typeof this.prevent_empty_line_address !== 'undefined' && this.prevent_empty_line_address === true && address.line1 === null) {
+                return [];
+            }
             return address;
         }
 
@@ -372,7 +419,7 @@ jQuery(function ($) {
             if (typeof message === 'object') {
                 if (message.type === "validation_error") {
                     wcCheckoutForm.removeClass('processing');
-
+                    scrollToDiv('.fkwcs-stripe-elements-wrapper', 100);
                     this.unblockElement();
                     return;
                 }
@@ -423,17 +470,9 @@ jQuery(function ($) {
         }
 
         getAmountCurrency() {
-
-
-            if (this.fragments.hasOwnProperty('fkwcs_paylater_data')) {
-
-                return {'amount': parseFloat(fkwcs_data.fkwcs_paylater_data.amount), 'currency': fkwcs_data.fkwcs_paylater_data.currency.toUpperCase()};
-            } else {
-                return {'amount': 0, 'currency': 'USD'};
-
-            }
-
-
+            const source = this.fragments?.fkwcs_paylater_data || fkwcs_data?.fkwcs_paylater_data;
+            return source ? {'amount': parseFloat(source.amount), 'currency': source.currency.toUpperCase()}
+                : {'amount': 0, 'currency': 'USD'};
         }
 
         isAvailable() {
@@ -537,9 +576,9 @@ jQuery(function ($) {
             if ('' === this.confirmCallBack || !this.stripe.hasOwnProperty(this.confirmCallBack)) {
                 return;
             }
-
             if (this.gateway_id === this.selectedGateway()) {
                 this.stripe[this.confirmCallBack](clientSecret, this.stripePaymentMethodOptions(redirectURL)).then((response) => {
+
                     if (response.error) {
                         this.logError(response.error, order_id);
                         this.showError(response.error);
@@ -792,11 +831,13 @@ jQuery(function ($) {
         }
 
         mountGateway() {
+
             if ('payment' === fkwcs_data.card_form_type) {
                 this.mountElements();
                 return;
 
             }
+
             this.mountCard();
         }
 
@@ -879,7 +920,8 @@ jQuery(function ($) {
             const process_data = {
                 action: 'fkwcs_create_setup_intent',
                 fkwcs_nonce,
-                fkwcs_source: payment_method
+                fkwcs_source: payment_method,
+                gateway_id: this.selectedGateway()
             };
 
             // Bind the function to preserve `this` context when used within the callback
@@ -1046,8 +1088,8 @@ jQuery(function ($) {
             e.preventDefault();
 
             $.ajax({
-                url: $('#early_renewal_modal_submit').attr('href'), method: 'get', success: (html) => {
-                    let response = JSON.parse(html);
+                url: $('#early_renewal_modal_submit').attr('href'), method: 'get', complete: (html) => {
+                    let response = JSON.parse(html.responseText);
                     if (response.fkwcs_stripe_sca_required) {
                         this.confirmStripePayment(response.intent_secret, response.redirect_url);
                     } else {
@@ -1068,32 +1110,7 @@ jQuery(function ($) {
 
         wc_events() {
             super.wc_events();
-            /**
-             * If this is the change payment or a pay page we need to trigger the tokenization form
-             */
-            if ('yes' === fkwcs_data.is_change_payment_page || 'yes' === fkwcs_data.is_pay_for_order_page) {
 
-                /**
-                 * IN case of SCA payments we need to trigger confirmStripePayment as hash change will not fire auto
-                 * @type {RegExpMatchArray}
-                 */
-                let partials = window.location.hash.match(/^#?fkwcs-confirm-(pi|si)-([^:]+):(.+):(.+):(.+):(.+)$/);
-                if (null == partials) {
-                    partials = window.location.hash.match(/^#?fkwcs-confirm-(pi|si)-([^:]+):(.+)$/);
-                }
-                if (partials) {
-                    const type = partials[1];
-                    const intentClientSecret = partials[2];
-                    const redirectURL = decodeURIComponent(partials[3]);
-                    const order_id = decodeURIComponent(partials[4]);
-
-
-                    // Cleanup the URL
-                    this.confirmStripePayment(intentClientSecret, redirectURL, type, order_id);
-                }
-
-
-            }
             // Subscription early renewals modal.
             if ($('#early_renewal_modal_submit[data-payment-method]').length) {
                 $('#early_renewal_modal_submit[data-payment-method=fkwcs_stripe]').on('click', this.onEarlyRenewalSubmit.bind(this));
@@ -1180,12 +1197,24 @@ jQuery(function ($) {
 
 
         mountElements() {
+
             try {
+                // Check if the selector matches any element
                 let selector = '.fkwcs-stripe-payment-elements-field.StripeElement';
+
+
+                // If the 'payment' object is available and the element is not mounted, mount it
                 if ($(selector).length === 0 && null !== this.payment) {
                     this.payment.mount('.fkwcs-stripe-payment-elements-field');
+                } else {
+                    if (null === this.payment) {
+                        console.log("Payment object is not initialized.");
+
+                    }
                 }
             } catch (e) {
+                // Log the error with the error message
+                console.log("Error in mountElements():", e);
 
             }
 
@@ -1239,7 +1268,6 @@ jQuery(function ($) {
                     background: '#fff', opacity: 0.6
                 }
             });
-
             let payment_submit = this.elements.submit();
             payment_submit.then((response) => {
 
@@ -1257,8 +1285,8 @@ jQuery(function ($) {
                              * We do not need to print any validation related errors here since they are auto showed up
                              */
                             this.showError(false);
-                            scrollToDiv('.payment_method_fkwcs_stripe');
                         }
+                        scrollToDiv('li.payment_method_fkwcs_stripe');
                         return;
                     }
 
@@ -1281,6 +1309,9 @@ jQuery(function ($) {
                 'redirect': 'if_required'
             };
 
+            if ('yes' === fkwcs_data.is_change_payment_page || 'yes' === fkwcs_data.is_pay_for_order_page) {
+                delete confirm_data.elements;
+            }
 
             let cardPayment = null;
             if ('si' === intent_type) {
@@ -1377,8 +1408,7 @@ jQuery(function ($) {
             let name = data.name;
             let names = name.split(' ');
             let firsname = names[0];
-            names = names.splice(0, 1);
-            let last_name = names.join(' ');
+            let last_name = names.slice(1).join(' ');
             let last_name_e = $(`#${type}_last_name`);
             let first_name_e = $(`#${type}_first_name`);
             if (0 === last_name_e.length) {
@@ -1801,6 +1831,8 @@ jQuery(function ($) {
             this.confirmCallBack = 'confirmAffirmPayment';
             this.mountable = true;
             this.message_element = true;
+            this.prevent_empty_line_address = true;
+
         }
 
         setupGateway() {
@@ -1856,6 +1888,7 @@ jQuery(function ($) {
             this.confirmCallBack = 'confirmAfterpayClearpayPayment';
             this.mountable = true;
             this.message_element = true;
+            this.prevent_empty_line_address = true;
         }
 
 
@@ -1872,6 +1905,34 @@ jQuery(function ($) {
         isSupportedCountries() {
             let billing_country = $('#billing_country').val();
             return ['US'].indexOf(billing_country) > -1;
+        }
+
+        stripePaymentMethodOptions(redirectURL) {
+            return {
+                payment_method: this.paymentMethods(),
+                payment_method_options: this.paymentMethodOptions(),
+                return_url: homeURL + redirectURL,
+            };
+        }
+    }
+
+    class FKWCS_MOBILEPAY extends LocalGateway {
+        constructor(stripe, gateway_id) {
+            super(stripe, gateway_id);
+            this.error_container = '.fkwcs_stripe_mobilepay_error';
+            this.confirmCallBack = 'confirmMobilepayPayment';
+            this.mountable = true;
+        }
+
+
+        setupGateway() {
+            this.setup_ready = true;
+            let data = this.getAmountCurrency();
+            this.createMessage(data.amount, data.currency);
+        }
+
+        paymentMethodTypes() {
+            return ['mobilepay'];
         }
 
         stripePaymentMethodOptions(redirectURL) {
@@ -1948,6 +2009,7 @@ jQuery(function ($) {
             this.hideGatewayWallets();
             $('.fkwcs-apple-button-container')?.show();
             $('#place_order')?.hide();
+            $('#place_order')?.addClass('fkwcs_hidden');
         }
 
         showPlaceOrder() {
@@ -2168,8 +2230,6 @@ jQuery(function ($) {
                         shipping_method: [shipping_method]
                     }, extraData),
                     success: (response) => {
-                        console.log('response', response);
-
                         // Check for a failed response
                         if (response.result === 'fail') {
                             this.showError({
@@ -2437,6 +2497,7 @@ jQuery(function ($) {
         hidePlaceOrder() {
             $('.fkwcs-gpay-button-container')?.show();
             $('#place_order')?.hide();
+            $('#place_order')?.addClass('fkwcs_hidden');
         }
 
         showPlaceOrder() {
@@ -2465,6 +2526,7 @@ jQuery(function ($) {
          * @returns {{}}
          */
         mapAddress(type, addressData) {
+
             let json = {};
             if (addressData.hasOwnProperty('address1')) {
                 $(`#${type}_address_1`)?.val(addressData?.address1);
@@ -2496,10 +2558,9 @@ jQuery(function ($) {
                 if ($(`#${type}_last_name`).length > 0) {
                     let names = addressData.name.split(' ');
                     let first_name = names[0];
-                    let last_names = names.splice(0, 1);
+                    let last_name = names.slice(1).join(' ');
                     $(`#${type}_first_name`).val(first_name);
-                    $(`#${type}_last_name`).val(last_names.join(' '));
-
+                    $(`#${type}_last_name`).val(last_name);
                 } else {
                     $(`#${type}_first_name`).val(addressData.name);
                 }
@@ -2642,6 +2703,7 @@ jQuery(function ($) {
             available_gateways.affirm = new FKWCS_AFFIRM(stripe, 'fkwcs_stripe_affirm');
             available_gateways.klarna = new FKWCS_KLARNA(stripe, 'fkwcs_stripe_klarna');
             available_gateways.afterpay = new FKWCS_AFTERPAY(stripe, 'fkwcs_stripe_afterpay');
+            available_gateways.mobilepay = new FKWCS_MOBILEPAY(stripe, 'fkwcs_stripe_mobilepay');
 
             available_gateways.google_pay = new FKWCS_GOOGLEPAY(stripe, 'fkwcs_stripe_google_pay');
             available_gateways.apple_pay = new FKWCS_ApplePay(stripe, 'fkwcs_stripe_apple_pay');
@@ -2657,6 +2719,7 @@ jQuery(function ($) {
                 "FKWCS_AFFIRM": FKWCS_AFFIRM,
                 "FKWCS_KLARNA": FKWCS_KLARNA,
                 "FKWCS_AFTERPAY": FKWCS_AFTERPAY,
+                "FKWCS_MOBILEPAY": FKWCS_MOBILEPAY,
                 'stripe_object': stripe
             });
         } catch (e) {
@@ -2682,3 +2745,4 @@ jQuery(function ($) {
 
     init_gateways();
 });
+

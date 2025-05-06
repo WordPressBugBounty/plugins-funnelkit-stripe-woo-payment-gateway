@@ -68,7 +68,7 @@ class ApplePay extends CreditCard {
 		$this->merchant_id          = $this->get_option( 'merchant_id' );
 		$this->description          = $this->get_option( 'description' );
 		$this->statement_descriptor = $this->get_option( 'statement_descriptor' );
-		$this->capture_method       = 'automatic';
+		$this->capture_method        = $this->get_option( 'charge_type' );
 		if ( false === $this->is_configured() ) {
 			return;
 		}
@@ -117,7 +117,18 @@ class ApplePay extends CreditCard {
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => __( 'Pay with Apple Pay', 'funnelkit-stripe-woo-payment-gateway' ),
 				'desc_tip'    => true,
-			]
+			],
+			'charge_type'           => [
+				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
+				'type'        => 'select',
+				'description' => __( 'Select how to charge Order', 'funnelkit-stripe-woo-payment-gateway' ),
+				'default'     => 'automatic',
+				'options'     => [
+					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
+					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
+				],
+				'desc_tip'    => true,
+			],
 		] );
 	}
 

@@ -158,6 +158,29 @@ class Admin {
 		add_filter( 'woocommerce_generate_fkwcs_admin_fields_start_html', [ $this, 'fkwcs_admin_fields_start_html_field' ], 10, 4 );
 		add_filter( 'woocommerce_generate_fkwcs_admin_fields_end_html', [ $this, 'fkwcs_admin_fields_end_html_field' ], 10, 4 );
 
+		add_action( 'admin_init', [ $this, 'maybe_sync_stripe_tax_keys' ] );
+
+		add_action( 'rest_api_init', function () {
+			register_rest_route( 'wc/v3', '/wc_stripe/orders/(?P<order_id>\w+)/capture_terminal_payment', [
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ $this, 'fkwcs_capture_terminal_payment' ],
+				'permission_callback' => [ $this, 'check_permission' ],
+				'args'                => [
+					'payment_intent_id' => [
+						'required' => true,
+					],
+				],
+			] );
+		}, - 1 );
+
+		add_action( 'admin_footer', [ $this, 'add_custom_admin_footer_script' ] );
+
+
+	}
+
+	public function check_permission() {
+		return current_user_can( 'manage_woocommerce' );
+
 
 	}
 
@@ -222,6 +245,7 @@ class Admin {
 			'fkwcs_stripe_apple_pay'  => __( 'Apple Pay', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_affirm'     => __( 'Affirm', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_afterpay'   => __( 'Afterpay', 'funnelkit-stripe-woo-payment-gateway' ),
+			'fkwcs_stripe_mobilepay'   => __( 'Mobilepay', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_klarna'     => __( 'Klarna', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_ideal'      => __( 'iDeal', 'funnelkit-stripe-woo-payment-gateway' ),
 			'fkwcs_stripe_bancontact' => __( 'Bancontact', 'funnelkit-stripe-woo-payment-gateway' ),
@@ -312,7 +336,7 @@ class Admin {
 					'test_admin_only' => 'Test Mode (For administrators)',
 					'live'            => 'Live Mode',
 				],
-				'desc'     => __( 'No live transactions are processed in test mode. To fully use test mode, you must have a sandbox (test) account for the payment gateway you are testing.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'desc'     => __( 'No live transactions are processed in test mode. To fully use test mode, you must have a sandbox (test) account for the payment gateway you are testing.<br/> ', 'funnelkit-stripe-woo-payment-gateway' ),
 				'id'       => 'fkwcs_mode',
 				'desc_tip' => true,
 			],
@@ -560,7 +584,7 @@ class Admin {
 			return;
 		}
 		?>
-        <ul class="subsubsub">
+		<ul class="subsubsub">
 			<?php
 			foreach ( $this->navigation as $key => $value ) {
 				$current_class = '';
@@ -576,8 +600,8 @@ class Admin {
 				}
 			}
 			?>
-        </ul>
-        <br class="clear"/>
+		</ul>
+		<br class="clear"/>
 		<?php
 	}
 
@@ -866,11 +890,11 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			wp_register_style( 'fkwcs-style', FKWCS_URL . 'admin/assets/css/admin.css', [], FKWCS_VERSION );
 			wp_enqueue_style( 'fkwcs-style' );
 			?>
-            <style>
-                a[href='<?php echo esc_url( get_site_url() ); ?>/wp-admin/admin.php?page=wc-settings&tab=fkwcs_api_settings'].nav-tab {
-                    display: none
-                }
-            </style>
+			<style>
+				a[href='<?php echo esc_url( get_site_url() ); ?>/wp-admin/admin.php?page=wc-settings&tab=fkwcs_api_settings'].nav-tab {
+					display: none
+				}
+			</style>
 			<?php
 		}
 	}
@@ -954,39 +978,38 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			}
 
 			wp_localize_script( 'fkwcs-admin-js', 'fkwcs_admin_data', apply_filters( 'fkwcs_admin_localize_script_args', [
-				'site_url'                 => get_site_url() . '/wp-admin/admin.php?page=wc-settings',
-				'ajax_url'                 => admin_url( 'admin-ajax.php' ),
-				'icons'                    => [
+				'site_url'                  => get_site_url() . '/wp-admin/admin.php?page=wc-settings',
+				'ajax_url'                  => admin_url( 'admin-ajax.php' ),
+				'icons'                     => [
 					'applepay_gray'  => FKWCS_URL . 'assets/icons/apple_pay_gray.svg',
 					'applepay_light' => FKWCS_URL . 'assets/icons/apple_pay_light.svg',
 					'gpay_light'     => FKWCS_URL . 'assets/icons/gpay_light.svg',
 					'gpay_gray'      => FKWCS_URL . 'assets/icons/gpay_gray.svg',
 					'link'           => FKWCS_URL . 'assets/icons/link.svg',
 				],
-				'settings'                 => $settings_data,
-				'messages'                 => [
+				'settings'                  => $settings_data,
+				'messages'                  => [
 					'default_text'  => __( 'Pay Now', 'funnelkit-stripe-woo-payment-gateway' ),
 					'checkout_note' => __( 'NOTE: Title and Tagline appears only on Checkout page.', 'funnelkit-stripe-woo-payment-gateway' ),
 					'no_method'     => sprintf( __( 'No payment method detected. Either your browser is not supported or you do not have save cards. For more details read %1$1sdocument$2$2s.', 'funnelkit-stripe-woo-payment-gateway' ), '<a href="#" target="_blank">', '</a>' )
 				],
-				'pub_key'                  => $pub_key,
-				'is_connected'             => $this->is_stripe_connected(),
-				'is_manually_connected'    => $this->is_manually_connected(), //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'fkwcs_admin_settings_tab' => isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : '', //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'fkwcs_admin_current_page' => isset( $_GET['section'] ) ? sanitize_text_field( $_GET['section'] ) : '', //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'fkwcs_admin_nonce'        => wp_create_nonce( 'fkwcs_admin_request' ),
-				'dashboard_url'            => admin_url( 'admin.php?page=wc-settings&tab=fkwcs_api_settings' ),
-				'generic_error'            => __( 'Something went wrong! Please reload the page and try again.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'test_btn_label'           => __( 'Save changes', 'funnelkit-stripe-woo-payment-gateway' ),
-				'stripe_key_notice'        => __( 'Please enter all keys to connect to stripe.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'stripe_key_error'         => __( 'You must enter your API keys or connect the plugin before performing a connection test. Mode:', 'funnelkit-stripe-woo-payment-gateway' ),
-				'stripe_key_unavailable'   => __( 'Keys Unavailable.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'stripe_disconnect'        => __( 'Your Stripe account has been disconnected.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'stripe_connect_other_acc' => __( 'You can connect other Stripe account now.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'stripe_notice_re_verify'  => __( 'Sorry, we are unable to re-verify domain at the moment. ', 'funnelkit-stripe-woo-payment-gateway' ),
-				'test_mode_admin_only'     => __( 'This will enable Test mode only for the admin users. While other users will continue to process payments in Live mode.', 'funnelkit-stripe-woo-payment-gateway' )
-
-
+				'stripe_country'            => get_option( 'fkwcs_stripe_account_settings', [] ),
+				'pub_key'                   => $pub_key,
+				'is_connected'              => $this->is_stripe_connected(),
+				'is_manually_connected'     => $this->is_manually_connected(), //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'fkwcs_admin_settings_tab'  => isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : '', //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'fkwcs_admin_current_page'  => isset( $_GET['section'] ) ? sanitize_text_field( $_GET['section'] ) : '', //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'fkwcs_admin_nonce'         => wp_create_nonce( 'fkwcs_admin_request' ),
+				'dashboard_url'             => admin_url( 'admin.php?page=wc-settings&tab=fkwcs_api_settings' ),
+				'generic_error'             => __( 'Something went wrong! Please reload the page and try again.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'test_btn_label'            => __( 'Save changes', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stripe_key_notice'         => __( 'Please enter all keys to connect to stripe.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stripe_key_error'          => __( 'You must enter your API keys or connect the plugin before performing a connection test. Mode:', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stripe_key_unavailable'    => __( 'Keys Unavailable.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stripe_disconnect'         => __( 'Your Stripe account has been disconnected.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stripe_connect_other_acc'  => __( 'You can connect other Stripe account now.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stripe_notice_re_verify'   => __( 'Sorry, we are unable to re-verify domain at the moment. ', 'funnelkit-stripe-woo-payment-gateway' ),
+				'test_mode_admin_only_html' => __( '<p class="description">This will enable Test mode only for the admin users. While other users will continue to process payments in Live mode. </p><p class="description"> <strong>Please note that this setting should always be switched back to live mode once testing is completed to avoid such issues in the future.</strong></br>', 'funnelkit-stripe-woo-payment-gateway' )
 			] ) );
 		}
 	}
@@ -1007,16 +1030,16 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			return;
 		}
 		?>
-        <tr>
-            <td class="label fkwcs-stripe-fee">
+		<tr>
+			<td class="label fkwcs-stripe-fee">
 				<?php echo wp_kses_post( wc_help_tip( __( 'This fee, Stripe collects for the transaction.', 'funnelkit-stripe-woo-payment-gateway' ) ) ); ?>
 				<?php esc_html_e( 'Stripe Fee:', 'funnelkit-stripe-woo-payment-gateway' ); ?>
-            </td>
-            <td width="1%"></td>
-            <td class="total">
-                -<?php echo wp_kses_post( wc_price( $fee, [ 'currency' => $currency, 'decimals' => 2 ] ) ); ?>
-            </td>
-        </tr>
+			</td>
+			<td width="1%"></td>
+			<td class="total">
+				-<?php echo wp_kses_post( wc_price( $fee, [ 'currency' => $currency, 'decimals' => 2 ] ) ); ?>
+			</td>
+		</tr>
 		<?php
 	}
 
@@ -1036,16 +1059,16 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			return;
 		}
 		?>
-        <tr>
-            <td class="label fkwcs-stripe-payout">
+		<tr>
+			<td class="label fkwcs-stripe-payout">
 				<?php echo wp_kses_post( wc_help_tip( __( 'This net total that will be credited to your stripe bank account.', 'funnelkit-stripe-woo-payment-gateway' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
 				<?php esc_html_e( 'Stripe Payout:', 'funnelkit-stripe-woo-payment-gateway' ); ?>
-            </td>
-            <td width="1%"></td>
-            <td class="total">
+			</td>
+			<td width="1%"></td>
+			<td class="total">
 				<?php echo wp_kses_post( wc_price( $net, [ 'currency' => $currency, 'decimals' => 2 ] ) ); ?>
-            </td>
-        </tr>
+			</td>
+		</tr>
 		<?php
 	}
 
@@ -1077,66 +1100,66 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 		$learn_more = sprintf( "<a href='%s'>%s</a>", 'https://funnelkit.com/docs/stripe-gateway-for-woocommerce/troubleshooting/express-payment-buttons-not-showing/', __( 'Learn more', 'funnelkit-stripe-woo-payment-gateway' ) );
 		?>
-        <tr valign="top" class="fkwcs-smart-container">
-            <th scope="row">
-                <label for="<?php echo esc_attr( $value['id'] ); ?>"><?php echo esc_html( $value['title'] ); ?> </label>
-            </th>
-            <td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
-                <fieldset>
-                    <div class="fkwcs_express_checkout_preview_wrapper">
-                        <div class="fkwcs_express_checkout_preview"></div>
-                        <div id="fkwcs-payment-request-custom-button" class="fkwcs-payment-request-custom-button-admin">
-                            <button lang="auto" class="fkwcs-payment-request-custom-button-render fkwcs_express_checkout_button fkwcs-express-checkout-button large" role="button" type="submit" style="height: 40px;">
-                                <div class="fkwcs-express-checkout-button-inner" tabindex="-1">
-                                    <div class="fkwcs-express-checkout-button-shines">
-                                        <div class="fkwcs-express-checkout-button-shine fkwcs-express-checkout-button-shine--scroll"></div>
-                                        <div class="fkwcs-express-checkout-button-shine fkwcs-express-checkout-button-shine--hover"></div>
-                                    </div>
-                                    <div class="fkwcs-express-checkout-button-content">
-                                        <span class="fkwcs-express-checkout-button-label"></span>
-                                        <img src="" class="fkwcs-express-checkout-button-icon">
-                                    </div>
-                                    <div class="fkwcs-express-checkout-button-overlay"></div>
-                                    <div class="fkwcs-express-checkout-button-border"></div>
-                                </div>
-                            </button>
-                            <button lang="auto" class="fkwcs-payment-request-custom-button-render fkwcs_express_checkout_button fkwcs-express-checkout-button large" role="button" type="submit" style="height: 40px;">
-                                <div class="fkwcs-express-checkout-button-inner" tabindex="-1">
-                                    <div class="fkwcs-express-checkout-button-shines">
-                                        <div class="fkwcs-express-checkout-button-shine fkwcs-express-checkout-button-shine--scroll"></div>
-                                        <div class="fkwcs-express-checkout-button-shine fkwcs-express-checkout-button-shine--hover"></div>
-                                    </div>
-                                    <div class="fkwcs-express-checkout-button-content">
-                                        <span class="fkwcs-express-checkout-button-label"></span>
-                                        <img src="" class="fkwcs-express-checkout-button-icon">
-                                    </div>
-                                    <div class="fkwcs-express-checkout-button-overlay"></div>
-                                    <div class="fkwcs-express-checkout-button-border"></div>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-                </fieldset>
-                <fieldset>
-                    <div class="fkwcs_test_visibility">
-                        <button type="button" class="fkwcs_test_visibility button-primary"><?php esc_html_e( 'Test Visibility' ) ?></button>
-                    </div>
-                    <div class="fkwcs_express_checkout_connection_div">
-                        <div class="fkwcs-btn-type-info-wrapper" id="is_apple_pay_available">
-                            <span class="fkwcs_btn_connection">&#10060;</span>
-                            <p class="fkwcs_not_supported"><?php esc_html_e( 'Apple Pay is not supported on this browser. ', 'funnelkit-stripe-woo-payment-gateway' ) ?><?php echo wp_kses_post( $learn_more ); ?></p>
-                            <p class="fkwcs_is_supported"><?php esc_html_e( 'Apple Pay is supported on this browser. ', 'funnelkit-stripe-woo-payment-gateway' ) ?><?php echo wp_kses_post( $learn_more ); ?></p>
-                        </div>
-                        <div class="fkwcs-btn-type-info-wrapper" id="is_google_pay_available">
-                            <span class="fkwcs_btn_connection">&#10060;</span>
-                            <p class="fkwcs_not_supported"><?php esc_html_e( 'Google Pay is not  supported on this browser. ', 'funnelkit-stripe-woo-payment-gateway' ) ?><?php echo wp_kses_post( $learn_more ); ?></p>
-                            <p class="fkwcs_is_supported"><?php esc_html_e( 'Google Pay is supported on this browser. ', 'funnelkit-stripe-woo-payment-gateway' ) ?><?php echo wp_kses_post( $learn_more ); ?></p>
-                        </div>
-                        <span class="spinner"></span>
-                    </div>
-                </fieldset>
-            </td>
-        </tr>
+		<tr valign="top" class="fkwcs-smart-container">
+			<th scope="row">
+				<label for="<?php echo esc_attr( $value['id'] ); ?>"><?php echo esc_html( $value['title'] ); ?> </label>
+			</th>
+			<td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
+				<fieldset>
+					<div class="fkwcs_express_checkout_preview_wrapper">
+						<div class="fkwcs_express_checkout_preview"></div>
+						<div id="fkwcs-payment-request-custom-button" class="fkwcs-payment-request-custom-button-admin">
+							<button lang="auto" class="fkwcs-payment-request-custom-button-render fkwcs_express_checkout_button fkwcs-express-checkout-button large" role="button" type="submit" style="height: 40px;">
+								<div class="fkwcs-express-checkout-button-inner" tabindex="-1">
+									<div class="fkwcs-express-checkout-button-shines">
+										<div class="fkwcs-express-checkout-button-shine fkwcs-express-checkout-button-shine--scroll"></div>
+										<div class="fkwcs-express-checkout-button-shine fkwcs-express-checkout-button-shine--hover"></div>
+									</div>
+									<div class="fkwcs-express-checkout-button-content">
+										<span class="fkwcs-express-checkout-button-label"></span>
+										<img src="" class="fkwcs-express-checkout-button-icon">
+									</div>
+									<div class="fkwcs-express-checkout-button-overlay"></div>
+									<div class="fkwcs-express-checkout-button-border"></div>
+								</div>
+							</button>
+							<button lang="auto" class="fkwcs-payment-request-custom-button-render fkwcs_express_checkout_button fkwcs-express-checkout-button large" role="button" type="submit" style="height: 40px;">
+								<div class="fkwcs-express-checkout-button-inner" tabindex="-1">
+									<div class="fkwcs-express-checkout-button-shines">
+										<div class="fkwcs-express-checkout-button-shine fkwcs-express-checkout-button-shine--scroll"></div>
+										<div class="fkwcs-express-checkout-button-shine fkwcs-express-checkout-button-shine--hover"></div>
+									</div>
+									<div class="fkwcs-express-checkout-button-content">
+										<span class="fkwcs-express-checkout-button-label"></span>
+										<img src="" class="fkwcs-express-checkout-button-icon">
+									</div>
+									<div class="fkwcs-express-checkout-button-overlay"></div>
+									<div class="fkwcs-express-checkout-button-border"></div>
+								</div>
+							</button>
+						</div>
+					</div>
+				</fieldset>
+				<fieldset>
+					<div class="fkwcs_test_visibility">
+						<button type="button" class="fkwcs_test_visibility button-primary"><?php esc_html_e( 'Test Visibility' ) ?></button>
+					</div>
+					<div class="fkwcs_express_checkout_connection_div">
+						<div class="fkwcs-btn-type-info-wrapper" id="is_apple_pay_available">
+							<span class="fkwcs_btn_connection">&#10060;</span>
+							<p class="fkwcs_not_supported"><?php esc_html_e( 'Apple Pay is not supported on this browser. ', 'funnelkit-stripe-woo-payment-gateway' ) ?><?php echo wp_kses_post( $learn_more ); ?></p>
+							<p class="fkwcs_is_supported"><?php esc_html_e( 'Apple Pay is supported on this browser. ', 'funnelkit-stripe-woo-payment-gateway' ) ?><?php echo wp_kses_post( $learn_more ); ?></p>
+						</div>
+						<div class="fkwcs-btn-type-info-wrapper" id="is_google_pay_available">
+							<span class="fkwcs_btn_connection">&#10060;</span>
+							<p class="fkwcs_not_supported"><?php esc_html_e( 'Google Pay is not  supported on this browser. ', 'funnelkit-stripe-woo-payment-gateway' ) ?><?php echo wp_kses_post( $learn_more ); ?></p>
+							<p class="fkwcs_is_supported"><?php esc_html_e( 'Google Pay is supported on this browser. ', 'funnelkit-stripe-woo-payment-gateway' ) ?><?php echo wp_kses_post( $learn_more ); ?></p>
+						</div>
+						<span class="spinner"></span>
+					</div>
+				</fieldset>
+			</td>
+		</tr>
 		<?php
 		do_action( 'fkwcs_after_express_checkout_preview' );
 	}
@@ -1292,14 +1315,14 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		do_action( 'fkwcs_before_connected_with_stripe' );
 
 		?>
-        <tr valign="top">
-            <th scope="row">
-                <label><?php echo esc_html( $value['title'] ); ?></label>
-            </th>
-            <td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
-                <fieldset>
-                    <div class="account_status" data-account-connect="<?php echo 'no' === $this->get_api_option( 'fkwcs_auto_connect' ) ? 'no' : 'yes' ?>">
-                        <div>
+		<tr valign="top">
+			<th scope="row">
+				<label><?php echo esc_html( $value['title'] ); ?></label>
+			</th>
+			<td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
+				<fieldset>
+					<div class="account_status" data-account-connect="<?php echo 'no' === $this->get_api_option( 'fkwcs_auto_connect' ) ? 'no' : 'yes' ?>">
+						<div>
 							<?php
 							if ( 'no' === $this->get_api_option( 'fkwcs_auto_connect' ) ) {
 								/* translators: %1$1s %2$2s %3$3s: HTML Markup */
@@ -1316,8 +1339,8 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 								echo '';
 							}
 							?>
-                        </div>
-                        <div>
+						</div>
+						<div>
 							<?php
 							echo '<a href="javascript:void(0);" id="fkwcs_disconnect_acc">';
 							esc_html_e( 'Disconnect &amp; connect other account?', 'funnelkit-stripe-woo-payment-gateway' );
@@ -1329,11 +1352,11 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 								}
 							}
 							?>
-                        </div>
-                    </div>
-                </fieldset>
-            </td>
-        </tr>
+						</div>
+					</div>
+				</fieldset>
+			</td>
+		</tr>
 		<?php
 
 		/**
@@ -1535,11 +1558,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	 * @return void
 	 */
 	public function init_notices() {
-
-		// If user has permissions.
-		if ( ! current_user_can( 'manage_options' ) ) {
-			add_action( 'admin_notices', [ $this, 'insufficient_permission' ] );
-
+		if ( false === current_user_can( 'manage_woocommerce' ) ) {
 			return;
 		}
 
@@ -1567,6 +1586,10 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		$gateway_settings = Helper::get_gateway_settings();
 		if ( $this->is_page( 'wc-settings', 'checkout', 'fkwcs_express_checkout' ) && ! empty( $this->get_api_option( 'fkwcs_secret_key' ) ) && 'yes' === $gateway_settings['express_checkout_enabled'] && is_ssl() && null === get_option( 'fkwcs_apple_pay_domain_is_verified', null ) && ! $this->is_notice_dismissed( 'fkwcs_apple_pay' ) ) {
 			add_action( 'admin_notices', [ $this, 'apple_pay_verification_failed' ] );
+		}
+
+		if ( $this->is_express_payments_page() && ! empty( $this->get_api_option( 'fkwcs_secret_key' ) ) && ('yes' === $gateway_settings['express_checkout_enabled'] || 'yes' === WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_apple_pay']->enabled || 'yes' === WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_google_pay']->enabled ) ) {
+			add_action( 'admin_notices', [ $this, 'custom_stripe_checkout_country_notice' ] );
 		}
 		global $fk_block_notice;
 		if ( empty( $fk_block_notice ) && $this->is_stripe_connected() && class_exists( '\Automattic\WooCommerce\Blocks\BlockTypes\ClassicShortcode' ) && $this->_should_display_block_incompatible_notice() && ! $this->is_notice_dismissed( 'wc_block_incompat' ) ) {
@@ -1616,15 +1639,6 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		} else {
 			return false;
 		}
-	}
-
-	/**
-	 * In-sufficient permissions notice text
-	 *
-	 * @return void
-	 */
-	public function insufficient_permission() {
-		echo wp_kses_post( '<div class="notice notice-error is-dismissible"><p>' . __( 'Error: The current user does not have sufficient permissions to perform this action. Please reload the page and try again.', 'funnelkit-stripe-woo-payment-gateway' ) . '</p></div>' );
 	}
 
 	/**
@@ -1703,19 +1717,19 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			$tooltip_html = wc_help_tip( $tooltip_html );
 		}
 		?>
-        <tr valign="top">
-            <th scope="row">
-                <label for="<?php echo esc_attr( $value['id'] ); ?>"><?php echo esc_html( $value['title'] ); ?><?php echo wp_kses_post( $tooltip_html ); ?></label>
-            </th>
-            <td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
-                <fieldset>
-                    <strong><?php echo esc_url( Helper::get_webhook_url() ); //phpcs:ignore WordPress.Security.EscapeOutput?></strong>
-                </fieldset>
-                <p class="description">
+		<tr valign="top">
+			<th scope="row">
+				<label for="<?php echo esc_attr( $value['id'] ); ?>"><?php echo esc_html( $value['title'] ); ?><?php echo wp_kses_post( $tooltip_html ); ?></label>
+			</th>
+			<td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
+				<fieldset>
+					<strong><?php echo esc_url( Helper::get_webhook_url() ); //phpcs:ignore WordPress.Security.EscapeOutput?></strong>
+				</fieldset>
+				<p class="description">
 					<?php echo wp_kses_post( $value['desc'] ); ?>
-                </p>
-            </td>
-        </tr>
+				</p>
+			</td>
+		</tr>
 		<?php
 	}
 
@@ -1729,21 +1743,21 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	public function wc_fkwcs_connection_test( $value ) {
 		$tooltip_html = '';
 		?>
-        <tr valign="top">
-            <th scope="row">
-                <label for="<?php echo esc_attr( $value['id'] ); ?>"><?php echo esc_html( $value['title'] ); ?><?php echo wp_kses_post( $tooltip_html ); ?></label>
-            </th>
-            <td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
-                <fieldset>
-                    <a id="fkwcs_test_connection" class="button wc_fkwcs_create_webhook_button" href="javascript:void(0)">
+		<tr valign="top">
+			<th scope="row">
+				<label for="<?php echo esc_attr( $value['id'] ); ?>"><?php echo esc_html( $value['title'] ); ?><?php echo wp_kses_post( $tooltip_html ); ?></label>
+			</th>
+			<td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
+				<fieldset>
+					<a id="fkwcs_test_connection" class="button wc_fkwcs_create_webhook_button" href="javascript:void(0)">
 						<?php esc_html_e( 'Test Connection', 'funnelkit-stripe-woo-payment-gateway' ) ?>
-                    </a>
-                </fieldset>
-                <p class="description">
+					</a>
+				</fieldset>
+				<p class="description">
 					<?php echo wp_kses_post( $value['desc'] ); ?>
-                </p>
-            </td>
-        </tr>
+				</p>
+			</td>
+		</tr>
 		<?php
 	}
 
@@ -1757,25 +1771,25 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	public function wc_fkwcs_apple_pay_domain( $value ) {
 		$tooltip_html = '';
 		?>
-        <table class="form-table">
-            <tbody>
-            <tr valign="top">
-                <th scope="row">
-                    <label for="<?php echo esc_attr( $value['id'] ); ?>"><?php echo esc_html( $value['title'] ); ?><?php echo wp_kses_post( $tooltip_html ); ?></label>
-                </th>
-                <td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
-                    <fieldset>
-                        <a class="button fkwcs_apple_pay_domain_verification" href="javascript:void(0)">
-                            <span><?php esc_html_e( 'Re-verify Domain', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
-                        </a>
-                    </fieldset>
-                    <p class="description">
+		<table class="form-table">
+			<tbody>
+			<tr valign="top">
+				<th scope="row">
+					<label for="<?php echo esc_attr( $value['id'] ); ?>"><?php echo esc_html( $value['title'] ); ?><?php echo wp_kses_post( $tooltip_html ); ?></label>
+				</th>
+				<td class="form-wc form-wc-<?php echo esc_attr( $value['class'] ); ?>">
+					<fieldset>
+						<a class="button fkwcs_apple_pay_domain_verification" href="javascript:void(0)">
+							<span><?php esc_html_e( 'Re-verify Domain', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
+						</a>
+					</fieldset>
+					<p class="description">
 						<?php echo wp_kses_post( $value['desc'] ); ?>
-                    </p>
-                </td>
-            </tr>
-            </tbody>
-        </table>
+					</p>
+				</td>
+			</tr>
+			</tbody>
+		</table>
 		<?php
 	}
 
@@ -1791,6 +1805,8 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		foreach ( $this->options_keys as $key => $value ) {
 			delete_option( $key );
 		}
+		delete_option( 'fkwcs_stripe_account_settings' );
+
 
 		wp_send_json_success( [ 'message' => __( 'Stripe keys are reset successfully.', 'funnelkit-stripe-woo-payment-gateway' ) ] );
 	}
@@ -1872,8 +1888,10 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		$meta = get_user_meta( $user->ID, '_fkwcs_notices', true );
 		if ( empty( $meta ) ) {
 			$meta = [ $notice_id ];
-		} else {
+		} elseif(is_array($meta)) {
 			$meta = array_push( $meta, $notice_id );
+		}else{
+            $meta = [ $notice_id ];
 		}
 
 		$result = update_user_meta( $user->ID, '_fkwcs_notices', $meta ); //phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.user_meta_update_user_meta
@@ -1922,7 +1940,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 					delete_option( 'fkwcs_' . $mode . '_webhook_secret' );
 				} else {
 					$params   = [ 'secret_key' => $secret_key, 'webhook_secret' => $webhook_secret, 'webhook_id' => $webhook_data['id'] ];
-                    $response = $this->delete_webhook( $params );
+					$response = $this->delete_webhook( $params );
 
 					if ( ! empty( $response ) && true === $response['deleted'] ) {
 						delete_option( $option_name );
@@ -2406,18 +2424,18 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 		ob_start();
 		?>
-        <tr valign="top">
-            <th scope="row" class="titledesc">
-                <label for="<?php echo esc_attr( $field_key ); ?>"><?php echo wp_kses_post( $data['title'] ); ?><?php echo $instance->get_tooltip_html( $data );//phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped  ?></label>
-            </th>
-            <td class="forminp">
-                <fieldset>
-                    <input type='radio' class="<?php echo esc_attr( $data['class'] ); ?>" name="<?php echo esc_attr( $field_key ); ?>" id="<?php echo esc_attr( $field_key ); ?>" style="<?php echo esc_attr( $data['css'] ); ?>" value="<?php echo esc_attr( $instance->get_option( $key ) ); ?>" placeholder="<?php echo esc_attr( $data['placeholder'] ); ?>" <?php disabled( $data['disabled'], true ); ?> <?php echo $instance->get_custom_attribute_html( $data ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped  ?> />
-                    <span class="screen-reader-text1"><span><?php echo wp_kses_post( $data['label'] ); ?></span></span>
+		<tr valign="top">
+			<th scope="row" class="titledesc">
+				<label for="<?php echo esc_attr( $field_key ); ?>"><?php echo wp_kses_post( $data['title'] ); ?><?php echo $instance->get_tooltip_html( $data );//phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped  ?></label>
+			</th>
+			<td class="forminp">
+				<fieldset>
+					<input type='radio' class="<?php echo esc_attr( $data['class'] ); ?>" name="<?php echo esc_attr( $field_key ); ?>" id="<?php echo esc_attr( $field_key ); ?>" style="<?php echo esc_attr( $data['css'] ); ?>" value="<?php echo esc_attr( $instance->get_option( $key ) ); ?>" placeholder="<?php echo esc_attr( $data['placeholder'] ); ?>" <?php disabled( $data['disabled'], true ); ?> <?php echo $instance->get_custom_attribute_html( $data ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped  ?> />
+					<span class="screen-reader-text1"><span><?php echo wp_kses_post( $data['label'] ); ?></span></span>
 					<?php echo $instance->get_description_html( $data ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped  ?>
-                </fieldset>
-            </td>
-        </tr>
+				</fieldset>
+			</td>
+		</tr>
 		<?php
 
 		return ob_get_clean();
@@ -2479,10 +2497,13 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		}
 		$user = wp_get_current_user();
 		$meta = get_user_meta( $user->ID, '_fkwcs_notices', true );
-		if ( empty( $meta ) ) {
+
+        if ( empty( $meta ) ) {
 			$meta = [ 'wc_block_incompat' ];
-		} else {
+		} elseif(is_array($meta)) {
 			$meta = array_push( $meta, 'wc_block_incompat' );
+		}else{
+            $meta = [ 'wc_block_incompat' ];
 		}
 
 		update_user_meta( $user->ID, '_fkwcs_notices', $meta ); //phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.user_meta_update_user_meta
@@ -2509,7 +2530,6 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 				$account                                           = $args['data'];
 				$this->account_data['statement_descriptor_prefix'] = $account->settings->card_payments->statement_descriptor_prefix;
 				$this->account_data['statement_descriptor_full']   = $account->settings->payments->statement_descriptor;
-				$stripe_account_settings                           = get_option( 'fkwcs_stripe_account_settings', [] );
 
 				if ( $this->options_keys['fkwcs_stripe_statement_descriptor_full'] === '' && $this->account_data['statement_descriptor_full'] !== '' ) {
 
@@ -2522,13 +2542,12 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 					$this->options_keys['fkwcs_stripe_statement_descriptor_prefix'] = $this->account_data['statement_descriptor_prefix'];
 				}
 
-				if ( empty( $stripe_account_settings ) ) {
-					$stripe_account_settings = array(
-						'country'          => $account->country,
-						'default_currency' => $account->default_currency,
-					);
-					update_option( 'fkwcs_stripe_account_settings', $stripe_account_settings );
-				}
+				$stripe_account_settings = array(
+					'country'          => $account->country,
+					'default_currency' => $account->default_currency,
+				);
+				update_option( 'fkwcs_stripe_account_settings', $stripe_account_settings );
+
 			}
 		}
 	}
@@ -2536,63 +2555,63 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	public function generate_wc_fkwcs_stripe_statement_preview_html( $value ) {
 
 		?>
-        <tr valign="top">
-            <th scope="row" class="titledesc">
-            </th>
-            <td class="forminp">
-                <div class="fkwcs-cards-wrap">
+		<tr valign="top">
+			<th scope="row" class="titledesc">
+			</th>
+			<td class="forminp">
+				<div class="fkwcs-cards-wrap">
 
-                    <div class="fkwcs-card" id="fkwcs_card_custom_descriptor">
-                        <div class="fkwcs-card-header">
-                            <svg width="24" height="24" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="credit card icon" aria-hidden="true" focusable="false">
-                                <mask id="mask-cc" maskUnits="userSpaceOnUse" x="1" y="2" width="14" height="12" style="mask-type: alpha;">
-                                    <path fill-rule="evenodd" clip-rule="evenodd" d="M13.3647 2.66669H2.69808C1.95808 2.66669 1.37141 3.26002 1.37141 4.00002L1.36475 12C1.36475 12.74 1.95808 13.3334 2.69808 13.3334H13.3647C14.1047 13.3334 14.6981 12.74 14.6981 12V4.00002C14.6981 3.26002 14.1047 2.66669 13.3647 2.66669ZM13.3647 12H2.69808V8.00002H13.3647V12ZM2.69808 5.33335H13.3647V4.00002H2.69808V5.33335Z" fill="white"></path>
-                                </mask>
-                                <g mask="url(#mask-cc)">
-                                    <rect x="0.0314941" width="16" height="16" fill="#1E1E1E"></rect>
-                                </g>
-                            </svg>
-                            <div class="fkwcs-card-subheading"><?php esc_html_e( 'Cards & Express Checkouts', 'funnelkit-stripe-woo-payment-gateway' ); ?></div>
-                        </div>
-                        <div class="fkwcs-card-transactions">
-                            <div class="fkwcs-card-transactions-header">
-                                <span class="fkwcs-card-transaction"><?php esc_html_e( 'Transaction', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
-                                <span class="fkwcs-card-amount"><?php esc_html_e( 'Amount', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
-                            </div>
-                            <div class="fkwcs-card-transactions-data">
-                                <a href="javascript:void(0)" id="fkwcs_custom_statement_desc_val" class="fkwcs-transaction-id"><?php echo esc_html( $value['customdata']['statement_descriptor_prefix'] ) . '* '; ?></a>
-                                <span class="fkwcs-amount-figure">$452.25</span>
-                            </div>
-                        </div>
-                    </div>
+					<div class="fkwcs-card" id="fkwcs_card_custom_descriptor">
+						<div class="fkwcs-card-header">
+							<svg width="24" height="24" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="credit card icon" aria-hidden="true" focusable="false">
+								<mask id="mask-cc" maskUnits="userSpaceOnUse" x="1" y="2" width="14" height="12" style="mask-type: alpha;">
+									<path fill-rule="evenodd" clip-rule="evenodd" d="M13.3647 2.66669H2.69808C1.95808 2.66669 1.37141 3.26002 1.37141 4.00002L1.36475 12C1.36475 12.74 1.95808 13.3334 2.69808 13.3334H13.3647C14.1047 13.3334 14.6981 12.74 14.6981 12V4.00002C14.6981 3.26002 14.1047 2.66669 13.3647 2.66669ZM13.3647 12H2.69808V8.00002H13.3647V12ZM2.69808 5.33335H13.3647V4.00002H2.69808V5.33335Z" fill="white"></path>
+								</mask>
+								<g mask="url(#mask-cc)">
+									<rect x="0.0314941" width="16" height="16" fill="#1E1E1E"></rect>
+								</g>
+							</svg>
+							<div class="fkwcs-card-subheading"><?php esc_html_e( 'Cards & Express Checkouts', 'funnelkit-stripe-woo-payment-gateway' ); ?></div>
+						</div>
+						<div class="fkwcs-card-transactions">
+							<div class="fkwcs-card-transactions-header">
+								<span class="fkwcs-card-transaction"><?php esc_html_e( 'Transaction', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
+								<span class="fkwcs-card-amount"><?php esc_html_e( 'Amount', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
+							</div>
+							<div class="fkwcs-card-transactions-data">
+								<a href="javascript:void(0)" id="fkwcs_custom_statement_desc_val" class="fkwcs-transaction-id"><?php echo esc_html( $value['customdata']['statement_descriptor_prefix'] ) . '* '; ?></a>
+								<span class="fkwcs-amount-figure">$452.25</span>
+							</div>
+						</div>
+					</div>
 
-                    <div class="fkwcs-card" id="fkwcs_card_full_descriptor">
-                        <div class="fkwcs-card-header">
-                            <svg width="24" height="24" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="bank icon" aria-hidden="true" focusable="false">
-                                <mask id="mask-bank" maskUnits="userSpaceOnUse" x="1" y="1" width="14" height="14" style="mask-type: alpha;">
-                                    <path fill-rule="evenodd" clip-rule="evenodd" d="M1.69812 4.66665L8.03145 1.33331L14.3648 4.66665V5.99998H1.69812V4.66665ZM8.03145 2.83998L11.5048 4.66665H4.55812L8.03145 2.83998ZM3.36479 7.33331H4.69812V12H3.36479V7.33331ZM8.69812 7.33331V12H7.36479V7.33331H8.69812ZM14.3648 14.6666V13.3333H1.69812V14.6666H14.3648ZM11.3648 7.33331H12.6981V12H11.3648V7.33331Z" fill="white"></path>
-                                </mask>
-                                <g mask="url(#mask-bank)">
-                                    <rect x="0.0314941" width="16" height="16" fill="#1E1E1E"></rect>
-                                </g>
-                            </svg>
-                            <div class="fkwcs-card-subheading"><?php esc_html_e( 'All payment methods', 'funnelkit-stripe-woo-payment-gateway' ); ?></div>
-                        </div>
-                        <div class="fkwcs-card-transactions">
-                            <div class="fkwcs-card-transactions-header">
-                                <span class="fkwcs-card-transaction"><?php esc_html_e( 'Transaction', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
-                                <span class="fkwcs-card-amount"><?php esc_html_e( 'Amount', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
-                            </div>
-                            <div class="fkwcs-card-transactions-data">
-                                <a href="javascript:void(0)" class="fkwcs-transaction-id"><?php echo esc_html( $value['customdata']['statement_descriptor_full'] ); ?></a>
-                                <span class="fkwcs-amount-figure">$452.25</span>
-                            </div>
-                        </div>
-                    </div>
+					<div class="fkwcs-card" id="fkwcs_card_full_descriptor">
+						<div class="fkwcs-card-header">
+							<svg width="24" height="24" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="bank icon" aria-hidden="true" focusable="false">
+								<mask id="mask-bank" maskUnits="userSpaceOnUse" x="1" y="1" width="14" height="14" style="mask-type: alpha;">
+									<path fill-rule="evenodd" clip-rule="evenodd" d="M1.69812 4.66665L8.03145 1.33331L14.3648 4.66665V5.99998H1.69812V4.66665ZM8.03145 2.83998L11.5048 4.66665H4.55812L8.03145 2.83998ZM3.36479 7.33331H4.69812V12H3.36479V7.33331ZM8.69812 7.33331V12H7.36479V7.33331H8.69812ZM14.3648 14.6666V13.3333H1.69812V14.6666H14.3648ZM11.3648 7.33331H12.6981V12H11.3648V7.33331Z" fill="white"></path>
+								</mask>
+								<g mask="url(#mask-bank)">
+									<rect x="0.0314941" width="16" height="16" fill="#1E1E1E"></rect>
+								</g>
+							</svg>
+							<div class="fkwcs-card-subheading"><?php esc_html_e( 'All payment methods', 'funnelkit-stripe-woo-payment-gateway' ); ?></div>
+						</div>
+						<div class="fkwcs-card-transactions">
+							<div class="fkwcs-card-transactions-header">
+								<span class="fkwcs-card-transaction"><?php esc_html_e( 'Transaction', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
+								<span class="fkwcs-card-amount"><?php esc_html_e( 'Amount', 'funnelkit-stripe-woo-payment-gateway' ); ?></span>
+							</div>
+							<div class="fkwcs-card-transactions-data">
+								<a href="javascript:void(0)" class="fkwcs-transaction-id"><?php echo esc_html( $value['customdata']['statement_descriptor_full'] ); ?></a>
+								<span class="fkwcs-amount-figure">$452.25</span>
+							</div>
+						</div>
+					</div>
 
-                </div>
-            </td>
-        </tr>
+				</div>
+			</td>
+		</tr>
 
 		<?php
 	}
@@ -2601,8 +2620,8 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	public function fkwcs_admin_fields_start_html_field( $html, $key, $data, $instance ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		ob_start();
 		?>
-        </table>
-        <table class="form-table <?php echo esc_attr( $data['class'] ) ?>">
+		</table>
+		<table class="form-table <?php echo esc_attr( $data['class'] ) ?>">
 		<?php
 		return ob_get_clean();
 	}
@@ -2610,28 +2629,352 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	public function fkwcs_admin_fields_end_html_field( $html, $key, $data, $instance ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		ob_start();
 		?>
-        </table>
-        <table class="form-table">
+		</table>
+		<table class="form-table">
 		<?php
 		return ob_get_clean();
 	}
 
+	/**
+	 * Sync Stripe Tax keys if the user is an administrator and on the correct page.
+	 *
+	 * @return void
+	 */
+	public function maybe_sync_stripe_tax_keys() {
+
+
+		// Check if the user is an administrator, on the correct page, and the fkwcs_sync_stripe_tax parameter exists
+		if ( is_admin() && current_user_can( 'manage_options' ) && isset( $_GET['page'], $_GET['tab'], $_GET['fkwcs_sync_stripe_tax'] ) && sanitize_text_field( $_GET['page'] ) === 'wc-settings' && sanitize_text_field( $_GET['tab'] ) === 'fkwcs_api_settings' && $_GET['fkwcs_sync_stripe_tax'] === 'true' ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+			$option_key = 'fkwcs_secret_key';
+			$secret_key = get_option( $option_key );
+
+			if ( $secret_key ) {
+				global $wpdb;
+
+				// Define the table name
+				$table_name = $wpdb->prefix . 'stripe_tax_for_wc_options';
+
+				// Prepare the data to insert/update for the 'live_mode_secret_key'
+				$secret_key_data = array(
+					'option_name'  => 'live_mode_secret_key',
+					'option_value' => $secret_key
+				);
+
+				// Prepare the data to insert/update for the 'live_mode_enabled'
+				$live_mode_enabled_data = array(
+					'option_name'  => 'live_mode_enabled',
+					'option_value' => '1'
+				);
+
+				// Sanitize table name
+				$table_name = esc_sql( $table_name );
+
+				// Check if 'live_mode_secret_key' entry already exists
+				$existing_secret_key_entry = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $table_name WHERE option_name = %s", 'live_mode_secret_key' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+				if ( $existing_secret_key_entry ) {
+					// Update the 'live_mode_secret_key' entry
+					$result = $wpdb->update( $table_name, $secret_key_data, array( 'option_name' => 'live_mode_secret_key' ) );
+
+					if ( $result !== false ) {
+						add_action( 'admin_notices', function () {
+							echo "<div class='notice notice-success'><p>" . esc_html__( 'Stripe Tax keys updated successfully.', 'funnelkit-stripe-woo-payment-gateway' ) . "</p></div>";
+						} );
+					}
+				} else {
+					// Insert a new 'live_mode_secret_key' entry
+					$result = $wpdb->insert( $table_name, $secret_key_data );
+
+					if ( $result ) {
+						add_action( 'admin_notices', function () {
+							echo "<div class='notice notice-success'><p>" . esc_html__( 'Stripe Tax keys inserted successfully.', 'funnelkit-stripe-woo-payment-gateway' ) . "</p></div>";
+						} );
+					}
+				}
+
+				// Check if 'live_mode_enabled' entry already exists
+				$existing_live_mode_enabled_entry = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $table_name WHERE option_name = %s", 'live_mode_enabled' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+				if ( $existing_live_mode_enabled_entry ) {
+					// Update the 'live_mode_enabled' entry
+					$wpdb->update( $table_name, $live_mode_enabled_data, array( 'option_name' => 'live_mode_enabled' ) );
+
+				} else {
+					// Insert a new 'live_mode_enabled' entry
+					$wpdb->insert( $table_name, $live_mode_enabled_data );
+
+				}
+			} else {
+				add_action( 'admin_notices', function () {
+					echo "<div class='notice notice-error'><p>Option key 'fkwcs_secret_key' not found!</p></div>";
+				} );
+			}
+		}
+
+	}
+
+	public function fkwcs_capture_terminal_payment( $request ) {
+		try {
+			$intent_id = $request['payment_intent_id'];
+			$order_id  = $request['order_id'];
+			$order     = wc_get_order( $order_id );
+
+			// Check that order exists before capturing payment.
+			if ( ! $order ) {
+				return new \WP_Error( 'wc_stripe_missing_order', __( 'Order not found', 'fkwcs-stripe-woo-payment-gateway' ), [ 'status' => 404 ] );
+			}
+
+			// Do not process refunded orders.
+			if ( 0 < $order->get_total_refunded() ) {
+				return new \WP_Error( 'wc_stripe_refunded_order_uncapturable', __( 'Payment cannot be captured for partially or fully refunded orders.', 'fkwcs-stripe-woo-payment-gateway' ), [ 'status' => 400 ] );
+			}
+
+			if ( 'live' === Helper::get_mode() ) {
+				$client_secret = get_option( 'fkwcs_secret_key' );
+			} else {
+				$client_secret = get_option( 'fkwcs_test_secret_key' );
+			}
+
+			if ( empty( $client_secret ) ) {
+				return;
+			}
+
+
+			$client   = Helper::get_new_client( $client_secret );
+			$response = $client->payment_intents( 'retrieve', [ $intent_id ] );
+			$intent   = $response['success'] ? $response['data'] : false;
+			if ( false === $intent ) {
+				return new \WP_Error( 'stripe_error', __( 'No Payment Intent found.', 'fkwcs-stripe-woo-payment-gateway' ) );
+			}
+
+
+			// Ensure that intent can be captured.
+			if ( ! in_array( $intent->status, [ 'processing', 'requires_capture' ], true ) ) {
+				return new \WP_Error( 'wc_stripe_payment_uncapturable', __( 'The payment cannot be captured', 'fkwcs-stripe-woo-payment-gateway' ), [ 'status' => 409 ] );
+			}
+
+			// Update order with payment method and intent details.
+			$order->set_payment_method( 'fkwcs_stripe' );
+			$order->set_payment_method_title( __( 'WooCommerce Stripe In-Person Payments', 'fkwcs-stripe-woo-payment-gateway' ) );
+			$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe'];
+			$gateway->save_intent_to_order( $order, $intent );
+
+
+			$result = $client->payment_intents( 'capture', [ $intent_id ] );
+			if ( false === $result['success'] ) {
+				wp_send_json_error( array( 'message' => 'Unable to capture charge.' ) );
+
+				return new \WP_Error( 'stripe_error', __( 'No Payment Intent found.', 'fkwcs-stripe-woo-payment-gateway' ) );
+
+			}
+
+
+			// Check for failure to capture payment.
+			if ( empty( $result ) || empty( $result['data'] ) || 'succeeded' !== $result['data']->status ) {
+				return new \WP_Error( 'wc_stripe_capture_error', sprintf( // translators: %s: the error message.
+					__( 'Payment capture failed to complete with the following message: %s', 'woocommerce-gateway-stripe' ), Helper::get_localized_error_message( $result ) ?? __( 'Unknown error', 'woocommerce-gateway-stripe' ) ), [ 'status' => 502 ] );
+			}
+
+			$gateway->process_final_order( end( $result['data']->charges->data ), $order_id );
+
+			return rest_ensure_response( [
+				'status' => $result['data']->status,
+				'id'     => $result['data']->id,
+			] );
+		} catch ( \Exception|\Error $e ) {
+			return rest_ensure_response( new \WP_Error( 'stripe_error', $e->getMessage() ) );
+		}
+	}
+
+// Add a custom admin notice if the WooCommerce store country is not supported by Stripe
+	function custom_stripe_checkout_country_notice() {
+
+
+		try {// List of supported Stripe countries
+			$supported_countries = array(
+				'AE',
+				'AT',
+				'AU',
+				'BE',
+				'BG',
+				'BR',
+				'CA',
+				'CH',
+				'CI',
+				'CR',
+				'CY',
+				'CZ',
+				'DE',
+				'DK',
+				'DO',
+				'EE',
+				'ES',
+				'FI',
+				'FR',
+				'GB',
+				'GI',
+				'GR',
+				'GT',
+				'HK',
+				'HR',
+				'HU',
+				'ID',
+				'IE',
+				'IN',
+				'IT',
+				'JP',
+				'LI',
+				'LT',
+				'LU',
+				'LV',
+				'MT',
+				'MX',
+				'MY',
+				'NL',
+				'NO',
+				'NZ',
+				'PE',
+				'PH',
+				'PL',
+				'PT',
+				'RO',
+				'SE',
+				'SG',
+				'SI',
+				'SK',
+				'SN',
+				'TH',
+				'TT',
+				'US',
+				'UY'
+			);// Get the store country code
+			$store_country       = substr( get_option( 'woocommerce_default_country' ), 0, 2 );// Check if the store's country is not supported by Stripe for Express Checkout
+			if ( ! in_array( $store_country, $supported_countries, true ) ) {
+				// Initialize the WC_Countries class
+				$wc_countries = new \WC_Countries();
+
+				// Get the full country name
+				$country_name = isset( $wc_countries->countries[ $store_country ] ) ? $wc_countries->countries[ $store_country ] : $store_country;
+
+				// Show an admin notice with dynamic country name and "Learn More" link
+				echo '<div class="notice notice-warning">
+                    <p><strong>' . esc_html__( 'FunnelKit Stripe Notice: ', 'fkwcs-stripe-woo-payment-gateway' ) . '</strong>' . sprintf( esc_html__( 'Your Stripe account address is in %s. Express Checkout is unfortunately not supported in %s. %s', 'fkwcs-stripe-woo-payment-gateway' ), esc_html( $country_name ), esc_html( $country_name ), '<a href="https://funnelkit.com/docs/stripe-gateway-for-woocommerce/faq/stripe-express-checkout-supported-countries/" target="_blank">' . esc_html__( 'Learn More', 'fkwcs-stripe-woo-payment-gateway' ) . '</a>' ) . '</p>
+                  </div>';
+			}
+		} catch ( \Exception|\Error $e ) {
+			Helper::log( 'Error in custom_stripe_checkout_country_notice: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Checks if the current page is an express payments page.
+	 *
+	 * This method iterates through a predefined list of express payment page identifiers
+	 * and checks if the current page matches any of them.
+	 *
+	 * @return bool True if the current page is an express payments page, false otherwise.
+	 */
+	public function is_express_payments_page() {
+		$pages = [
+			'fkwcs_express_checkout',
+			'fkwcs_stripe_google_pay',
+			'fkwcs_stripe_apple_pay',
+		];
+
+		foreach ( $pages as $page ) {
+			if ( $this->is_page( 'wc-settings', 'checkout', $page ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Adds a custom admin footer script to dynamically generate navigation links.
+	 *
+	 * This method creates a `<ul>` element with navigation links based on the `$navigation` property.
+	 * It appends the generated navigation menu to the admin page, ensuring the current section is highlighted.
+	 *
+	 * @return void
+	 */
+	public function add_custom_admin_footer_script() {
+
+		$navigation = $this->sub_links( [] );  // This is directly using the class property
+		$current_section = isset( $_GET['section'] ) ? sanitize_text_field( $_GET['section'] ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if(! in_array($current_section, array_keys($navigation), true)) {
+			return;
+		}
+		$navigation_json = wp_json_encode( $navigation ); ?>
+		<script type="text/javascript">
+          document.addEventListener('DOMContentLoaded', function() {
+          // Check if the <ul> already exists
+          try{
+          if (!document.querySelector('.subsubsub')) {
+              // Create the <ul> element
+              const ul = document.createElement('ul');
+              ul.classList.add('subsubsub');
+
+              const settings = <?php echo ($navigation_json); //phpcs:ignore  ?>;
+
+              const urlParams = new URLSearchParams(window.location.search);
+              const currentSection = urlParams.get('section');  // Get the section from the URL
+              const adminURL = '<?php echo admin_url('admin.php?page=wc-settings&tab=checkout&section='); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>';
+              let matched = false;
+
+              Object.entries(settings).forEach(([section, label], index, array) => {
+                  const li = document.createElement('li');
+                  const a = document.createElement('a');
+                  a.href = adminURL + section;
+                  a.textContent = label;
+
+                  // Mark the link as 'current' if the section matches the URL's 'section' param
+                  if (section === currentSection) {
+                      a.classList.add('current');  // Add the 'current' class to the active item
+                      matched = true;  // Mark that we found a match
+                  }
+
+                  // Append the <a> inside <li> and the <li> to <ul>
+                  li.appendChild(a);
+                  ul.appendChild(li);
+
+                  // Add separator unless it's the last item
+                  if (index < array.length - 1) {
+                      const separator = document.createTextNode(' | ');
+                      ul.appendChild(separator);
+                  }
+              });
+
+              // If no match is found, mark the first item as 'current'
+              if (!matched) {
+                  const firstLink = ul.querySelector('a');
+                  if (firstLink) {
+                      firstLink.classList.add('current');
+                  }
+              }
+
+              // Find the h1 element with the class "screen-reader-text"
+              const targetElement = document.querySelector('h1.screen-reader-text');
+
+              // Append the <ul> after the <h1> element if the target element is found
+              if (targetElement) {
+                  targetElement.parentNode.insertBefore(ul, targetElement.nextSibling);
+
+                  // Append <br class="clear"> after the <ul> element
+                  const br = document.createElement('br');
+                  br.classList.add('clear');
+                  targetElement.parentNode.insertBefore(br, ul.nextSibling);
+              }
+          }
+		  }
+		  catch (e) {
+		  }
+		  });
+  </script>
+  <?php
+
+	}
+
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

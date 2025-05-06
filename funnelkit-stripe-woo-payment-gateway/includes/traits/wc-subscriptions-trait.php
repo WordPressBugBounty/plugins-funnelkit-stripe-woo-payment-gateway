@@ -2,6 +2,7 @@
 
 namespace FKWCS\Gateway\Stripe\Traits;
 
+use FKWCS\Gateway\Stripe;
 use FKWCS\Gateway\Stripe\Helper;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -145,7 +146,7 @@ trait WC_Subscriptions_Trait {
 			if ( is_object( $prepared_source ) && empty( $prepared_source->source ) ) {
 				if ( ! empty( $subscription ) ) {
 					/* translators: error message */
-					$subscription->update_status( 'failed', 'Reason: ' . __( 'Error: Unable to get payment method from the browser, please check for browser console error. ', 'funnelkit-stripe-woo-payment-gateway' ) );
+					$this->mark_order_failed( $subscription, __( 'Error: Unable to get payment method from the browser, please check for browser console error. ', 'funnelkit-stripe-woo-payment-gateway' ) );
 					throw new \Exception( __( 'Payment processing failed. Please retry.' ), 200 );
 				}
 
@@ -156,15 +157,9 @@ trait WC_Subscriptions_Trait {
 			 * For the change subscription payment process we do not need to create setup intent and get the return url, its for checkout only
 			 */
 			if ( false === $is_change_subs ) {
-				if ( $this instanceof \FKWCS\Gateway\Stripe\Sepa ) {
-					$intent_secret = $this->create_setup_intent( $prepared_source->source, $prepared_source->customer, $subscription, 'sepa_debit' );
-
-				} else {
-					$intent_secret = $this->create_setup_intent( $prepared_source->source, $prepared_source->customer, $subscription );
-
-				}
-
+				$intent_secret = $this->create_setup_intent( $prepared_source->source, $prepared_source->customer, $subscription );
 				if ( ! empty( $intent_secret ) ) {
+
 					$intent_data = [
 						'id'            => $intent_secret['id'],
 						'client_secret' => $intent_secret['client_secret'],
@@ -178,19 +173,21 @@ trait WC_Subscriptions_Trait {
 						'result'                    => 'success',
 						'fkwcs_redirect'            => $this->get_return_url( $subscription ),
 						'fkwcs_setup_intent_secret' => $intent_secret['client_secret'],
-					        'token_used' => $this->is_using_saved_payment_method() ? 'yes' : 'no',
+						'token_used'                => $this->is_using_saved_payment_method() ? 'yes' : 'no',
 					];
 				}
 			}
 
 			$this->save_payment_method_to_order( $subscription, $prepared_source );
-
+			delete_transient( 'fkwcs_user_tokens_' . $subscription->get_user_id() );
+			$subscription = $this->force_update_payment_method( $subscription );
 			do_action( 'fkwcs_change_subs_payment_method_success', $prepared_source->source, $prepared_source );
-
-			if ( 'automatic' === $this->capture_method ) {
-				$subscription->payment_complete();
-			} else {
-				$subscription->update_status( apply_filters( 'fkwcs_stripe_authorized_order_status', 'on-hold' ) );
+			if ( false === $is_change_subs ) {
+				if ( 'automatic' === $this->capture_method ) {
+					$subscription->payment_complete();
+				} else {
+					$subscription->update_status( apply_filters( 'fkwcs_stripe_authorized_order_status', 'on-hold' ) );
+				}
 			}
 
 			return [
@@ -202,7 +199,7 @@ trait WC_Subscriptions_Trait {
 			Helper::log( 'Payment Failed. Reason: ' . $e->getMessage() );
 			if ( false === $is_change_subs && ! empty( $subscription ) ) {
 				/* translators: error message */
-				$subscription->update_status( 'failed', 'Reason: ' . $e->getMessage() );
+				$this->mark_order_failed( $subscription, $e->getMessage() );
 			}
 		}
 	}
@@ -278,7 +275,10 @@ trait WC_Subscriptions_Trait {
 
 			// Get source from order
 			$prepared_source = $this->prepare_subscription_order_source( $renewal_order );
-
+			$subscriptions   = wcs_get_subscriptions_for_renewal_order( $renewal_order->get_id() );
+			foreach ( $subscriptions as $subscription ) {
+				$this->force_update_payment_method( $subscription );
+			}
 			if ( is_null( $prepared_source ) || ! $prepared_source->customer ) {
 				throw new \Exception( 'Failed to process renewal for order ' . $renewal_order->get_id() . '. Stripe customer id is missing in the order', 200 );
 			}
@@ -343,7 +343,8 @@ trait WC_Subscriptions_Trait {
 				do_action( 'fkwcs_process_response', $charge, $renewal_order );
 
 				/* translators: %s is the charge Id */
-				$renewal_order->update_status( 'failed', sprintf( __( 'Stripe charge awaiting authentication by user: %s.', 'funnelkit-stripe-woo-payment-gateway' ), $id ) );
+
+				$this->mark_order_failed( $renewal_order, sprintf( __( 'Stripe charge awaiting authentication by user: %s.', 'funnelkit-stripe-woo-payment-gateway' ), $id ) );
 				if ( is_callable( [ $renewal_order, 'save' ] ) ) {
 					$renewal_order->save();
 				}
@@ -357,8 +358,8 @@ trait WC_Subscriptions_Trait {
 				$renewal_order->update_status( 'pending' );
 				$renewal_order->update_meta_data( '_fkwcs_maybe_check_for_auth', 'yes' );
 				$this->save_intent_to_order( $renewal_order, $response->data );
-				$charge = end( $response->error->payment_intent->charges->data );
-				do_action( 'fkwcs_process_response', $charge, $renewal_order );
+				do_action( 'fkwcs_process_response', $this->get_latest_charge_from_intent( $response->data ), $renewal_order );
+
 				if ( is_callable( [ $renewal_order, 'save' ] ) ) {
 					$renewal_order->save();
 				}
@@ -396,8 +397,9 @@ trait WC_Subscriptions_Trait {
 			Helper::log( $e->getMessage(), 'warning' );
 
 			do_action( 'fkwcs_gateway_stripe_process_payment_error', $e, $renewal_order );
-			/* translators: error message */
-			$renewal_order->update_status( 'failed', 'Reason: ' . $e->getMessage() );
+
+			$this->mark_order_failed( $renewal_order, $e->getMessage() );
+
 			if ( ! empty( $response ) ) {
 				$charge = $this->get_latest_charge_from_intent( $response );
 				do_action( 'fkwcs_process_response', $charge, $renewal_order );
@@ -529,7 +531,7 @@ trait WC_Subscriptions_Trait {
 	 *
 	 */
 	public function add_subscription_payment_meta( $payment_meta, $subscription ) {
-		$source_id       = Helper::get_meta( $subscription, '_fkwcs_source_id' );
+		$source_id = Helper::get_meta( $subscription, '_fkwcs_source_id' );
 
 		// For BW compat will remove in future.
 		if ( empty( $source_id ) ) {
@@ -542,6 +544,24 @@ trait WC_Subscriptions_Trait {
 		}
 		$customer_key              = Helper::get_customer_key();
 		$payment_meta[ $this->id ] = [
+			'post_meta' => [
+				$customer_key      => [
+					'value' => $this->get_order_stripe_data( $customer_key, $subscription ),
+					'label' => 'Stripe Customer ID',
+				],
+				'_fkwcs_source_id' => [
+					'value' => $this->get_order_stripe_data( '_fkwcs_source_id', $subscription ),
+					'label' => 'Stripe Source ID',
+				],
+
+			],
+		];
+
+		/**
+		 * we are passing the same meta for official stripe as well to let the woocommerce subscription know that we have the same meta for that gateway
+		 * this need arises when token payment method gets into consideration instead of subscriptions
+		 */
+		$payment_meta['stripe'] = [
 			'post_meta' => [
 				$customer_key      => [
 					'value' => $this->get_order_stripe_data( $customer_key, $subscription ),
@@ -633,19 +653,48 @@ trait WC_Subscriptions_Trait {
 
 		$customer_user     = $subscription->get_customer_id();
 		$fkwcs_customer_id = Helper::get_customer_key();
+
 		// bail for other payment methods
 		if ( $subscription->get_payment_method() !== $this->id || ! $customer_user ) {
 			return $payment_method_to_display;
 		}
 
-		$stripe_source_id   = Helper::get_meta( $subscription, '_fkwcs_source_id' );
+		$other_source_IDs = Helper::get_compatibility_keys( '_fkwcs_source_id' );
+		$stripe_source_id = Helper::get_meta( $subscription, '_fkwcs_source_id' );
+		if ( empty( $stripe_source_id ) ) {
+			if ( Helper::get_meta( $subscription, $other_source_IDs[0] ) ) {
+				$stripe_source_id = Helper::get_meta( $subscription, $other_source_IDs[0] );
+
+			} elseif ( Helper::get_meta( $subscription, $other_source_IDs[1] ) ) {
+				$stripe_source_id = Helper::get_meta( $subscription, $other_source_IDs[1] );
+
+			}
+		}
+
+
 		$stripe_customer_id = Helper::get_meta( $subscription, $fkwcs_customer_id );
+		$user_id            = $subscription->get_customer_id();
+		if ( empty( $stripe_customer_id ) ) {
+			$stripe_customer_id = $this->filter_customer_id( get_user_option( '_fkwcs_customer_id', $user_id ) );
+			if ( empty( $stripe_customer_id ) ) {
+				$compatibility_keys = Helper::get_compatibility_keys( '_fkwcs_customer_id' );
+				if ( ! empty( $compatibility_keys ) ) {
+					foreach ( $compatibility_keys as $key ) {
+						$stripe_customer_id = $this->filter_customer_id( get_user_option( $key, $user_id ) );
+						if ( ! empty( $stripe_customer_id ) ) {
+							break;
+						}
+					}
+				}
+
+			}
+		}
 
 		// If we couldn't find a Stripe customer linked to the subscription, fallback to the user meta data.
 		if ( ! $stripe_customer_id || ! is_string( $stripe_customer_id ) ) {
 			$user_id            = $customer_user;
-			$stripe_customer_id = get_user_option( $fkwcs_customer_id, $user_id );
-			$stripe_source_id   = get_user_option( '_fkwcs_source_id', $user_id );
+			$stripe_customer_id = $this->filter_customer_id( get_user_option( $fkwcs_customer_id, $user_id ) );
+			$stripe_source_id   = $this->filter_customer_id( get_user_option( '_fkwcs_source_id', $user_id ) );
 		}
 
 		// If we couldn't find a Stripe customer linked to the account, fallback to the order meta data.
@@ -653,7 +702,6 @@ trait WC_Subscriptions_Trait {
 			$stripe_customer_id = Helper::get_meta( $subscription->get_parent(), $fkwcs_customer_id );
 			$stripe_source_id   = Helper::get_meta( $subscription->get_parent(), '_fkwcs_source_id' );
 		}
-
 
 		// Retrieve all possible payment methods for subscriptions.
 		$sources                   = array_merge( $this->get_payment_methods( $stripe_customer_id, 'card' ) );
@@ -713,7 +761,7 @@ trait WC_Subscriptions_Trait {
 		$charge    = end( $existing_intent->charges->data );
 		$charge_id = $charge->id;
 		/* translators: %s is the stripe charge Id */
-		$renewal_order->update_status( 'failed', sprintf( __( 'Stripe charge awaiting authentication by user: %s.', 'funnelkit-stripe-woo-payment-gateway' ), $charge_id ) );
+		$this->mark_order_failed( $renewal_order, sprintf( __( 'Stripe charge awaiting authentication by user: %s.', 'funnelkit-stripe-woo-payment-gateway' ), $charge_id ) );
 
 		return true;
 	}
@@ -867,6 +915,80 @@ trait WC_Subscriptions_Trait {
 	 */
 	protected function maybe_check_for_auth( $payment_intent ) {
 		return ! empty( $payment_intent->status ) && 'processing' === $payment_intent->status && ! empty( $payment_intent->processing->card->customer_notification->completes_at );
+	}
+
+
+	/**
+	 * Force update the payment method for a subscription.
+	 *
+	 * This method updates the payment method for a given subscription to the current instance's payment method.
+	 *
+	 * @param \WC_Subscription||\WC_Order $subscription The subscription object to update.
+	 *
+	 * @return \WC_Subscription The updated subscription object.
+	 */
+	public function force_update_payment_method( $subscription ) {
+		try {
+			remove_filter( 'woocommerce_subscription_get_payment_method', array( Stripe::get_instance(), 'change_payment_method' ), 99 );
+
+			$subscription->set_payment_method( $this->id );
+			$subscription->save();
+
+			remove_filter( 'woocommerce_subscription_get_payment_method', array( Stripe::get_instance(), 'change_payment_method' ), 99 );
+
+			return $subscription;
+		} catch ( \Exception $e ) {
+
+			return $subscription;
+		}
+	}
+
+
+	/**
+	 * @param int $wordpress_user_id
+	 * @param string $token
+	 * @param string $type 'id' Or 'token'
+	 *
+	 * @return void
+	 */
+	public function update_subscriptions_payment_method( $wordpress_user_id, $token, $type = 'id' ) {
+		// Maybe mark the token ID as default
+		$default_token = false;
+		if ( $type === 'id' ) {
+			$default_token = \WC_Payment_Tokens::get( $token );
+		} else {
+			global $wpdb;
+			$token_exists = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_payment_tokens where token =%s", $token ), ARRAY_A );
+
+			if ( ! empty( $token_exists ) ) {
+				$default_token = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
+			}
+		}
+
+		if ( ! $default_token ) {
+			Helper::log( 'Default token not found for user ID: ' . $wordpress_user_id );
+
+			return;
+		}
+
+		\WC_Payment_Tokens::set_users_default( $wordpress_user_id, intval( $default_token->get_id() ) );
+		Helper::log( 'Set default token for user ID: ' . $wordpress_user_id . ' to token ID: ' . $default_token->get_id() );
+
+		if ( class_exists( '\WCS_Payment_Tokens' ) ) {
+			$tokens = \WCS_Payment_Tokens::get_customer_tokens( $wordpress_user_id, $this->id );
+			unset( $tokens[ $default_token->get_id() ] );
+
+			foreach ( $tokens as $old_token ) {
+				foreach ( \WCS_Payment_Tokens::get_subscriptions_from_token( $old_token ) as $subscription ) {
+					if ( ! empty( $subscription ) && \WCS_Payment_Tokens::update_subscription_token( $subscription, $default_token, $old_token ) ) {
+						// translators: 1: previous token, 2: new token.
+						$subscription->add_order_note( sprintf( _x( 'Payment method meta updated after customer changed their default token and opted to update their subscriptions. Payment meta changed from %1$s to %2$s', 'used in subscription note', 'woocommerce-subscriptions' ), $old_token->get_token(), $default_token->get_token() ) );
+						Helper::log( 'Updated subscription ID: ' . $subscription->get_id() . ' with new token ID: ' . $default_token->get_id() );
+					}
+				}
+			}
+		}
+
 	}
 
 
