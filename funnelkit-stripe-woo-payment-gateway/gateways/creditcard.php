@@ -76,7 +76,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 		add_filter( 'woocommerce_gateway_title', function ( $title ) {
 			global $theorder;
 
-			if ( $theorder instanceof \WC_Order && $theorder->get_payment_method() === 'fkwcs_stripe' && ! empty( $theorder->get_payment_method_title() ) && !did_action('woocommerce_admin_order_data_after_payment_info') ) {
+			if ( $theorder instanceof \WC_Order && $theorder->get_payment_method() === 'fkwcs_stripe' && ! empty( $theorder->get_payment_method_title() ) && ! did_action( 'woocommerce_admin_order_data_after_payment_info' ) ) {
 				$title = $theorder->get_payment_method_title();
 			}
 
@@ -442,13 +442,14 @@ class CreditCard extends Abstract_Payment_Gateway {
 				];
 			}
 		} catch ( \Exception $e ) {
-				//Check if there could be a retry without tokenization
-				if ( $this->should_retry_without_tokenization( $e, $order ) ) {
+			//Check if there could be a retry without tokenization
+			if ( $this->should_retry_without_tokenization( $e, $order ) ) {
 
 				$this->is_recursion = true;
 
 				Helper::log( 'Card does not support this type of purchase. Retrying payment without saving source.' );
-				$this->process_payment( $order_id, $retry, true, $e->getMessage(), $use_order_source );
+
+				return $this->process_payment( $order_id, $retry, true, $e->getMessage(), $use_order_source );
 			}
 
 			if ( ! empty( $order ) ) {

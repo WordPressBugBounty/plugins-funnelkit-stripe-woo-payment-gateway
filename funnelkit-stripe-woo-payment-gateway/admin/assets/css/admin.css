@@ -377,7 +377,6 @@ div.fkwcs_test_visibility {
 }
 
 .fkwcs_connect_btn {
-    background: #6772e5;
     display: inline-block;
     height: 38px;
     text-decoration: none;
@@ -391,19 +390,20 @@ div.fkwcs_test_visibility {
     -ms-user-select: none;
     -webkit-font-smoothing: antialiased;
 }
+.fkwcs_connect_btn, .fkwcs_connect_btn:hover, .fkwcs_connect_btn:focus, .fkwcs_connect_btn:active {
+    background: #635BFF;
+}
+.fkwcs_connect_btn:focus {
+    box-shadow: none;
+}
 
 .form-wc-account_id .fkwcs_connect_btn {
     margin: 10px;
 }
 
-.form-wc-wc_fkwcs_connect_btn .fkwcs_connect_btn:hover {
-    background: #3f4ddf;
-}
-
 .fkwcs_connect_btn span, .fkwcs_connect_btn span {
     color: #fff;
     display: block;
-    font-family: sohne-var, "Helvetica Neue", Arial, sans-serif;
     font-size: 15px;
     font-weight: 400;
     line-height: 14px;

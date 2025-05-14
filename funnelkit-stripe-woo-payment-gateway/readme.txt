@@ -4,7 +4,7 @@ Tags: stripe, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
 Tested up to: 6.8.1
 Requires PHP: 7.0
-Stable tag: 1.12.0
+Stable tag: 1.12.1
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -216,6 +216,10 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+= 1.12.1 =
+* Improved: Styling improvements in Onboarding wizard. (#744)
+* Fixed: PHP Error on API settings page when keys are manually entered. (#744)
+* Fixed: Issue with order status moving to failed in case of recovered transaction with "card not supported" error. (#744)
 
 = 1.12.0 =
 * Added: MobilePay, a new gateway is added. (#677)

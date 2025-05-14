@@ -822,3 +822,55 @@
 
 
 }(jQuery));
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        if (!document.querySelector('.subsubsub')) {
+            const ul = document.createElement('ul');
+            ul.classList.add('subsubsub');
+
+            const settings = JSON.parse(fkwcsAdminNav.settings);
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentSection = urlParams.get('section');
+            const adminURL = fkwcsAdminNav.adminUrl;
+            let matched = false;
+
+            Object.entries(settings).forEach(([section, label], index, array) => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = adminURL + section;
+                a.textContent = label;
+
+                if (section === currentSection) {
+                    a.classList.add('current');
+                    matched = true;
+                }
+
+                li.appendChild(a);
+                ul.appendChild(li);
+
+                if (index < array.length - 1) {
+                    const separator = document.createTextNode(' | ');
+                    ul.appendChild(separator);
+                }
+            });
+
+            if (!matched) {
+                const firstLink = ul.querySelector('a');
+                if (firstLink) {
+                    firstLink.classList.add('current');
+                }
+            }
+
+            const targetElement = document.querySelector('h1.screen-reader-text');
+            if (targetElement) {
+                targetElement.parentNode.insertBefore(ul, targetElement.nextSibling);
+
+                const br = document.createElement('br');
+                br.classList.add('clear');
+                targetElement.parentNode.insertBefore(br, ul.nextSibling);
+            }
+        }
+    } catch (e) {
+        console.log('FKWCS Admin Navigation Error:', e);
+    }
+});
