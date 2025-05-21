@@ -23,13 +23,21 @@ $payment_intent_id = $order->get_meta( '_payment_intent_id', true );
 				<?php echo esc_html($payment_intent_id); ?>
             </div>
 		<?php endif; ?>
+
 		<?php if ( isset( $charge->customer ) ) : ?>
             <div class="metadata">
                 <label><?php esc_html_e( 'Customer', 'funnelkit-stripe-woo-payment-gateway' ); ?></label>:&nbsp;
 				<?php echo esc_html($charge->customer); ?>
             </div>
 		<?php endif; ?>
-    </div>
+	    <?php if ( isset( $charge->amount ) ) : ?>
+			<div class="metadata fkwcs_admin_amount">
+				<label><?php esc_html_e( 'Amount', 'funnelkit-stripe-woo-payment-gateway' ); ?></label>:&nbsp;
+			    <?php echo esc_html(\FKWCS\Gateway\Stripe\Helper::format_amount( $charge->currency,$charge->amount )); ?>
+			</div>
+	    <?php endif; ?>
+
+	</div>
     <div class="column-6">
         <h3><?php esc_html_e( 'Payment Method', 'funnelkit-stripe-woo-payment-gateway' ); ?></h3>
         <div class="metadata">

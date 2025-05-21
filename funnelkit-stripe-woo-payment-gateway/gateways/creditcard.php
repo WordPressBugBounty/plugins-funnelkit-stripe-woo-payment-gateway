@@ -884,23 +884,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 		return $fragments;
 	}
 
-	public function get_element_options() {
 
-		$order_amount = WC()->cart->get_total( 'edit' );
-		$amount       = Helper::get_minimum_amount();
-		if ( $order_amount >= $amount ) {
-			$amount = $order_amount;
-		}
-
-
-		return array(
-			"locale"                => $this->convert_wc_locale_to_stripe_locale( get_locale() ),
-			"mode"                  => "payment",
-			"paymentMethodCreation" => "manual",
-			"currency"              => strtolower( $this->get_currency() ),
-			"amount"                => Helper::get_formatted_amount( $amount ), //keeping it as sample
-		);
-	}
 
 
 	public function payment_element_data() {

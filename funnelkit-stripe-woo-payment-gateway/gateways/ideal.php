@@ -33,6 +33,8 @@ class Ideal extends Abstract_Payment_Gateway {
 		$this->description = $this->get_option( 'description' );
 		$this->enabled     = $this->get_option( 'enabled' );
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, [ $this, 'process_admin_options' ] );
+		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
+
 	}
 
 	/**
@@ -152,15 +154,15 @@ class Ideal extends Abstract_Payment_Gateway {
 	 * @throws \Exception If payment will not be accepted.
 	 *
 	 */
-	public function process_payment( $order_id  ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+	public function process_payment( $order_id ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		try {
 			$order = wc_get_order( $order_id );
 
 			/** This will throw exception if not valid */
 			$this->validate_minimum_order_amount( $order );
-			$customer_id     = $this->get_customer_id( $order );
-			$idempotency_key = $order->get_order_key() . time();
-			$data            = [
+			$customer_id      = $this->get_customer_id( $order );
+			$idempotency_key  = $order->get_order_key() . time();
+			$data             = [
 				'amount'               => Helper::get_stripe_amount( $order->get_total() ),
 				'currency'             => $this->get_currency(),
 				'description'          => $this->get_order_description( $order ),
@@ -197,6 +199,37 @@ class Ideal extends Abstract_Payment_Gateway {
 			Helper::log( $e->getMessage(), 'warning' );
 			wc_add_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	public function localize_element_data( $data ) {
+		if ( !$this->is_available() ) {
+			return $data;
+		}
+		$data['fkwcs_payment_data_ideal'] = $this->payment_element_data();
+
+
+		return $data;
+	}
+
+	public function payment_element_data() {
+
+		$data    = $this->get_payment_element_options();
+		$methods = [ 'ideal' ];
+
+
+		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
+		$data['appearance']           = array(
+			"theme" => "stripe"
+		);
+		$options                      = [
+			'fields' => [
+				'billingDetails' => ( true === is_wc_endpoint_url( 'order-pay' ) || true === is_wc_endpoint_url( 'add-payment-method' ) ) ? 'auto' : 'never'
+			]
+		];
+		$options['wallets']           = [ 'applePay' => 'never', 'googlePay' => 'never' ];
+
+		return apply_filters( 'fkwcs_stripe_payment_element_data_ideal', [ 'element_data' => $data, 'element_options' => $options ], $this );
+
 	}
 
 

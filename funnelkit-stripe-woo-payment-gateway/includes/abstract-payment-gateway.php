@@ -28,7 +28,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public $is_past_customer = false;
 	protected $payment_element = false;
 	protected $processing_payment_element = false;
-
+	protected $shipping_address_required = false;
 	private static $enqueued = false;
 	public $supports_success_webhook = false;
 
@@ -786,7 +786,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return boolean
 	 */
 	public function should_save_card( $order ) {  //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
-		return apply_filters('fkwcs_should_save_card', $this->supports( 'tokenization' ),$order);
+		return apply_filters( 'fkwcs_should_save_card', $this->supports( 'tokenization' ), $order );
 	}
 
 
@@ -1841,6 +1841,10 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 		$is_token_used = isset( $result['token_used'] ) && $result['token_used'] === 'yes' ? 'yes' : 'no';
 
+		if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$output['wfacp_id']                   = wc_clean( $_GET['wfacp_id'] ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$output['wfacp_is_checkout_override'] = wc_clean( $_GET['wfacp_is_checkout_override'] ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
 
 		// Put the final thank you page redirect into the verification URL.
 		$verification_url = add_query_arg( $output, \WC_AJAX::get_endpoint( 'fkwcs_stripe_verify_payment_intent' ) );
@@ -2017,7 +2021,9 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 				$redirect_url = wc_get_checkout_url();
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
-
+				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					$redirect_url = get_the_permalink( wc_clean( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				}
 				/**
 				 * Handle intent with no payment method here, we mark the order as failed and show users a notice
 				 */
@@ -2152,8 +2158,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			</th>
 			<td class="forminp">
 				<select multiple="multiple" name="<?php echo esc_attr( $data['id'] ); ?>[]" style="width:350px"
-				        data-placeholder="<?php esc_attr_e( 'Choose countries / regions&hellip;', 'funnelkit-stripe-woo-payment-gateway' ); ?>"
-				        aria-label="<?php esc_attr_e( 'Country / Region', 'funnelkit-stripe-woo-payment-gateway' ); ?>" class="wc-enhanced-select <?php esc_attr_e( $data['class'] ) ?>">
+						data-placeholder="<?php esc_attr_e( 'Choose countries / regions&hellip;', 'funnelkit-stripe-woo-payment-gateway' ); ?>"
+						aria-label="<?php esc_attr_e( 'Country / Region', 'funnelkit-stripe-woo-payment-gateway' ); ?>" class="wc-enhanced-select <?php esc_attr_e( $data['class'] ) ?>">
 					<?php
 					if ( ! empty( $countries ) ) {
 						foreach ( $countries as $key => $val ) {
@@ -2389,6 +2395,23 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 
 		return $element_options;
+	}
+
+	public function get_element_options() {
+		$order_amount = WC()->cart->get_total( 'edit' );
+		$amount       = Helper::get_minimum_amount();
+		if ( $order_amount >= $amount ) {
+			$amount = $order_amount;
+		}
+
+
+		return array(
+			"locale"                => $this->convert_wc_locale_to_stripe_locale( get_locale() ),
+			"mode"                  => "payment",
+			"paymentMethodCreation" => "manual",
+			"currency"              => strtolower( $this->get_currency() ),
+			"amount"                => Helper::get_formatted_amount( $amount ), //keeping it as sample
+		);
 	}
 
 	public function if_amount_required() {

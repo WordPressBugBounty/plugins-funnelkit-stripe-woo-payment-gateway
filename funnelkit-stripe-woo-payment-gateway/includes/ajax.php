@@ -24,7 +24,8 @@ class AJAX {
 		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_alipay_localgateway_payment', [ $this, 'ajax_for_upsells_alipay' ] );
 		add_action( 'wp_ajax_fkwcs_js_errors', [ $this, 'log_frontend_error' ] );
 		add_action( 'wp_ajax_nopriv_fkwcs_js_errors', [ $this, 'log_frontend_error' ] );
-
+		add_action( 'wp_ajax_fkwcs_create_payment_intent', [ $this, 'fkwcs_create_payment_intent' ] );
+		add_action( 'wp_ajax_nopriv_fkwcs_create_payment_intent', [ $this, 'fkwcs_create_payment_intent' ] );
 	}
 
 
@@ -153,6 +154,67 @@ class AJAX {
 		}
 
 		wp_send_json( [ 'status' => 'true' ] );
+	}
+
+	public function fkwcs_create_payment_intent() {
+
+		check_ajax_referer( 'fkwcs_nonce', 'security' );
+		$order_id   = isset($_POST['order_id'] ) ? absint( sanitize_text_field($_POST['order_id'] )): '';
+		$gateway_id = isset($_POST['gateway_id'] ) ? sanitize_text_field( $_POST['gateway_id'] ) : '';
+		try {
+			$order = wc_get_order( $order_id );
+			if ( ! $order ) {
+				throw new \Exception( __( 'Invalid order ID.', 'funnelkit-stripe-woo-payment-gateway' ) );
+			}
+			$payment_gateways = WC()->payment_gateways()->payment_gateways();
+			if ( ! isset( $payment_gateways[ $gateway_id ] ) ) {
+				throw new \Exception( __( 'Invalid payment gateway.', 'funnelkit-stripe-woo-payment-gateway' ) );
+			}
+
+			$gateway = $payment_gateways[ $gateway_id ];
+
+			$gateway->validate_minimum_order_amount( $order );
+
+			$customer_id = $gateway->get_customer_id( $order );
+
+			$idempotency_key = $order->get_order_key() . time();
+
+
+			$data             = [
+				'amount'               => Helper::get_formatted_amount( $order->get_total() ),
+				'currency'             => $gateway->get_currency(),
+				'description'          => $gateway->get_order_description( $order ),
+				'metadata'             => $gateway->get_metadata( $order_id ),
+				'payment_method_types' => [ $gateway->payment_method_types ],
+				'customer'             => $customer_id,
+				'capture_method'       => isset($gateway->capture_method)? $gateway->capture_method : 'automatic',
+			];
+			$data['metadata'] = $gateway->add_metadata( $order );
+			$data             = $gateway->set_shipping_data( $data, $order, $gateway->shipping_address_required );
+
+			$intent_data = $gateway->get_payment_intent( $order, $idempotency_key, $data );
+			$return_url = $gateway->get_return_url( $order );
+			$output = [
+				'order'             => $order_id,
+				'order_key'         => $order->get_order_key(),
+				'fkwcs_redirect_to' => rawurlencode( $return_url ),
+				'gateway'           => $gateway->id,
+			];
+			if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$output['wfacp_id']                   = wc_clean( $_GET['wfacp_id'] ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$output['wfacp_is_checkout_override'] = wc_clean( $_GET['wfacp_is_checkout_override'] ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			}
+			// Put the final thank you page redirect into the verification URL.
+			$verification_url = add_query_arg( $output, \WC_AJAX::get_endpoint( 'fkwcs_stripe_verify_payment_intent' ) );
+			wp_send_json_success( [
+				'payment_id'    => $intent_data->id,
+				'client_secret' => $intent_data->client_secret,
+				'redirect_url' => $verification_url
+			] );
+
+		} catch ( \Exception|\Error $e ) {
+			wp_send_json_error( [ 'message' => $e->getMessage() ] );
+		}
 	}
 
 

@@ -12,7 +12,7 @@ jQuery(function ($) {
     const stripeLocalized = fkwcs_data.stripe_localized;
 
     function scrollToDiv(id, offset) {
-        if(typeof offset === 'undefined') {
+        if (typeof offset === 'undefined') {
             offset = 0;
         }
         if (jQuery(id).length === 0) {
@@ -112,7 +112,7 @@ jQuery(function ($) {
             });
 
             $(window).on('load', function () {
-                if(window.fkwcsIsDomLoaded) {
+                if (window.fkwcsIsDomLoaded) {
                     return;
                 }
                 if (self.gateway_id === self.selectedGateway()) {
@@ -883,7 +883,11 @@ jQuery(function ($) {
                 return;
             }
 
-
+            if($('.fkwcs-credit-card-error.fkwcs-error-text').length > 0 && $('.fkwcs-credit-card-error.fkwcs-error-text').text() !== '') {
+                scrollToDiv($('.fkwcs-credit-card-error.fkwcs-error-text'), 100);
+                wcCheckoutForm.unblock();
+                return;
+            }
             this.stripe.createPaymentMethod({
                 type: 'card', card: this.getCardElement(), billing_details: this.getBillingAddress(type),
             }).then((response) => {
@@ -1731,70 +1735,196 @@ jQuery(function ($) {
         }
     }
 
-    class FKWCS_Ideal extends Gateway {
+    class FKWCS_Ideal extends LocalGateway {
+
+
         constructor(stripe, gateway_id) {
             super(stripe, gateway_id);
-            this.selectedIdealBank = '';
-            this.error_cotainer = '.fkwcs_stripe_ideal_error';
+            this.error_container = '.fkwcs_stripe_ideal_error';
         }
 
         setupGateway() {
-            this.ideal = this.elements.create('idealBank', {"style": style});
-            this.ideal.on('change', (event) => {
-                this.selectedIdealBank = event.value;
-                this.showError();
+            //check if defined fkwcs_data.fkwcs_payment_data_ideal
+            if (typeof fkwcs_data.fkwcs_payment_data_ideal === 'undefined') {
+                return;
+            }
+            let amount_data = this.getAmountCurrency();
+            this.elements = this.stripe.elements({
+                mode: 'payment',
+                currency: amount_data.currency.toLowerCase(),
+                amount: amount_data.amount,
+                payment_method_types: ['ideal']
             });
+
+
+            let paymentData = fkwcs_data.fkwcs_payment_data_ideal;
+            this.element_data = paymentData.element_data;
+            this.element_options = paymentData.element_options;
+            this.element_options.fields.billingDetails = paymentData.element_options.fields.billingDetails;
+
+
+            if (typeof this.element_options.fields.billingDetails !== 'object') {
+                this.element_options.fields.billingDetails = {};
+                this.element_options.fields.billingDetails.address = 'never';
+            }
+            this.element_options.fields.billingDetails.name = jQuery("#billing_first_name").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.email = jQuery("#billing_email").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.phone = jQuery("#billing_phone").length ? "never" : "auto";
+
+
+            this.element_options.defaultValues = {
+                billingDetails: {
+                    name: jQuery("#billing_first_name").length ? jQuery("#billing_first_name").val() + " " + jQuery("#billing_last_name").val() : '',
+                    email: jQuery("#billing_email").val(),
+                    phone: jQuery("#billing_phone").val()
+                }
+            };
+
+
+            this.ideal = this.elements.create('payment', this.element_options);
 
         }
 
         setGateway() {
-            this.ideal.unmount('.fkwcs_stripe_ideal_form .fkwcs_stripe_ideal_select');
+            this.ideal.unmount();
             this.mountGateway();
         }
 
         mountGateway() {
-            let ideal_form = $('.fkwcs_stripe_ideal_form');
-            if (0 === ideal_form.length) {
+            if (typeof fkwcs_data.fkwcs_payment_data_ideal === 'undefined') {
                 return;
             }
-            ideal_form.show();
-            this.ideal.mount('.fkwcs_stripe_ideal_form .fkwcs_stripe_ideal_select');
-            $('.fkwcs_stripe_ideal_form .fkwcs_stripe_ideal_select').css({backgroundColor: '#fff'});
+            let form = $(`.${this.gateway_id}_form`);
+            if (0 === form.length) {
+                return;
+            }
+            let selector = `.${this.gateway_id}_form .${this.gateway_id}_select`;
+            this.ideal.mount(selector);
+            $(selector).css({backgroundColor: '#fff'});
         }
 
         processingSubmit(e) {
-
-
-            if ('' === this.selectedIdealBank) {
-                this.showError({message: fkwcs_data.empty_bank_message});
-                this.showNotice(fkwcs_data.empty_bank_message);
-                return false;
-            }
-            this.showError();
-
+            return true;
         }
 
+        hasSource() {
+            return '';
+        }
+
+        processOrderReview(e) {
+            if (this.gateway_id === this.selectedGateway()) {
+                let source = this.hasSource();
+                if ('' === source) {
+                    this.createIntent('order_review');
+                    e.preventDefault();
+                    return false;
+                }
+            }
+        }
+
+        createIntent(type) {
+            if (!this.processingSubmit()) {
+                return;
+            }
+            wcCheckoutForm.block({
+                message: null,
+                overlayCSS: {
+                    background: '#fff',
+                    opacity: 0.6
+                }
+            });
+            let self = this;
+            let order_id = self.getOrderIdFromUrl();
+            let orderData = {
+                action: 'fkwcs_create_payment_intent',
+                order_id: order_id,
+                gateway_id: this.gateway_id,
+                security: fkwcs_data.nonce
+            };
+            $.ajax({
+                url: fkwcs_data.ajax_url,
+                method: 'POST',
+                dataType: 'json',
+                data: orderData
+            }).done(function (response) {
+                if (response.success && response.data.client_secret && response.data.payment_id) {
+                    let payment_id = response.data.payment_id;
+                    let clientSecret = response.data.client_secret;
+                    let redirectURL = response.data.redirect_url;
+                    wcCheckoutForm.append(`<input type='hidden' name='payment_intent' class='payment_intent' value='${payment_id}'>`);
+                    wcCheckoutForm.append(`<input type='hidden' name='payment_intent_client_secret' class='payment_intent_client_secret' value='${clientSecret}'>`);
+                    wcCheckoutForm.append(`<input type='hidden' name='fkwcs_source' class='fkwcs_source' value='${payment_id}'>`);
+                    self.elements.submit().then(() => {
+                        self.stripe.confirmPayment({
+                            elements: self.elements,
+                            clientSecret: clientSecret,
+                            confirmParams: {
+                                return_url: `${homeURL}${redirectURL}`,
+                                payment_method_data: {
+                                    billing_details: self.getBillingAddress()
+                                }
+                            }
+                        }).then((result) => {
+                            // Check if there is an error in the result
+                            if (result.error) {
+                                // Validation or payment error occurred — handle it here
+                                console.error("Payment confirmation error:", result.error.message);
+                                // Show error to user, prevent form submission
+                            } else {
+                                // Payment successful or processing, proceed with form submit
+                                wcCheckoutForm.trigger('submit');
+                            }
+                        }).catch((error) => {
+                            console.error("Error confirming payment:", error);
+                        });
+                    }).catch((error) => {
+                        console.error("Error submitting elements:", error);
+                    });
+
+                } else {
+                    console.error("Server Error:", response.message || "Error creating payment intent.");
+                }
+            }).fail(function (jqXHR, textStatus, errorThrown) {
+                console.error("AJAX Error:", textStatus, errorThrown);
+                console.error("Response Text:", jqXHR.responseText);
+            }).always(function () {
+                wcCheckoutForm.unblock();
+            });
+        }
+
+        getOrderIdFromUrl() {
+            let urlParams = new URLSearchParams(window.location.search);
+            let orderIdFromQuery = urlParams.get("order_id");
+
+            if (!orderIdFromQuery) {
+                let pathSegments = window.location.pathname.split('/');
+                let orderIndex = pathSegments.indexOf('order-pay');
+                if (orderIndex !== -1 && pathSegments.length > orderIndex + 1) {
+                    return pathSegments[orderIndex + 1];
+                }
+            }
+            return orderIdFromQuery || null;
+        }
 
         confirmStripePayment(clientSecret, redirectURL, intent_type, authenticationAlready = false, order_id = false) {
 
             if (this.gateway_id === this.selectedGateway()) {
-                let ideal = this.ideal;
-                this.stripe.confirmIdealPayment(clientSecret, {
-                    payment_method: {
-                        ideal, billing_details: this.getBillingAddress(),
-                    }, return_url: homeURL + redirectURL,
-                }).then((result) => {
-                    if (result.error) {
-                        // Show error to your customer (e.g., insufficient funds)
-                        this.logError(result.error, order_id);
-                        this.showNotice(getStripeLocalizedMessage(result.error.code, result.error.message));
+                this.elements.submit();
+                this.stripe.confirmPayment({
+                    elements: this.elements,
+                    clientSecret: clientSecret,
+                    confirmParams: {
+                        return_url: `${homeURL}${redirectURL}`,
+                        payment_method_data: {
+                            billing_details: this.getBillingAddress()
+                        }
                     }
                 });
             }
 
         }
-
     }
+
 
     class FKWCS_BanContact extends LocalGateway {
         constructor(stripe, gateway_id) {
