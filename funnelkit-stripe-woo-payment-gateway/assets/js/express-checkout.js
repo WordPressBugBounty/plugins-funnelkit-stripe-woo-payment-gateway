@@ -73,14 +73,19 @@
                     return;
                 }
 
+                let current_selected_gateway = $('input[name="payment_method"]:checked');
+                let shipping_required = ('yes' === data.shipping_required);
+                // If the selected gateway is Apple Pay, then no shipping method or shipping address is required.
+                if (current_selected_gateway.length > 0 && current_selected_gateway.val() === 'fkwcs_stripe_apple_pay') {
+                    shipping_required = false;
+                }
                 this.request_data = Object.assign(this.dataCommon, {
                     total: data.order_data.total,
                     currency: data.order_data.currency,
                     country: data.order_data.country_code,
-                    requestShipping: ('yes' === data.shipping_required),
+                    requestShipping: shipping_required,
                     displayItems: data.order_data.displayItems,
                 });
-
             }
 
             getRequestData() {
@@ -447,7 +452,7 @@
             getVariationAttributes() {
 
 
-                let variation_forms = $('.variations_form');
+                let variation_forms = $('.variations_form').first();
                 let select_list = variation_forms.find('.variations select');
                 let attributes = {};
                 let count = 0, chosen = 0;
@@ -857,7 +862,7 @@
                         if (typeof (Storage) !== "undefined") {
                             let json = sessionStorage.getItem(wc_cart_fragments_params.fragment_name);
                             json = JSON.parse(json);
-                            if (typeof json !== "object") {
+                            if (typeof json !== "object" || !json.hasOwnProperty('fkwcs_cart_details')) {
                                 return;
                             }
                             this.cart_request_data = json.fkwcs_cart_details;

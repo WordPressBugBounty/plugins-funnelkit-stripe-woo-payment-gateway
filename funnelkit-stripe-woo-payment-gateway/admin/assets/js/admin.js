@@ -1,5 +1,6 @@
 (function ($) {
 
+
     let style = fkwcs_admin_data.settings;
     const icons = fkwcs_admin_data.icons;
     let smart_button_result = {'apple_pay': false, 'google_pay': false};
@@ -241,6 +242,7 @@
     }
 
     function HideShowKeys(cond = '') {
+
         if (cond === true) {
             toggleTestKeys(1);
             toggleLiveKeys(0);
@@ -254,8 +256,6 @@
             $('.fkwcs-cards-wrap').hide();
 
         }
-
-
         if (cond === false) {
             $('#fkwcs_test_pub_key').closest('tr').hide();
             $('#fkwcs_test_secret_key').closest('tr').hide();
@@ -277,6 +277,7 @@
                 $('.fkwcs-cards-wrap').hide();
             }
         }
+        $('table.fkwcs_f_table').show();
     }
 
     function toggleLiveKeys(toggle = 0) {
@@ -399,23 +400,11 @@
         $.getScript('https://pay.google.com/gp/p/js/pay.js', init);
     }
 
-    if (fkwcs_admin_data.is_connected === '1') {
-        $('.fkwcs_connect_btn').closest('tr').hide();
-    }
 
     if (fkwcs_admin_data.is_connected === '' && 'fkwcs_api_settings' === fkwcs_admin_data.fkwcs_admin_settings_tab) {
         $('.woocommerce-save-button').hide();
     }
 
-    if (fkwcs_admin_data.is_manually_connected) {
-        HideShowKeys(true);
-        setTimeout(function () {
-            $("#fkwcs_mode").trigger('change');
-        }, 100);
-    } else {
-        HideShowKeys(false);
-        $('.fkwcs_inline_notice').hide();
-    }
 
     $(document).ready(function () {
 
@@ -423,6 +412,18 @@
         generateCheckoutDemo(style);
         toggleOptions();
         toggleDescriptor();
+        if (fkwcs_admin_data.is_connected === '1') {
+            $('.fkwcs_connect_btn').closest('tr').hide();
+        }
+        if (fkwcs_admin_data.is_manually_connected) {
+            HideShowKeys(true);
+            setTimeout(function () {
+                $("#fkwcs_mode").trigger('change');
+            }, 100);
+        } else {
+            HideShowKeys(false);
+            $('.fkwcs_inline_notice').hide();
+        }
         checkPaymentRequestAvailibility();
         show_google_pay_button();
 
@@ -820,9 +821,33 @@
 
     $('.fkwcs_link_type_selection:checked').trigger('click');
 
-
+    if (window.location.href.indexOf('page=wc-settings') !== -1 && window.location.href.indexOf('tab=fkwcs_api_settings') !== -1) {
+        $.post(ajaxurl, { action: 'fkwcs_check_live_webhook_url', _security: fkwcs_admin_data.fkwcs_admin_nonce }, function(response) {
+            if (response && response.data && response.data.mismatch) {
+                // If we have actual and expected URLs, show the detailed message
+                if (response.data.actual_url && response.data.expected_url) {
+                    let msg = '<div class="fkwcs_inline_message_error">' +
+                        '<p>The current webhook seems to have been configured with the URL: <strong>' + response.data.actual_url + '</strong>, however, the webhook should be configured for <strong>' + response.data.expected_url + '</strong>. Kindly delete the current webhook and a create webhook button will appear.</p>' +
+                        '</div>';
+                    $('#fkwcs_delete_webhook_button').closest('fieldset').append(msg);
+                } else if (response.data.mismatch) {
+                    // Generic mismatch message
+                    let msg = '<div class="fkwcs_inline_message_error">' +
+                        '<p>There is no matching webhook found with id : <strong>' + response.data.webhook_id + '</strong>. Kindly delete the webhook and a create webhook button will appear.</p>' +
+                        '</div>';
+                    $('#fkwcs_delete_webhook_button').closest('fieldset').append(msg);
+                }
+            }
+        }).fail(function(xhr) {
+            // Show error notice for AJAX/Stripe error
+            let msg = '<div class="fkwcs_inline_message_error">' +
+                '<p>There was an error verifying the Stripe webhook. Please check your Stripe connection and try again. If the problem persists, delete and recreate the webhook.</p>' +
+                '</div>';
+            $('#fkwcs_delete_webhook_button').closest('fieldset').append(msg);
+        });
+    }
 }(jQuery));
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     try {
         if (!document.querySelector('.subsubsub')) {
             const ul = document.createElement('ul');

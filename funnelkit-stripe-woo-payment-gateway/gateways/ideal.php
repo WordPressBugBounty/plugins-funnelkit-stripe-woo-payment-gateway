@@ -202,7 +202,7 @@ class Ideal extends Abstract_Payment_Gateway {
 	}
 
 	public function localize_element_data( $data ) {
-		if ( !$this->is_available() ) {
+		if ( ! $this->is_available() ) {
 			return $data;
 		}
 		$data['fkwcs_payment_data_ideal'] = $this->payment_element_data();
@@ -219,8 +219,10 @@ class Ideal extends Abstract_Payment_Gateway {
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			"theme" => "stripe"
+			"theme" => "stripe",
+			'rules' => apply_filters('fkwcs_stripe_payment_element_rules', (object)[], $this)
 		);
+
 		$options                      = [
 			'fields' => [
 				'billingDetails' => ( true === is_wc_endpoint_url( 'order-pay' ) || true === is_wc_endpoint_url( 'add-payment-method' ) ) ? 'auto' : 'never'
@@ -230,6 +232,70 @@ class Ideal extends Abstract_Payment_Gateway {
 
 		return apply_filters( 'fkwcs_stripe_payment_element_data_ideal', [ 'element_data' => $data, 'element_options' => $options ], $this );
 
+	}
+
+	public function process_final_order( $response, $order_id ) {
+		$order = wc_get_order( $order_id );
+
+		if ( isset( $response->balance_transaction ) ) {
+			Helper::update_balance( $order, $response->balance_transaction );
+		}
+
+		if ( isset( $response->status ) && 'succeeded' === $response->status ) {
+			$order->payment_complete( $response->id );
+
+			Helper::log( sprintf( 'iDEAL Payment successful Order id - %1s', $order->get_id() ) );
+
+			if ( isset( $response->payment_method_details->ideal ) ) {
+				$ideal_details = $response->payment_method_details->ideal;
+
+				$bank_name = isset( $ideal_details->bank ) ? $ideal_details->bank : 'iDEAL';
+				$bic       = isset( $ideal_details->bic ) ? $ideal_details->bic : '';
+
+				if ( ! empty( $bic ) ) {
+					$order->add_order_note( sprintf( __( 'Order charge successful in Stripe. Charge: %s. Payment method: %s (%s)', 'funnelkit-stripe-woo-payment-gateway' ), $response->id, $bank_name, $bic ) );
+					Helper::log( sprintf( __( 'Order charge successful in Stripe. Charge: %s. Payment method: %s (%s)', 'funnelkit-stripe-woo-payment-gateway' ), $response->id, $bank_name, $bic ) );
+				} else {
+					$order->add_order_note( sprintf( __( 'Order charge successful in Stripe. Charge: %s. Payment method: %s', 'funnelkit-stripe-woo-payment-gateway' ), $response->id, $bank_name ) );
+					Helper::log( sprintf( __( 'Order charge successful in Stripe. Charge: %s. Payment method: %s', 'funnelkit-stripe-woo-payment-gateway' ), $response->id, $bank_name ) );
+				}
+			} else {
+				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe. Charge: %s. Payment method: iDEAL', 'funnelkit-stripe-woo-payment-gateway' ), $response->id ) );
+				Helper::log( sprintf( __( 'Order charge successful in Stripe. Charge: %s. Payment method: iDEAL', 'funnelkit-stripe-woo-payment-gateway' ), $response->id ) );
+			}
+
+			/**
+			 * Remove webhook paid meta-data if order is paid from same IP
+			 */
+			if ( $order->get_customer_ip_address() === \WC_Geolocation::get_ip_address() ) {
+				$order->delete_meta_data( '_fkwcs_webhook_paid' );
+				$order->save_meta_data();
+			}
+
+		} else {
+			$order->set_transaction_id( $response->id );
+			$order->save();
+
+			$status = isset( $response->status ) ? $response->status : 'unknown';
+			$order->update_status( 'failed', sprintf( __( 'iDEAL payment failed (Payment Intent ID: %s). Status: %s', 'funnelkit-stripe-woo-payment-gateway' ), $response->id, $status ) );
+
+			Helper::log( sprintf( 'iDEAL payment failed Order id - %1s, Status: %2s', $order->get_id(), $status ) );
+		}
+
+		/** Empty cart only if payment was successful */
+		if ( isset( $response->status ) && 'succeeded' === $response->status && ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			WC()->cart->empty_cart();
+		}
+
+		do_action( 'fkwcs_process_response_ideal', $response, $order );
+		do_action( 'fkwcs_process_response', $response, $order );
+
+		$return_url = $this->get_return_url( $order );
+
+		return $return_url;
+	}
+	protected function get_successful_intent_statuses() {
+		return ['succeeded']; // Only 'succeeded', no 'requires_capture'
 	}
 
 

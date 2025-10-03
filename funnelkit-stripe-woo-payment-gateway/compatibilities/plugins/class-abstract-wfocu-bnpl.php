@@ -367,24 +367,108 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
             <script>
                 (function ($) {
                     "use strict";
-                    let wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
-                    let stripeHandleconfirmCallBack = '<?php echo esc_js( $this->stripe_verify_js_callback ) ?>';
-                    let homeURL = '<?php echo esc_url( site_url() )?>';
-                    let ajax_link = '<?php echo esc_attr( $this->ajax_action() )?>';
-                    let wfocuStripeJS = {
-                        bucket: null,
-                        initCharge: function () {
-                            let getBucketData = this.bucket.getBucketSendData();
-                            let postData = $.extend(getBucketData, {action: ajax_link, 'fkwcs_gateway': '<?php echo esc_js( $this->get_key() ) ?>'});
-                            let action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', ajax_link), postData);
-                            action.done(function (data) {
-                                console.log(JSON.stringify(data));
-                                /**
-                                 * Process the response for the call to handle client stripe payments
-                                 * first handle error state to show failure notice and redirect to thank you
-                                 * */
-                                if (data.result !== "success") {
 
+                    function initializeStripePayment() {
+                        let wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
+                        let stripeHandleconfirmCallBack = '<?php echo esc_js( $this->stripe_verify_js_callback ) ?>';
+                        let homeURL = '<?php echo esc_url( site_url() )?>';
+                        let ajax_link = '<?php echo esc_attr( $this->ajax_action() )?>';
+                        let wfocuStripeJS = {
+                            bucket: null,
+                            initCharge: function () {
+                                let getBucketData = this.bucket.getBucketSendData();
+                                let postData = $.extend(getBucketData, {action: ajax_link, 'fkwcs_gateway': '<?php echo esc_js( $this->get_key() ) ?>'});
+                                let action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', ajax_link), postData);
+                                action.done(function (data) {
+                                    console.log(JSON.stringify(data));
+                                    /**
+                                     * Process the response for the call to handle client stripe payments
+                                     * first handle error state to show failure notice and redirect to thank you
+                                     * */
+                                    if (data.result !== "success") {
+
+                                        wfocuStripeJS.bucket.swal.show({'text': wfocu_vars.messages.offer_msg_pop_failure, 'type': 'warning'});
+                                        if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
+                                            setTimeout(function () {
+                                                window.location = data.response.redirect_url;
+                                            }, 1500);
+                                        } else {
+                                            /** move to order received page */
+                                            if (typeof wfocu_vars.order_received_url !== 'undefined') {
+                                                window.location = wfocu_vars.order_received_url + '&ec=fkwcs_stripe_error';
+
+                                            }
+                                        }
+                                    } else {
+
+                                        /**
+                                         * There could be two states --
+                                         * 1. intent confirmed
+                                         * 2. requires action
+                                         * */
+                                        /**
+                                         * handle scenario when authentication requires for the payment intent
+                                         * In this case we need to trigger stripe payment intent popups
+                                         * */
+                                        if (typeof data.intent_secret !== "undefined" && '' !== data.intent_secret) {
+
+                                            /**
+                                             * Stripe doesn't accept data payment method data to be blank assigned it undefined instead
+                                             */
+                                            for (let key in data.payment_method['billing_details']['address']) {
+                                                if (data.payment_method['billing_details']['address'].hasOwnProperty(key) && (data.payment_method['billing_details']['address'][key] === null || data.payment_method['billing_details']['address'][key] === '')) {
+                                                    data.payment_method['billing_details']['address'][key] = undefined;
+                                                }
+                                            }
+                                            data.payment_method['billing_details']['name'] = data.payment_method['billing_details']['name'] === '' ? undefined : data.payment_method['billing_details']['name'];
+                                            data.payment_method['billing_details']['email'] = data.payment_method['billing_details']['email'] === '' ? undefined : data.payment_method['billing_details']['email'];
+
+                                            let payment_options = {
+                                                payment_method: data.payment_method,
+                                                return_url: homeURL + data.response.redirect_url,
+                                            };
+
+
+                                            wfocuStripe[stripeHandleconfirmCallBack](data.intent_secret, payment_options).then((response) => {
+                                                if (response.error) {
+                                                    throw response.error;
+                                                }
+                                                $(document).trigger('fkwcs_stripe_localgateway_upsell_on_authentication', [response, true]);
+                                            }).catch(() => {
+                                                wfocuStripeJS.bucket.swal.show({'text': wfocu_vars.messages.offer_msg_pop_failure, 'type': 'warning'});
+
+                                                setTimeout(function () {
+                                                    window.location = data.response.redirect_url;
+                                                }, 1500);
+
+                                            });
+                                            return;
+                                        }
+                                        /**
+                                         * If code reaches here means it no longer require any authentication from the client and we process success
+                                         * */
+
+                                        wfocuStripeJS.bucket.swal.show({'text': wfocu_vars.messages.offer_success_message_pop, 'type': 'success'});
+                                        if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
+
+                                            setTimeout(function () {
+                                                window.location = data.response.redirect_url;
+                                            }, 1500);
+                                        } else {
+                                            /** move to order received page */
+                                            if (typeof wfocu_vars.order_received_url !== 'undefined') {
+
+                                                window.location = wfocu_vars.order_received_url + '&ec=stripe_error';
+
+                                            }
+                                        }
+                                    }
+                                });
+                                action.fail(function (data) {
+                                    console.log(JSON.stringify(data));
+                                    /**
+                                     * In case of failure of ajax, process failure
+                                     * */
                                     wfocuStripeJS.bucket.swal.show({'text': wfocu_vars.messages.offer_msg_pop_failure, 'type': 'warning'});
                                     if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
                                         setTimeout(function () {
@@ -393,120 +477,66 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
                                     } else {
                                         /** move to order received page */
                                         if (typeof wfocu_vars.order_received_url !== 'undefined') {
-                                            window.location = wfocu_vars.order_received_url + '&ec=fkwcs_stripe_error';
-
-                                        }
-                                    }
-                                } else {
-
-                                    /**
-                                     * There could be two states --
-                                     * 1. intent confirmed
-                                     * 2. requires action
-                                     * */
-                                    /**
-                                     * handle scenario when authentication requires for the payment intent
-                                     * In this case we need to trigger stripe payment intent popups
-                                     * */
-                                    if (typeof data.intent_secret !== "undefined" && '' !== data.intent_secret) {
-
-                                        /**
-                                         * Stripe doesn't accept data payment method data to be blank assigned it undefined instead
-                                         */
-                                        for (let key in data.payment_method['billing_details']['address']) {
-                                            if (data.payment_method['billing_details']['address'].hasOwnProperty(key) && (data.payment_method['billing_details']['address'][key] === null || data.payment_method['billing_details']['address'][key] === '')) {
-                                                data.payment_method['billing_details']['address'][key] = undefined;
-                                            }
-                                        }
-                                        data.payment_method['billing_details']['name'] = data.payment_method['billing_details']['name'] === '' ? undefined : data.payment_method['billing_details']['name'];
-                                        data.payment_method['billing_details']['email'] = data.payment_method['billing_details']['email'] === '' ? undefined : data.payment_method['billing_details']['email'];
-
-                                        let payment_options = {
-                                            payment_method: data.payment_method,
-                                            return_url: homeURL + data.response.redirect_url,
-                                        };
-
-
-                                        wfocuStripe[stripeHandleconfirmCallBack](data.intent_secret, payment_options).then((response) => {
-                                            if (response.error) {
-                                                throw response.error;
-                                            }
-                                            $(document).trigger('fkwcs_stripe_localgateway_upsell_on_authentication', [response, true]);
-                                        }).catch(() => {
-                                            wfocuStripeJS.bucket.swal.show({'text': wfocu_vars.messages.offer_msg_pop_failure, 'type': 'warning'});
-
-                                            setTimeout(function () {
-                                                window.location = data.response.redirect_url;
-                                            }, 1500);
-
-                                        });
-                                        return;
-                                    }
-                                    /**
-                                     * If code reaches here means it no longer require any authentication from the client and we process success
-                                     * */
-
-                                    wfocuStripeJS.bucket.swal.show({'text': wfocu_vars.messages.offer_success_message_pop, 'type': 'success'});
-                                    if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
-
-                                        setTimeout(function () {
-                                            window.location = data.response.redirect_url;
-                                        }, 1500);
-                                    } else {
-                                        /** move to order received page */
-                                        if (typeof wfocu_vars.order_received_url !== 'undefined') {
-
                                             window.location = wfocu_vars.order_received_url + '&ec=stripe_error';
-
                                         }
                                     }
-                                }
-                            });
-                            action.fail(function (data) {
-                                console.log(JSON.stringify(data));
-                                /**
-                                 * In case of failure of ajax, process failure
-                                 * */
-                                wfocuStripeJS.bucket.swal.show({'text': wfocu_vars.messages.offer_msg_pop_failure, 'type': 'warning'});
-                                if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
-                                    setTimeout(function () {
-                                        window.location = data.response.redirect_url;
-                                    }, 1500);
-                                } else {
-                                    /** move to order received page */
-                                    if (typeof wfocu_vars.order_received_url !== 'undefined') {
-                                        window.location = wfocu_vars.order_received_url + '&ec=stripe_error';
-                                    }
-                                }
-                            });
-                        }
-                    };
+                                });
+                            }
+                        };
 
 
-                    /**
-                     * Save the bucket instance at several
-                     */
-                    $(document).on('wfocuBucketCreated', function (e, Bucket) {
-                        wfocuStripeJS.bucket = Bucket;
-
-                    });
-                    $(document).on('wfocu_external', function (e, Bucket) {
+                        $(document).off('wfocuBucketCreated');
+                        $(document).off('wfocu_external');
+                        $(document).off('wfocuBucketConfirmationRendered');
+                        $(document).off('wfocuBucketLinksConverted');
                         /**
-                         * Check if we need to mark inoffer transaction to prevent default behavior of page
+                         * Save the bucket instance at several
                          */
-                        if (0 !== Bucket.getTotal()) {
-                            Bucket.inOfferTransaction = true;
-                            wfocuStripeJS.initCharge();
+                        $(document).on('wfocuBucketCreated', function (e, Bucket) {
+                            wfocuStripeJS.bucket = Bucket;
+
+                        });
+                        $(document).on('wfocu_external', function (e, Bucket) {
+                            /**
+                             * Check if we need to mark inoffer transaction to prevent default behavior of page
+                             */
+                            if (0 !== Bucket.getTotal()) {
+                                wfocuStripeJS.bucket = Bucket;
+                                Bucket.inOfferTransaction = true;
+                                wfocuStripeJS.initCharge();
+                            }
+                        });
+
+                        $(document).on('wfocuBucketConfirmationRendered', function (e, Bucket) {
+                            wfocuStripeJS.bucket = Bucket;
+
+                        });
+                        $(document).on('wfocuBucketLinksConverted', function (e, Bucket) {
+                            wfocuStripeJS.bucket = Bucket;
+
+                        });
+                        window.wfocuStripeJS = wfocuStripeJS;
+                    }
+
+                    $(document).ready(function () {
+                        if (typeof Stripe !== 'undefined') {
+                            initializeStripePayment();
+                            window.fkwcsStripeInitialized = true;
+                        } else {
+                            // Stripe.js not ready yet, wait for window load
+                            console.log('Stripe not ready on DOM ready, waiting for window load...');
                         }
                     });
 
-                    $(document).on('wfocuBucketConfirmationRendered', function (e, Bucket) {
-                        wfocuStripeJS.bucket = Bucket;
-
-                    });
-                    $(document).on('wfocuBucketLinksConverted', function (e, Bucket) {
-                        wfocuStripeJS.bucket = Bucket;
-
+                    $(window).on('load', function () {
+                        if (!window.fkwcsStripeInitialized) {
+                            if (typeof Stripe !== 'undefined') {
+                                initializeStripePayment();
+                                window.fkwcsStripeInitialized = true;
+                            } else {
+                                console.error('Stripe library failed to load');
+                            }
+                        }
                     });
                 })(jQuery);
             </script>

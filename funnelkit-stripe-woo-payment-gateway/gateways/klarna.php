@@ -72,13 +72,13 @@ class klarna extends LocalGateway {
 			'charge_type'           => [
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
-				'description' => __( 'Select how to charge Order', 'funnelkit-stripe-woo-payment-gateway' ),
+				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => 'automatic',
 				'options'     => [
 					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
 					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
 				],
-				'desc_tip'    => true,
+				'desc_tip'    => false,
 			],
 			'paylater_section' => [
 				'title'       => __( 'Klarna Message Location', 'funnelkit-stripe-woo-payment-gateway' ),

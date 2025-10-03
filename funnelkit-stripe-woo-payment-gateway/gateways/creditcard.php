@@ -73,11 +73,13 @@ class CreditCard extends Abstract_Payment_Gateway {
 		add_action( 'fkwcs_webhook_event_intent_succeeded', [ $this, 'handle_webhook_intent_succeeded' ], 10, 2 );
 
 		add_action( 'woocommerce_payment_token_deleted', [ $this, 'detach_customer_token' ], 10, 2 );
+
 		add_filter( 'woocommerce_gateway_title', function ( $title ) {
 			global $theorder;
 
-			if ( $theorder instanceof \WC_Order && $theorder->get_payment_method() === 'fkwcs_stripe' && ! empty( $theorder->get_payment_method_title() ) && ! did_action( 'woocommerce_admin_order_data_after_payment_info' ) ) {
+			if ( $theorder instanceof \WC_Order && $theorder->get_payment_method() === 'fkwcs_stripe' && ! empty( $theorder->get_payment_method_title() ) && ( ! did_action( 'woocommerce_admin_order_data_after_payment_info' ) && ! did_action( 'woocommerce_admin_order_data_after_order_details' ) ) ) {
 				$title = $theorder->get_payment_method_title();
+
 			}
 
 			return $title;
@@ -93,8 +95,11 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 * @return void
 	 */
 	protected function filter_hooks() {
-		add_filter( 'woocommerce_payment_successful_result', [ $this, 'modify_successful_payment_result' ], 999, 2 );
-		add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'send_payment_options' ], 999 );
+		if ( $this->is_configured() ) {
+			add_filter( 'woocommerce_payment_successful_result', [ $this, 'modify_successful_payment_result' ], 999, 2 );
+			add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'send_payment_options' ], 999 );
+
+		}
 
 	}
 
@@ -118,7 +123,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 * @return boolean
 	 */
 	public function is_page_supported() {
-		return is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page() || is_account_page(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page() || (function_exists('wcs_is_view_subscription_page') && wcs_is_view_subscription_page()); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -154,13 +159,13 @@ class CreditCard extends Abstract_Payment_Gateway {
 			'charge_type'           => [
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
-				'description' => __( 'Select how to charge Order', 'funnelkit-stripe-woo-payment-gateway' ),
+				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => 'automatic',
 				'options'     => [
 					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
 					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
 				],
-				'desc_tip'    => true,
+				'desc_tip'    => false,
 			],
 			'enable_saved_cards'    => [
 				'label'       => __( 'Enable Payment via Saved Cards', 'funnelkit-stripe-woo-payment-gateway' ),
@@ -553,7 +558,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 			}
 
 			/** Empty cart */
-			if ( ! is_null( WC()->cart ) ) {
+			if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 				WC()->cart->empty_cart();
 			}
 
@@ -683,7 +688,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 		}
 
 		/** Empty cart */
-		if ( ! is_null( WC()->cart ) ) {
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 			WC()->cart->empty_cart();
 		}
 
@@ -879,12 +884,12 @@ class CreditCard extends Abstract_Payment_Gateway {
 		if ( 'payment' === $this->credit_card_form_type ) {
 			$fragments['fkwcs_payment_data'] = $this->payment_element_data();
 		}
-		$fragments['fkwcs_cart_total'] = WC()->cart->get_total( 'edit' );
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			$fragments['fkwcs_cart_total'] = WC()->cart->get_total( 'edit' );
+		}
 
 		return $fragments;
 	}
-
-
 
 
 	public function payment_element_data() {
@@ -897,8 +902,10 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			"theme" => "stripe"
+			"theme" => "stripe",
+			'rules' => apply_filters('fkwcs_stripe_payment_element_rules', (object)[], $this)
 		);
+
 		$options                      = [
 			'fields' => [
 				'billingDetails' => ( true === is_wc_endpoint_url( 'order-pay' ) || true === is_wc_endpoint_url( 'add-payment-method' ) ) ? 'auto' : 'never'
@@ -912,7 +919,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 
 	public function process_link_payment() {
-		return isset( $this->settings['link_authentication'] ) && 'yes' === $this->settings['link_authentication'] && is_checkout() && WC()->cart;
+		return isset( $this->settings['link_authentication'] ) && 'yes' === $this->settings['link_authentication'] && is_checkout() && WC()->cart instanceof \WC_Cart;
 	}
 
 	/**
@@ -1034,7 +1041,37 @@ class CreditCard extends Abstract_Payment_Gateway {
 		return $this->sync_gateway_tokens( $tokens, $user_id, $gateway_id );
 	}
 
+	/**
+	 * Determines if the Stripe payment gateway is available for use.
+	 *
+	 * This method overrides the parent implementation to add custom logic for
+	 * Google Pay and Apple Pay via the Payment Request Button. If the request
+	 * is for Google Pay or Apple Pay and the payment method is 'fkwcs_stripe',
+	 * and the checkout process has started, the gateway is considered available.
+	 * Otherwise, it falls back to the parent availability check.
+	 *
+	 * @return bool True if the gateway is available, false otherwise.
+	 */
+	public function is_available() {
+		// Check if the request is for Google Pay or Apple Pay via Payment Request Button
+		// Also if the gateway is credit card from the js
 
+		if ( $this->is_payment_request_for_supported_method() ) {
+			return true;
+		}
+
+		return parent::is_available();
+	}
+
+	/**
+	 * Checks if the current request is for a supported payment method via Payment Request Button.
+	 *
+	 * @return bool
+	 */
+	private function is_payment_request_for_supported_method() {
+		return isset( $_POST['payment_request_type'], $_POST['payment_method'] ) && in_array( $_POST['payment_request_type'], array( 'google_pay', 'apple_pay' ), true ) && 'fkwcs_stripe' === $_POST['payment_method'] && did_action( 'woocommerce_before_checkout_process' ); 		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+	}
 	/**
 	 * Sync gateway tokens from the API, generic method that handled cache detection too
 	 * This method will check for existing tokens and then will sync them with the stripe API
@@ -1224,7 +1261,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 
 		try {
-			$token    = WC_Payment_Tokens::get( $token_id );
+			$token    = Helper::get_cached_token( $token_id );
 			$client   = $this->get_client();
 			$customer = $this->filter_customer_id( get_user_option( '_fkwcs_customer_id', get_current_user_id() ) );
 			if ( empty( $customer ) ) {
@@ -1238,6 +1275,36 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 	}
 
+	/**
+	 * Override to check if charge was captured before completing payment
+	 * CreditCard gateway needs to verify captured status for authorization-only charges
+	 *
+	 * @param object $intent The payment intent object
+	 * @param \WC_Order $order The order object
+	 * @return bool True if payment should be completed, false otherwise
+	 */
+	protected function should_complete_payment_on_thankyou( $intent, $order ) {
+		// For CreditCard, check if the charge was actually captured
+		$charge = $this->get_latest_charge_from_intent( $intent );
+
+		if ( $charge && wc_string_to_bool( $charge->captured ) ) {
+			// Charge was captured, safe to complete payment
+			Helper::log( 'CreditCard Gateway: Charge captured, payment completion allowed for order ' . $order->get_id() );
+			return true;
+		} else {
+			// Charge was not captured (authorization only), should be on-hold
+			Helper::log( 'CreditCard Gateway: Charge not captured (authorization only), payment completion blocked for order ' . $order->get_id() );
+
+			// Set order to on-hold if not already
+			if ( ! $order->has_status( 'on-hold' ) ) {
+				$order->set_transaction_id( $intent->id );
+				$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Press an eye icon below Transaction Data / Actions to Capture/Void the charge.', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id ) );
+				Helper::log( 'CreditCard Gateway: Order ' . $order->get_id() . ' set to on-hold for authorization-only charge' );
+			}
+
+			return false;
+		}
+	}
 
 }
 

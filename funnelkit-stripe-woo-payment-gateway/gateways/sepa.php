@@ -200,7 +200,11 @@ class Sepa extends Abstract_Payment_Gateway {
 	 */
 	public function payment_fields() {
 		global $wp;
-		$total = WC()->cart->total;
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			$total = WC()->cart->total;
+		} else {
+			$total = 0;
+		}
 
 		$display_tokenization = $this->supports( 'tokenization' ) && is_checkout() && 'yes' === $this->enable_saved_cards && is_user_logged_in();
 
@@ -382,7 +386,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			}
 
 			/** Empty cart */
-			if ( isset( WC()->cart ) ) {
+			if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 				WC()->cart->empty_cart();
 			}
 
@@ -531,7 +535,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			/* translators: transaction id */
 			Helper::log( sprintf( 'Charge authorized Order id - %1s', $order->get_id() ) );
 		}
-		if ( ! is_null( WC()->cart ) ) {
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 			WC()->cart->empty_cart();
 		}
 		do_action( 'fkwcs_'.$this->id.'_before_redirect', $order_id );
@@ -750,5 +754,36 @@ class Sepa extends Abstract_Payment_Gateway {
 	public function is_page_supported() {
 
 		return  is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+
+	/**
+	 * Override to check if charge was captured before completing payment
+	 * SEPA gateway needs to verify captured status for authorization-only charges
+	 *
+	 * @param object $intent The payment intent object
+	 * @param \WC_Order $order The order object
+	 * @return bool True if payment should be completed, false otherwise
+	 */
+	protected function should_complete_payment_on_thankyou( $intent, $order ) {
+		// For SEPA, check if the charge was actually captured
+		$charge = $this->get_latest_charge_from_intent( $intent );
+		
+		if ( $charge && true === $charge->captured ) {
+			// Charge was captured, safe to complete payment
+			Helper::log( 'SEPA Gateway: Charge captured, payment completion allowed for order ' . $order->get_id() );
+			return true;
+		} else {
+			// Charge was not captured (authorization only), should be on-hold
+			Helper::log( 'SEPA Gateway: Charge not captured (authorization only), payment completion blocked for order ' . $order->get_id() );
+			
+			// Set order to on-hold if not already
+			if ( ! $order->has_status( 'on-hold' ) ) {
+				$order->set_transaction_id( $intent->id );
+				$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization. Attempting to refund the order in part or in full will release the authorization and cancel the payment.', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id ) );
+				Helper::log( 'SEPA Gateway: Order ' . $order->get_id() . ' set to on-hold for authorization-only charge' );
+			}
+			
+			return false;
+		}
 	}
 }

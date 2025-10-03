@@ -3,7 +3,11 @@
 use FKWCS\Gateway\Stripe\Helper;
 
 global $wp;
-$total       = WC()->cart->total;
+if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+	$total = WC()->cart->total;
+} else {
+	$total = 0;
+}
 $description = $this->get_description(); //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UndefinedVariable
 
 // If paying from order, we need to get total from order not cart.

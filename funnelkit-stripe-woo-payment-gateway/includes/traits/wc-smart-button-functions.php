@@ -202,7 +202,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		$product_price = $product->get_price();
 		/** Add subscription sign-up fees to product price */
 		if ( 'subscription' === $product->get_type() && class_exists( '\WC_Subscriptions_Product' ) ) {
-			$product_price = $product->get_price() + \WC_Subscriptions_Product::get_sign_up_fee( $product );
+			$product_price = floatval( $product->get_price() ) + \WC_Subscriptions_Product::get_sign_up_fee( $product );
 		}
 
 		return $product_price;
@@ -329,8 +329,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 				throw new \Exception( sprintf( __( 'You cannot add that amount of "%1$s"; to the cart because there is not enough stock (%2$s remaining).', 'funnelkit-stripe-woo-payment-gateway' ), $product->get_name(), wc_format_stock_quantity_for_display( $product->get_stock_quantity(), $product ) ) );
 			}
 
-			$total = $qty * $this->get_product_price( $product ) + $addon_value;
-
+			$total          = $qty * floatval( $this->get_product_price( $product ) ) + $addon_value;
 			$quantity_label = 1 < $qty ? ' (' . $qty . ')' : '';
 
 			$data  = [];
@@ -834,15 +833,30 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		if ( class_exists( '\WC_Subscriptions_Cart' ) ) {
 			remove_action( 'woocommerce_after_checkout_validation', 'WC_Subscriptions_Cart::validate_recurring_shipping_methods' );
 		}
+		add_action( 'woocommerce_before_checkout_process', [ $this, 'remove_street_address_validation' ], 10 );
+
 
 		// Hook the custom function to the 'woocommerce_add_error' action
 		add_filter( 'woocommerce_add_error', function ( $message ) {
 			Helper::log( 'WooCommerce Error recorded during order creation:: ' . $message ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+
 			return $message;
 		}, 10 );
 
 		WC()->checkout()->process_checkout();
 		exit();
+	}
+
+	/**
+	 * Remove street validation(house number) for smart button checkout process
+	 * @return void
+	 */
+	public function remove_street_address_validation() {
+		if ( class_exists( '\WFACP_Template_Common' ) && function_exists( 'wfacp_template' ) ) {
+			if ( wfacp_template() instanceof \WFACP_Template_Common ) {
+				remove_action( 'woocommerce_checkout_process', [ wfacp_template(), 'process_fields' ] );
+			}
+		}
 	}
 
 	/**

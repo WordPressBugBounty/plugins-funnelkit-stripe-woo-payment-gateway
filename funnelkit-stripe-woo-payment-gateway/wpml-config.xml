@@ -42,6 +42,11 @@
             <key name="description"/>
         </key>
 
+        <key name="woocommerce_fkwcs_stripe_ach_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+
         <key name="woocommerce_fkwcs_stripe_sepa_settings">
             <key name="title"/>
             <key name="description"/>

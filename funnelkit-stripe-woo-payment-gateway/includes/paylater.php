@@ -1,6 +1,8 @@
 <?php
 
 namespace FKWCS\Gateway\Stripe;
+
+
 #[\AllowDynamicProperties]
 class PayLater_Helper {
 	private static $instance = null;
@@ -77,7 +79,7 @@ class PayLater_Helper {
 
 		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], false, true );
 
-		wp_enqueue_script( 'fkwcs-stripe-paylater', FKWCS_URL . 'assets/js/paylater.js', [ 'fkwcs-stripe-external' ] );
+		wp_enqueue_script( 'fkwcs-stripe-paylater', FKWCS_URL . 'assets/js/paylater.js', [ 'fkwcs-stripe-external' ], FKWCS_VERSION );
 		wp_localize_script( 'fkwcs-stripe-paylater', 'fkwcs_paylater', $this->update_localize_data() );
 
 	}
@@ -96,14 +98,20 @@ class PayLater_Helper {
 			$country = substr( get_option( 'woocommerce_default_country' ), 0, 2 );
 		}
 		$data['country_code'] = $country;
+		$data['appearance']   = $this->get_appearance_rules();
+
 		return apply_filters( 'fkwcs_paylater_localized_data', $data );
+	}
+
+	public function get_appearance_rules() {
+		return new \StdClass();
 	}
 
 	public function prepare_paylater_gateway() {
 
-		$avilable_gateway = WC()->payment_gateways()->payment_gateways();
+		$available_gateway = WC()->payment_gateways()->payment_gateways();
 
-		foreach ( $avilable_gateway as $gateway ) {
+		foreach ( $available_gateway as $gateway ) {
 
 			if ( 'yes' !== $gateway->enabled || ! $gateway instanceof \FKWCS\Gateway\Stripe\LocalGateway || ! $gateway->is_available() ) {
 				continue;
@@ -133,8 +141,10 @@ class PayLater_Helper {
 	}
 
 	public function cart_button_wrapper() {
-		$paylater_data = [ 'amount' => Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) ) ];
-		echo "<div class='fkwcs_paylater_messaging fkwcs_cart_page' paylater-data='" . wp_json_encode( $paylater_data ) . "'></div>";
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			$paylater_data = [ 'amount' => Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) ) ];
+			echo "<div class='fkwcs_paylater_messaging fkwcs_cart_page' paylater-data='" . wp_json_encode( $paylater_data ) . "'></div>";
+		}
 	}
 
 	public function single_button_wrapper() {
@@ -160,7 +170,7 @@ class PayLater_Helper {
 	}
 
 	public function fkcart_mini_cart_wrapper() {
-		if ( is_null( WC()->cart ) ) {
+		if ( is_null( WC()->cart ) || ! WC()->cart instanceof \WC_Cart ) {
 			return;
 		}
 		$paylater_data = [ 'amount' => Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) ) ];

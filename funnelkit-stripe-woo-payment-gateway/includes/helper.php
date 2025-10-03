@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Abstract class that will be inherited by all payment methods.
  */
 abstract class Helper {
+	const MAX_STRIPE_METADATA_LENGTH = 500;
 	public static $log_enabled = true;
 	const FKWCS_STRIPE_FEE = '_fkwcs_stripe_fee';
 	const FKWCS_STRIPE_NET = '_fkwcs_stripe_net';
@@ -21,6 +22,8 @@ abstract class Helper {
 	public static $client = null;
 
 	private static $mode = '';
+	private static $token_cache = [];
+
 	/**
 	 * Default gateway values
 	 *
@@ -791,6 +794,8 @@ abstract class Helper {
 		if ( ! empty( $token_exists ) ) {
 
 			$token = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
+			self::$token_cache[$token->get_id()] = $token;
+
 			$token->set_gateway_id( $gateway_id );
 			$token->update_meta_data( 'mode', ( $is_live ) ? 'live' : 'test' );
 			$token->save_meta_data();
@@ -811,6 +816,20 @@ abstract class Helper {
 		$token->update_meta_data( 'mode', ( $is_live ) ? 'live' : 'test' );
 		$token->save_meta_data();
 		$token->save();
+		self::$token_cache[$token->get_id()] = $token;
+
+		return $token;
+	}
+
+	public static function get_cached_token( $token_id ) {
+		if (isset(self::$token_cache[$token_id])) {
+			return self::$token_cache[$token_id];
+		}
+
+		$token = \WC_Payment_Tokens::get($token_id);
+		if ($token) {
+			self::$token_cache[$token_id] = $token;
+		}
 
 		return $token;
 	}
@@ -819,7 +838,9 @@ abstract class Helper {
 		return is_array( $value ) ? $value : array();
 	}
 
+
 	public static function get_mode() {
+
 		return self::$mode;
 	}
 
@@ -850,5 +871,48 @@ abstract class Helper {
 		return end( $intent->charges->data );
 	}
 
+	/**
+	 * Truncate a string to a maximum of 500 characters for Stripe metadata.
+	 *
+	 * This method ensures that the value does not exceed Stripe's 500 character limit for metadata fields.
+	 * It uses mb_substr if available for multibyte safety, otherwise falls back to substr.
+	 *
+	 * @param string $value The value to be truncated.
+	 * @return string The truncated string, or the original value if not a string or already within the limit.
+	 */
+	public static function truncate_stripe_metadata_value( $value ) {
+		if ( is_string( $value ) && strlen( $value ) > self::MAX_STRIPE_METADATA_LENGTH ) {
+			if ( function_exists( 'mb_substr' ) ) {
+				return mb_substr( $value, 0, self::MAX_STRIPE_METADATA_LENGTH );
+			} else {
+				return substr( $value, 0, self::MAX_STRIPE_METADATA_LENGTH );
+			}
+		}
+		return $value;
+	}
 
+	/**
+	 * Clears the WooCommerce order cache for a specific order.
+	 *
+	 * This method should be called after making changes to an order that may not be
+	 * immediately reflected due to WooCommerce's internal caching mechanisms.
+	 * It ensures that the latest order data is retrieved from the database.
+	 *
+	 * @param int $order_id The ID of the order whose cache should be cleared.
+	 *
+	 * @return void
+	 *
+	 * @throws \Throwable Silently catches and ignores any exceptions to prevent breaking main functionality.
+	 *
+	 * @since 1.2.0
+	 */
+	public static function clear_order_cache( $order_id ) {
+		try {
+			wp_using_ext_object_cache( false );
+			$data_store = wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::class );
+			$data_store->clear_cached_data( [$order_id] );
+		} catch ( \Throwable $e ) {
+			// Silently fail to prevent breaking main functionality
+		}
+	}
 }

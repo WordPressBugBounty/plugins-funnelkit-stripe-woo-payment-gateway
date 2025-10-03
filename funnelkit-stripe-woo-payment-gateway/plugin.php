@@ -97,6 +97,7 @@ class Stripe {
 		$methods['fkwcs_ideal']      = 'FKWCS\Gateway\Stripe\Ideal';
 		$methods['fkwcs_bancontact'] = 'FKWCS\Gateway\Stripe\Bancontact';
 		$methods['fkwcs_p24']        = 'FKWCS\Gateway\Stripe\P24';
+		$methods['fkwcs_ach']        = 'FKWCS\Gateway\Stripe\ACH';
 		$methods['fkwcs_sepa']       = 'FKWCS\Gateway\Stripe\Sepa';
 		$methods['fkwcs_affirm']     = 'FKWCS\Gateway\Stripe\Affirm';
 		$methods['fkwcs_klarna']     = 'FKWCS\Gateway\Stripe\Klarna';
@@ -105,7 +106,10 @@ class Stripe {
 		$methods['fkwcs_applepay']   = 'FKWCS\Gateway\Stripe\ApplePay';
 		$methods['fkwcs_alipay']     = 'FKWCS\Gateway\Stripe\Alipay';
 		$methods['fkwcs_mobilepay']  = 'FKWCS\Gateway\Stripe\Mobilepay';
-
+		$methods['fkwcs_stripe_pix'] = 'FKWCS\Gateway\Stripe\Pix';
+		$methods['fkwcs_cashapp']    = 'FKWCS\Gateway\Stripe\CashApp';
+		$methods['fkwcs_stripe_multibanco'] = 'FKWCS\Gateway\Stripe\Multibanco';
+		$methods['fkwcs_stripe_eps']        = 'FKWCS\Gateway\Stripe\EPS';
 
 		return $methods;
 	}
@@ -138,6 +142,7 @@ class Stripe {
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/ideal.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/bancontact.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/p24.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/ach.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/sepa.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/affirm.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/klarna.php';
@@ -147,6 +152,10 @@ class Stripe {
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/alipay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/includes/paylater.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/mobilepay.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/pix.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/cashapp.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/multibanco.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/eps.php';
 
 		do_action( 'fkwcs_gateways_included' );
 
@@ -165,7 +174,10 @@ class Stripe {
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe-apple-pay.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe-google-pay.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-alipay-upsell.php';
+                include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-pix.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-multibanco.php';
 
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-cashapp.php';
 
 			}
 
@@ -223,6 +235,9 @@ class Stripe {
 		$gateways['fkwcs_stripe_google_pay'] = 'WFOCU_Plugin_Integration_Fkwcs_Google_Pay';
 		$gateways['fkwcs_stripe_apple_pay']  = 'WFOCU_Plugin_Integration_Fkwcs_Apple_Pay';
 		$gateways['fkwcs_stripe_alipay']     = 'WFOCU_Plugin_Integration_Fkwcs_Alipay';
+		$gateways['fkwcs_stripe_pix']        = 'WFOCU_Plugin_Integration_Fkwcs_Pix';
+		$gateways['fkwcs_stripe_cashapp']    = 'WFOCU_Plugin_Integration_Fkwcs_Cashapp';
+		$gateways['fkwcs_stripe_multibanco'] = 'WFOCU_Plugin_Integration_Fkwcs_Multibanco';
 
 		return $gateways;
 	}
@@ -244,6 +259,7 @@ class Stripe {
 		$gateways[] = 'fkwcs_stripe_google_pay';
 		$gateways[] = 'fkwcs_stripe_apple_pay';
 		$gateways[] = 'fkwcs_stripe_alipay';
+		$gateways[] = 'fkwcs_stripe_cashapp';
 
 		return $gateways;
 	}
@@ -276,6 +292,15 @@ class Stripe {
 		}
 		if ( isset( $resp['fkwcs_stripe_alipay'] ) && true === $resp['fkwcs_stripe_alipay'] ) {
 			array_push( $all_options['gateways'], 'fkwcs_stripe_alipay' );
+		}
+		if ( isset( $resp['fkwcs_stripe_cashapp'] ) && true === $resp['fkwcs_stripe_cashapp'] ) {
+			array_push( $all_options['gateways'], 'fkwcs_stripe_cashapp' );
+		}
+		if ( isset( $resp['fkwcs_stripe_pix'] ) && true === $resp['fkwcs_stripe_pix'] ) {
+			array_push( $all_options['gateways'], 'fkwcs_stripe_pix' );
+		}
+        if ( isset( $resp['fkwcs_stripe_multibanco'] ) && true === $resp['fkwcs_stripe_multibanco'] ) {
+			array_push( $all_options['gateways'], 'fkwcs_stripe_multibanco' );
 		}
 		WFOCU_Core()->data->update_options( $all_options );
 	}
@@ -411,6 +436,11 @@ class Stripe {
 	public function modify_token_class( $class, $type ) {
 		if ( 'fkwcs_stripe_sepa' === $type ) {
 			return 'FKWCS\Gateway\Stripe\Token';
+		} else if ( 'fkwcs_stripe_ach' === $type ) {
+			return 'FKWCS\Gateway\Stripe\ACHToken';
+		}
+		if ( 'fkwcs_stripe_cashapp' === $type ) {
+			return 'FKWCS\Gateway\Stripe\CashAppToken';
 		}
 
 		return $class;
@@ -459,10 +489,21 @@ class Stripe {
 				$payment_method = 'fkwcs_stripe';
 				break;
 			case 'stripe_sepa':
-				if ( did_action( 'woocommerce_checkout_order_processed' ) ) {
+				if (did_action('woocommerce_checkout_order_processed')) {
 					return $payment_method;
 				}
 				$payment_method = 'fkwcs_stripe_sepa';
+			case 'cashapp':
+				if (did_action('woocommerce_checkout_order_processed')) {
+					return $payment_method;
+				}
+				$payment_method = 'fkwcs_stripe_cashapp';
+				break;
+			case 'stripe_ach':
+				if ( did_action( 'woocommerce_checkout_order_processed' ) ) {
+					return $payment_method;
+				}
+				$payment_method = 'fkwcs_stripe_ach';
 				break;
 		}
 

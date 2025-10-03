@@ -24,27 +24,35 @@ if ( ! class_exists( 'FKWCS_Compat_FK_Checkout' ) ) {
 			 * Smart Buttons Support
 			 */
 			$instance = SmartButtons::get_instance();
-			remove_action( 'woocommerce_checkout_before_customer_details', [ $instance, 'payment_request_button' ], 5 );
-			$buttons['fkwcs_gpay_apay'] = [
-				'iframe' => true,
-				'name'   => __( 'Stripe Payment Request', 'funnelkit-stripe-woo-payment-gateway' ),
-			];
-
-			$instance = FKWCS\Gateway\Stripe\GooglePay::get_instance();
-			if ( $instance->is_available() ) {
-				$buttons['fkwcs_google_pay'] = [
+			if (
+				isset($instance->local_settings['express_checkout_enabled']) &&
+				'yes' === $instance->local_settings['express_checkout_enabled'] &&
+				isset($instance->local_settings['express_checkout_location']) &&
+				in_array('checkout', $instance->local_settings['express_checkout_location'], true)
+			) {
+				remove_action('woocommerce_checkout_before_customer_details', [$instance, 'payment_request_button'], 5);
+				$buttons['fkwcs_gpay_apay'] = [
 					'iframe' => true,
-					'name'   => __( 'Google Pay', 'funnelkit-stripe-woo-payment-gateway' ),
+					'name'   => __('Stripe Payment Request', 'funnelkit-stripe-woo-payment-gateway'),
 				];
-			}
 
-			$instance = FKWCS\Gateway\Stripe\ApplePay::get_instance();
-			if ( $instance->is_available() ) {
-				$buttons['fkwcs_apple_pay'] = [
-					'iframe' => true,
-					'name'   => __( 'Apple Pay', 'funnelkit-stripe-woo-payment-gateway' ),
-				];
+				$instance = FKWCS\Gateway\Stripe\GooglePay::get_instance();
+				if ($instance->is_available()) {
+					$buttons['fkwcs_google_pay'] = [
+						'iframe' => true,
+						'name'   => __('Google Pay', 'funnelkit-stripe-woo-payment-gateway'),
+					];
+				}
+
+				$instance = FKWCS\Gateway\Stripe\ApplePay::get_instance();
+				if ($instance->is_available()) {
+					$buttons['fkwcs_apple_pay'] = [
+						'iframe' => true,
+						'name'   => __('Apple Pay', 'funnelkit-stripe-woo-payment-gateway'),
+					];
+				}
 			}
+			
 
 
 			return $buttons;
@@ -52,7 +60,6 @@ if ( ! class_exists( 'FKWCS_Compat_FK_Checkout' ) ) {
 		}
 
 		public function checkout_hook() {
-			add_filter( 'wfacp_page_settings', [ $this, 'enable_smart_button_optimizations' ] );
 			add_filter( 'wfacp_smart_button_or_text', [ $this, 'change_separator_txt' ] );
 			add_filter( 'wfacp_smart_button_legend_title', [ $this, 'change_express_checkout_txt' ] );
 			add_action( 'woocommerce_before_checkout_process', [ $this, 'remove_phone_process' ] );
@@ -70,16 +77,6 @@ if ( ! class_exists( 'FKWCS_Compat_FK_Checkout' ) ) {
 			remove_action( 'woocommerce_checkout_process', [ $instance, 'process_phone_field' ] );
 		}
 
-		public function enable_smart_button_optimizations( $page_settings ) {
-
-			$instance = SmartButtons::get_instance();
-			if ( isset( $instance->local_settings['express_checkout_location'] ) && in_array( 'checkout', $instance->local_settings['express_checkout_location'], true ) ) {
-				$page_settings['enable_smart_buttons'] = 'true';
-
-			}
-
-			return $page_settings;
-		}
 
 
 		public function add_fkwcs_gpay_apay_buttons() {

@@ -21,11 +21,6 @@
     color: #fff !important;
 }
 
-
-div#fkwcs_stripe_smart_button .fkwcs_disabled_btn button {
-    background: gray;
-}
-
 #fkwcs_custom_express_button {
     max-width: 100%;
 }
@@ -258,7 +253,7 @@ body #payment #fkwcs-stripe-elements-wrapper .fkwcs-save-cards input {
     vertical-align: middle;
 }
 
-body #payment #fkwcs-stripe-elements-wrapper .fkwcs-stripe-elements-field, body #payment .fkwcs_stripe_ideal_form .fkwcs_stripe_ideal_select, body #payment .fkwcs_stripe_p24_form .fkwcs_stripe_p24_select {
+body #payment #fkwcs-stripe-elements-wrapper .fkwcs-stripe-elements-field, body #payment .fkwcs_stripe_ideal_form .fkwcs_stripe_ideal_select, body #payment .fkwcs_stripe_p24_form .fkwcs_stripe_p24_select,body #payment .fkwcs_stripe_pix_form .fkwcs_stripe_pix_select ,body #payment .fkwcs_stripe_multibanco_form .fkwcs_stripe_multibanco_select,body #payment .fkwcs_stripe_eps_form .fkwcs_stripe_eps_select , body #payment .fkwcs_stripe_cashapp_form .fkwcs_stripe_cashapp_select {
     box-shadow: rgb(239, 239, 239) 0 0 0 1px;
     padding: 10px;
     margin: 0;
@@ -490,6 +485,7 @@ li.payment_method_fkwcs_stripe_apple_pay, li.payment_method_fkwcs_stripe_google_
 #fkwcs_stripe_smart_button_wrapper .fkwcs_disabled_btn, .fkwcs_google_pay_wrapper .fkwcs_disabled_btn {
     opacity: 0.5 !important;
     cursor: not-allowed;
+    pointer-events: none;
 }
 
 .fkwcs_google_pay_wrapper button {
@@ -500,7 +496,13 @@ li.payment_method_fkwcs_stripe_apple_pay, li.payment_method_fkwcs_stripe_google_
 
     margin: 8px 0;
 }
+body .fkwcs_google_pay_wrapper.fkwcs_smart_product_button.fkwcs_google_button_theme_black .gpay-card-info-container-fill button {
+    background-color: #000 !important;
+}
 
+body .fkwcs_google_pay_wrapper.fkwcs_smart_product_button.fkwcs_google_button_theme_white .gpay-card-info-container-fill button{
+    background-color: #fff !important;
+}
 .fkwcs_fkcart_gpay_wrapper {
     margin-top: 8px;
 }
@@ -542,4 +544,16 @@ body button#gpay-button-online-api-id {
         margin-left: -5em;
         width: 10em;
     }
+}
+
+#fkwcs_stripe_smart_button .fkwcs_google_pay_wrapper .gpay-button-fill button, .fkwcs_google_pay_wrapper button{
+    background-size: contain!important;
+    padding: 4px!important;
+}
+
+#fkwcs_stripe_smart_button .fkwcs_google_pay_wrapper.fkwcs-single-product .gpay-button-fill button{background-size: 65%!important;}
+.fkwcs_fkcart_gpay_wrapper .fkwcs_google_pay_wrapper .gpay-button-fill button{background-size: 50%!important;}
+#fkwcs_stripe_smart_button .fkwcs_google_pay_wrapper .gpay-button-fill button, .fkwcs_google_pay_wrapper button{
+    background-size: contain!important;
+    padding: 4px!important;
 }

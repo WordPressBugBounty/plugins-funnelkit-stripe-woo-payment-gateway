@@ -2,9 +2,9 @@
 Contributors: amans2k, xlplugins, teamwoofunnels
 Tags: stripe, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
-Tested up to: 6.8.1
+Tested up to: 6.8.3
 Requires PHP: 7.0
-Stable tag: 1.12.2
+Stable tag: 1.13.0
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -151,7 +151,7 @@ The FunnelKit Team is committed to bringing more payment gateways to enhance you
 
 ## WE ARE AN OFFICIAL STRIPE PARTNER ##
 
-FunnelKit is proud to be an official Stripe partner!
+FunnelKit is proud to be an [official Stripe partner](https://stripe.partners/directory/funnelkit).
 
 Stripe Payment Gateway for WooCommerce is part of FunnelKit's ever-growing plugin ecosystem used on thousands of websites.
 
@@ -216,6 +216,51 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+
+= 1.13.0 =
+* Added: CashApp Pay payment method integration, offering an additional payment option for users. (#803)
+* Added: ACH direct debit payment method support, expanding payment flexibility. (#639)
+* Added: EPS payment method integration for enhanced payment method diversity. (#639)
+* Added: Pix payment method for Brazil, providing a localized payment option. (#785)
+* Added: Multibanco payment integration with upsell support for a smoother customer experience. (#779)
+* Added: Admin notice for missing PHP cURL extension to improve troubleshooting and configuration. (#786)
+* Added: Filter `fkwcs_stripe_payment_element_rules` to allow custom CSS rules for better design flexibility. (#925)
+* Improved: Shipping address requirements and error handling for Google Pay integration, ensuring a smoother user experience. (#941)
+* Improved: Express Buttons payments on the single product page for variable products, improving payment flow. (#951)
+* Improved: Order object cache buster during webhook requests for better performance. (#953)
+* Improved: Customer description in the create customer API for more consistent payouts reporting. (#955)
+* Improved: Express Buttons functionality when Credit Card gateway is disabled, improving payment options. (#931)
+* Improved: Payment processing to reuse existing intent and avoid multiple payment intents, enhancing transaction efficiency. (#911)
+* Improved: Double verification of payment intent on the Thank You page for greater accuracy. (#895)
+* Improved: Token caching for optimized payment token retrieval performance, increasing speed. (#858)
+* Improved: Updated `fkwcs_paylater_localized_data` filter with custom CSS support for enhanced styling flexibility. (#861)
+* Improved: Admin UX to show/hide fields based on connected mode, offering a more personalized interface. (#851)
+* Improved: Greece added as a supported country for payment messaging element, expanding regional support. (#829)
+* Improved: Admin UX to show webhook misconfigurations, helping with troubleshooting and configuration. (#801)
+* Improved: Error handling in express checkout for session storage validation, improving payment reliability. (#816)
+* Improved: Stripe Elements integration and event handling for upsells, improving upsell flow. (#771)
+* Improved: Payment method handling for subscription renewals, making the process more efficient. (#761)
+* Improved: Subscription renewal payment processing improved to handle multiple scheduled action invokation. (#982)
+* Improved: Enhanced P24 and Bancontact gateway redirection flow for seamless payment processing. (#937)
+* Improved: Robust error handling and intelligent fallback payment methods in subscription renewals for enhanced reliability. (#943)
+* Improved: Enhanced order status management with review closed webhook for more accurate order tracking. (#945)
+* Improved: Streamlined admin settings display for Google Pay & Apple Pay with better configuration consistency. (#965)
+* Improved: Smart express buttons rendering that adapts to Stripe settings for consistent UI behavior. (#922)
+* Improved: Enhanced country filtering for Alipay, Multibanco & MobilePay admin settings with improved regional accuracy. (#909)
+* Improved: Optimized CSS visibility for Klarna Payment messaging modal ensuring consistent display across all scenarios. (#907)
+* Improved: Enhanced WC_Cart instance validation in backend context for improved stability and reliability. (#904)
+* Improved: Smart background color management for express buttons with enhanced visibility and better user experience. (#859)
+* Improved: Enhanced house number validation for express buttons payment with improved data accuracy and user experience. (#796)
+* Improved: Enhanced FK checkout compatibility with robust loading mechanisms for seamless checkout experience. (#789)
+* Improved: Intelligent fallback system for Stripe fee and net values using legacy meta keys for seamless compatibility with existing setups. (#787)
+* Improved: Enhanced saved credit cards display with intelligent respect for `enable_saved_cards` setting for flexible card management. (#776)
+* Improved: Optimized Stripe elements initialization during mount for enhanced reliability and consistent element rendering. (#773)
+* Improved: Enhanced zero-dollar payment processing with iDEAL integration for seamless transaction handling. (#763)
+* Improved: Handling related to WooCommerce scheduled action for renewals to prevent any duplicate transactions. (#763)
+* Fixed: User agent parameter truncation to prevent transaction failures, ensuring successful payments. (#826)
+* Fixed: Price conversion to float to avoid type errors, ensuring accurate calculations. (#808)
+* Fixed: Blank src in img attribute causing image optimizer issues for improved image handling. (#935)
+* Fixed: Fatal error on order-pay page when no order found, ensuring a smoother user experience. (#933)
 
 = 1.12.2 =
 * Improved: Behavior of card brand validation in standard credit card input fields. (#752)

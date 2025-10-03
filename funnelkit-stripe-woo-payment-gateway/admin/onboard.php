@@ -157,8 +157,12 @@ class Onboard {
 	}
 
 	public function redirect_to_onboarding() {
+		$url = admin_url( 'index.php?page=fkwcs-onboarding' );
+		if ( isset( $_GET['error'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$url = add_query_arg( 'path', '/failed', $url );
+		}
 		// Return to Onboarding
-		return admin_url( 'index.php?page=fkwcs-onboarding' );
+		return $url;
 	}
 
 	public function is_woocommerce_installed() {
@@ -582,11 +586,12 @@ class Onboard {
 				'app_data'      => plugin_dir_url( __FILE__ ) . 'app/dist/',
 				'images_dir'    => plugin_dir_url( __FILE__ ) . 'assets/images/',
 				'settings_link' => admin_url( 'admin.php?page=wc-settings&tab=fkwcs_api_settings' ),
+                'fb_url' => class_exists( 'WFFN_Core' ) ? admin_url( 'admin.php?page=bwf' ) : '',
 				'connect_link'  => $this->admin_controller->get_connect_url(),
 				'webhook_url'   => Helper::get_webhook_url(),
 			];
 
-			wp_localize_script( $app_name, 'bwfsg', $localized_data );
+			wp_localize_script( $app_name, 'bwfsg', apply_filters( 'fkwcs_app_localize_vars', $localized_data) );
 
 			wp_enqueue_style( $app_name, $assets_dir . $style_path, array( 'wp-components' ), $version );
 

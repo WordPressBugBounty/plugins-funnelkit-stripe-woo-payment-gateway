@@ -222,7 +222,9 @@ class Bancontact extends Abstract_Payment_Gateway {
 
 			if ( 'setup_intent' === $intent->object && 'succeeded' === $intent->status ) {
 				$order->payment_complete();
-				WC()->cart->empty_cart();
+				if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+					WC()->cart->empty_cart();
+				}
 
 			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$redirect_to = $this->process_final_order( end( $intent->charges->data ), $order_id );
@@ -270,7 +272,9 @@ class Bancontact extends Abstract_Payment_Gateway {
 			Helper::log( sprintf( 'Charge authorized Order id - %1s', $order->get_id() ) );
 		}
 
-		WC()->cart->empty_cart();
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			WC()->cart->empty_cart();
+		}
 		$return_url = $this->get_return_url( $order );
 		Helper::log( "Return URL: $return_url" );
 
@@ -286,5 +290,36 @@ class Bancontact extends Abstract_Payment_Gateway {
 		do_action( $this->id . '_before_payment_field_checkout' );
 		include __DIR__ . '/parts/bancontact.php';
 		do_action( $this->id . '_after_payment_field_checkout' );
+	}
+
+	/**
+	 * Override to check if charge was captured before completing payment
+	 * Bancontact gateway needs to verify captured status for authorization-only charges
+	 *
+	 * @param object $intent The payment intent object
+	 * @param \WC_Order $order The order object
+	 * @return bool True if payment should be completed, false otherwise
+	 */
+	protected function should_complete_payment_on_thankyou( $intent, $order ) {
+		// For Bancontact, check if the charge was actually captured
+		$charge = $this->get_latest_charge_from_intent( $intent );
+		
+		if ( $charge && true === $charge->captured ) {
+			// Charge was captured, safe to complete payment
+			Helper::log( 'Bancontact Gateway: Charge captured, payment completion allowed for order ' . $order->get_id() );
+			return true;
+		} else {
+			// Charge was not captured (authorization only), should be on-hold
+			Helper::log( 'Bancontact Gateway: Charge not captured (authorization only), payment completion blocked for order ' . $order->get_id() );
+			
+			// Set order to on-hold if not already
+			if ( ! $order->has_status( 'on-hold' ) ) {
+				$order->set_transaction_id( $intent->id );
+				$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization. Attempting to refund the order in part or in full will release the authorization and cancel the payment.', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id ) );
+				Helper::log( 'Bancontact Gateway: Order ' . $order->get_id() . ' set to on-hold for authorization-only charge' );
+			}
+			
+			return false;
+		}
 	}
 }

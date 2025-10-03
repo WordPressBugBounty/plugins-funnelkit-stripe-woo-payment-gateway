@@ -142,10 +142,7 @@ class GooglePay extends CreditCard {
 	}
 
 	public function get_method_description() {
-
-		if ( did_action( 'woocommerce_admin_field_payment_gateways' ) > 0 ) {
-			return $this->method_description;
-		}
+		
 
 
 		$gpay_console_url     = esc_url( 'https://pay.google.com/business/console' );
@@ -212,13 +209,13 @@ class GooglePay extends CreditCard {
 			'charge_type'           => [
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
-				'description' => __( 'Select how to charge Order', 'funnelkit-stripe-woo-payment-gateway' ),
+				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => 'automatic',
 				'options'     => [
 					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
 					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
 				],
-				'desc_tip'    => true,
+				'desc_tip'    => false,
 			],
 			'icon_type'            => [
 				'type'        => 'select',
@@ -333,7 +330,7 @@ class GooglePay extends CreditCard {
 			$data['gpay_single_product'] = $this->get_product_data();
 		}
 
-		if ( $this->is_cart() || $this->is_checkout() || ($this->is_product() && !WC()->cart->is_empty()) ) {
+		if ( $this->is_cart() || $this->is_checkout() || ($this->is_product() && WC()->cart instanceof \WC_Cart && !WC()->cart->is_empty()) ) {
 			$data['gpay_cart_data'] = $this->ajax_get_cart_details( true );
 		}
 
@@ -407,7 +404,9 @@ class GooglePay extends CreditCard {
 
 			$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', [] );
 			/** update the WC cart with the new shipping options */
-			WC()->cart->calculate_totals();
+			if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+				WC()->cart->calculate_totals();
+			}
 			$this->maybe_restore_recurring_chosen_shipping_methods( $chosen_shipping_methods );
 			/** if shipping address is not serviceable, throw an error */
 			if ( ! $this->wc_stripe_shipping_address_serviceable( $this->get_shipping_packages() ) ) {
@@ -435,7 +434,7 @@ class GooglePay extends CreditCard {
 				'currencyCode'     => get_woocommerce_currency(),
 				'countryCode'      => WC()->countries->get_base_country(),
 				'totalPriceStatus' => 'FINAL',
-				'totalPrice'       => wc_format_decimal( WC()->cart->total, 2 ),
+				'totalPrice'       => wc_format_decimal( WC()->cart instanceof \WC_Cart ? WC()->cart->total : 0, 2 ),
 				'displayItems'     => $items,
 				'totalPriceLabel'  => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
 			),
@@ -512,7 +511,9 @@ class GooglePay extends CreditCard {
 
 		}
 		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', [] );
-		WC()->cart->calculate_totals();
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			WC()->cart->calculate_totals();
+		}
 		$this->maybe_restore_recurring_chosen_shipping_methods( $chosen_shipping_methods );
 		$currency = get_woocommerce_currency();
 		/** Set mandatory payment details */
@@ -529,7 +530,7 @@ class GooglePay extends CreditCard {
 		 */
 
 		$data['is_fkwcs_need_payment'] = false;
-		if ( WC()->cart->needs_payment() ) {
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart && WC()->cart->needs_payment() ) {
 			$data['is_fkwcs_need_payment'] = true;
 		}
 		$data['order_data']       += $this->build_display_items( true, $is_localized );
@@ -616,60 +617,71 @@ class GooglePay extends CreditCard {
 		$subtotal  = 0;
 		$discounts = 0;
 
-		foreach ( WC()->cart->get_cart() as $item ) {
-			$subtotal       += $item['line_subtotal'];
-			$amount         = $item['line_subtotal'];
-			$quantity_label = 1 < $item['quantity'] ? ' (' . $item['quantity'] . ')' : '';
-			$product_name   = $item['data']->get_name();
-			$items[]        = $this->get_smart_button_line_item( $product_name . $quantity_label, $amount );
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			foreach ( WC()->cart->get_cart() as $item ) {
+				$subtotal       += $item['line_subtotal'];
+				$amount         = $item['line_subtotal'];
+				$quantity_label = 1 < $item['quantity'] ? ' (' . $item['quantity'] . ')' : '';
+				$product_name   = $item['data']->get_name();
+				$items[]        = $this->get_smart_button_line_item( $product_name . $quantity_label, $amount );
+			}
+
+			if ( $display_items ) {
+				$items = array_merge( $items, $lines );
+			} else {
+				/** Default show only subtotal instead of itemization */
+				$items[] = $this->get_smart_button_line_item( 'Subtotal', $subtotal, 'SUBTOTAL' );
+			}
+
+			$applied_coupons = array_values( WC()->cart->get_coupon_discount_totals() );
+			foreach ( $applied_coupons as $amount ) {
+				$discounts += (float) $amount;
+			}
+
+			$discounts   = wc_format_decimal( $discounts, WC()->cart->dp );
+			$tax         = wc_format_decimal( WC()->cart->tax_total + WC()->cart->shipping_tax_total, WC()->cart->dp );
+			$shipping    = wc_format_decimal( WC()->cart->shipping_total, WC()->cart->dp );
+			$order_total = WC()->cart->get_total( false );
+
+			if ( wc_tax_enabled() ) {
+				$items[] = $this->get_smart_button_line_item( esc_html( __( 'Tax', 'funnelkit-stripe-woo-payment-gateway' ) ), $tax, 'TAX' );
+			}
+
+			if ( WC()->cart->needs_shipping() ) {
+				$items[] = $this->get_smart_button_line_item( esc_html( __( 'Shipping', 'funnelkit-stripe-woo-payment-gateway' ) ), $shipping );
+			}
+
+			if ( WC()->cart->has_discount() ) {
+				$items[] = $this->get_smart_button_line_item( esc_html( __( 'Discount', 'funnelkit-stripe-woo-payment-gateway' ) ), $discounts );
+			}
+
+			$cart_fees = WC()->cart->get_fees();
+
+			/** Include fees and taxes as display items */
+			foreach ( $cart_fees as $fee ) {
+				$items[] = $this->get_smart_button_line_item( $fee->name, $fee->amount );
+			}
+
+
+			$totals = $this->get_smart_button_line_totals( [
+				'label'   => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
+				'amount'  => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_stripe_amount( $order_total, '', 1, true ), $order_total, WC()->cart ) ),
+				'pending' => false,
+			], $order_total );
+
+			return [
+				'displayItems' => $items,
+				'total'        => $totals,
+			];
 		}
-
-		if ( $display_items ) {
-			$items = array_merge( $items, $lines );
-		} else {
-			/** Default show only subtotal instead of itemization */
-			$items[] = $this->get_smart_button_line_item( 'Subtotal', $subtotal, 'SUBTOTAL' );
-		}
-
-		$applied_coupons = array_values( WC()->cart->get_coupon_discount_totals() );
-		foreach ( $applied_coupons as $amount ) {
-			$discounts += (float) $amount;
-		}
-
-		$discounts   = wc_format_decimal( $discounts, WC()->cart->dp );
-		$tax         = wc_format_decimal( WC()->cart->tax_total + WC()->cart->shipping_tax_total, WC()->cart->dp );
-		$shipping    = wc_format_decimal( WC()->cart->shipping_total, WC()->cart->dp );
-		$order_total = WC()->cart->get_total( false );
-
-		if ( wc_tax_enabled() ) {
-			$items[] = $this->get_smart_button_line_item( esc_html( __( 'Tax', 'funnelkit-stripe-woo-payment-gateway' ) ), $tax, 'TAX' );
-		}
-
-		if ( WC()->cart->needs_shipping() ) {
-			$items[] = $this->get_smart_button_line_item( esc_html( __( 'Shipping', 'funnelkit-stripe-woo-payment-gateway' ) ), $shipping );
-		}
-
-		if ( WC()->cart->has_discount() ) {
-			$items[] = $this->get_smart_button_line_item( esc_html( __( 'Discount', 'funnelkit-stripe-woo-payment-gateway' ) ), $discounts );
-		}
-
-		$cart_fees = WC()->cart->get_fees();
-
-		/** Include fees and taxes as display items */
-		foreach ( $cart_fees as $fee ) {
-			$items[] = $this->get_smart_button_line_item( $fee->name, $fee->amount );
-		}
-
-
-		$totals = $this->get_smart_button_line_totals( [
-			'label'   => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
-			'amount'  => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_stripe_amount( $order_total, '', 1, true ), $order_total, WC()->cart ) ),
-			'pending' => false,
-		], $order_total );
 
 		return [
-			'displayItems' => $items,
-			'total'        => $totals,
+			'displayItems' => [],
+			'total'        => [
+				'label'   => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
+				'amount'  => 0,
+				'pending' => false,
+			],
 		];
 	}
 

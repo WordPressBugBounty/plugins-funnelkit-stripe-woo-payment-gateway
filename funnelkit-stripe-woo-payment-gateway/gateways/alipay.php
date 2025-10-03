@@ -122,14 +122,6 @@ class AliPay extends LocalGateway {
 		];
 		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', [] );
 
-		$admin_country = ! empty( $stripe_account_settings ) ? strtoupper( $stripe_account_settings['country'] ) : wc_format_country_state_string( get_option( 'woocommerce_default_country', '' ) )['country'];
-
-		if ( in_array( $admin_country, $this->specific_country, true ) ) {
-			$this->specific_country = [ $admin_country ];
-		} else {
-			$this->specific_country = [];
-		}
-
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
 
 		if ( isset( $countries_fields['allowed_countries']['options']['all'] ) ) {
@@ -144,6 +136,7 @@ class AliPay extends LocalGateway {
 		}
 
 		$countries_fields['specific_countries']['options'] = $this->specific_country;
+
 		$this->form_fields                                 = apply_filters( $this->id . '_payment_form_fields', array_merge( $settings, $countries_fields ) );
 	}
 }

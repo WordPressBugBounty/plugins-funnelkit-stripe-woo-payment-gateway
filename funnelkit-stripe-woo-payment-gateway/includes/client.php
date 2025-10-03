@@ -262,6 +262,9 @@ class Client {
 	public function subscriptions( $method, $args ) {
 		return $this->execute( 'subscriptions', $method, $args );
 	}
+	public function subscriptionItem( $method, $args ) {
+		return $this->execute( 'subscriptionItems', $method, $args );
+	}
 
 	public function invoices( $method, $args ) {
 		return $this->execute( 'invoices', $method, $args );

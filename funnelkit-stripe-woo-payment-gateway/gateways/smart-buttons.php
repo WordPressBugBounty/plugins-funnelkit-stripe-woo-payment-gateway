@@ -23,6 +23,11 @@ class SmartButtons extends CreditCard {
 
 	public $button_type = '';
 
+	/**
+	 * Get the instance of the SmartButtons class
+	 *
+	 * @return SmartButtons
+	 */
 	public static function get_instance() {
 		if ( is_null( self::$instance ) ) {
 			self::$instance = new self();
@@ -284,9 +289,9 @@ class SmartButtons extends CreditCard {
 			}
 		}
 
-		$button_theme    = ! empty( $this->local_settings['express_checkout_button_theme'] ) ? wc_clean( $this->local_settings['express_checkout_button_theme'] ) : 'dark';
-		$button_theme    = "fkwcs_ec_payment_button-" . $button_theme;
-		$only_buttons    = apply_filters( 'fkwcs_express_buttons_is_only_buttons', false );
+		$button_theme = ! empty( $this->local_settings['express_checkout_button_theme'] ) ? wc_clean( $this->local_settings['express_checkout_button_theme'] ) : 'dark';
+		$button_theme = "fkwcs_ec_payment_button-" . $button_theme;
+		$only_buttons = apply_filters( 'fkwcs_express_buttons_is_only_buttons', false );
 
 		?>
         <div id="fkwcs_stripe_smart_button_wrapper" class="<?php echo esc_attr( implode( ' ', $sec_classes ) ); ?>">
@@ -309,7 +314,7 @@ class SmartButtons extends CreditCard {
                     <button type="button" class="fkwcs_smart_buttons <?php echo esc_attr( $extra_class . ' ' . $button_theme ) ?>" style="display:none;<?php echo esc_attr( $button_width . $button_max_width ); ?>">
                         <span class="fkwcs_express_checkout_button_content">
 							<?php echo esc_html( $options['express_checkout_button_text'] ); ?>
-                            <img alt="" style="display:none" src="" class="fkwcs_express_checkout_button_icon skip-lazy">
+                            <img alt="" style="display:none" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" class="fkwcs_express_checkout_button_icon skip-lazy">
                         </span>
                     </button>
                 </div>
@@ -359,7 +364,8 @@ class SmartButtons extends CreditCard {
 		}
 
 		if ( 'cart' === $container_class && ! empty( $options['express_checkout_separator_cart'] ) ) {
-			$separator_text = $options['express_checkout_separator_cart'];
+			$separator_text    = $options['express_checkout_separator_cart'];
+			$display_separator = true;
 		}
 
 		if ( 'fkwcs-product' === $container_class && 'inline' === $options['express_checkout_product_page_position'] ) {
@@ -499,10 +505,15 @@ class SmartButtons extends CreditCard {
 
 
 	public function load_fk_checkout_compatibility() {
-		if ( class_exists( '\WFACP_Core' ) ) {
-			include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-fk-checkout.php';
 
-			new \FKWCS_Compat_FK_Checkout();
+		try {
+			if ( class_exists( '\WFACP_Core' ) ) {
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-fk-checkout.php';
+
+				new \FKWCS_Compat_FK_Checkout();
+			}
+		} catch ( \Exception|\Error $e ) {
+
 		}
 
 

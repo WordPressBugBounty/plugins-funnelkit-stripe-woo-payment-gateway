@@ -39,6 +39,16 @@
                 }
             };
 
+            if (fkwcs_paylater.appearance && typeof fkwcs_paylater.appearance === 'object') {
+                for (let i in fkwcs_paylater.appearance) {
+                    if (fkwcs_paylater.appearance.hasOwnProperty(i)) {
+                        appearance[i] = fkwcs_paylater.appearance[i];
+                    }
+                }
+            } else {
+                console.log('Invalid appearance object:', fkwcs_paylater.appearance);
+            }
+
 
             this.elements = stripe.elements({appearance});
         }
@@ -81,7 +91,7 @@
         createMessage(amount, methods, selector) {
             try {
                 let supported_currency = ["USD", "GBP", "EUR", "DKK", "NOK", "SEK", "CAD", "AUD"];
-                let supported_countries = ["US", "CA", "AU", "NZ", "GB", "IE", "FR", "ES", "DE", "AT", "BE", "DK", "FI", "IT", "NL", "NO", "SE"];
+                let supported_countries = ["US", "CA", "AU", "NZ", "GB", "IE", "FR", "ES", "DE", "AT", "BE", "DK", "FI", "IT", "NL", "NO", "SE", "GR"];
 
                 let currency = fkwcs_paylater.currency.toUpperCase();
                 if (supported_currency.indexOf(currency) < 0 || supported_countries.indexOf(fkwcs_paylater.country_code) < 0) {
@@ -93,6 +103,13 @@
                     paymentMethodTypes: methods,
                     countryCode: fkwcs_paylater.country_code,
                 });
+
+                //klarna modal z-index was too less that fkcart modal so we are setting it to 2147483646 to make it compatible
+                let fkcartModal = $('#fkcart-modal');
+                if (fkcartModal.length > 0) {
+                    fkcartModal.css('z-index', '2147483646');
+                }
+
                 element.mount(selector);
                 $(selector).show();
             } catch (Exception) {

@@ -324,7 +324,8 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 			$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 			$data['appearance']           = array(
-				"theme" => "stripe"
+				"theme" => "stripe",
+				'rules' => apply_filters('fkwcs_stripe_payment_element_rules', (object)[], $this)
 			);
 			$options                      = [
 				'fields' => [
@@ -370,6 +371,14 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		 */
 		public function handle_api_error( $order_note, $log, $order, $create_failed_order_or_stripe_error = false ) {
 
+			if ( ! $order instanceof \WC_Order ) {
+				WFOCU_Core()->log->log( 'Order object is not valid in handle_api_error' );
+				wp_send_json( apply_filters( 'wfocu_modify_error_json_response', array(
+					'result'   => 'error',
+					'response' => 'Invalid order object',
+				), $order ) );
+				return;
+			}
 
 			/**
 			 * This case tells us that some stripe error occured during the charge process from the credit card popup
@@ -399,6 +408,20 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 				$order->add_order_note( $order_note );
 
 				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . " - Upsell transaction Failed Showing Credit Card Form" ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+
+				/**
+				 * Here down below we are handling upsell failure,
+				 * We need to unhook subscription object creation
+				 * We need to unhook new order creation
+				 * We are marking upsell failed so that required actions runs
+				 */
+				if ( class_exists( 'UpStroke_Subscriptions' ) ) {
+					remove_action( 'wfocu_offer_payment_failed_event', array( UpStroke_Subscriptions::get_instance(), 'create_pending_subscription' ), 10, 1 );
+
+				}
+				remove_all_actions( 'wfocu_front_create_new_order_on_failure' );
+				WFOCU_Core()->public->handle_failed_upsell();
+
 				wp_send_json( apply_filters( 'wfocu_modify_error_json_response', array(
 					'result'   => 'error',
 					'response' => [ 'show_payment_options' => 'yes' ],
@@ -740,7 +763,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 				return $gateways;
 			}
 
-			if ( $this->should_tokenize() && $this->is_enabled() && ! is_null( WC()->cart ) && '0.00' === WC()->cart->get_total( 'edit' ) && isset( $gateways['fkwcs_stripe'] ) ) {
+			if ( $this->should_tokenize() && $this->is_enabled() && ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart && '0.00' === WC()->cart->get_total( 'edit' ) && isset( $gateways['fkwcs_stripe'] ) ) {
 				$gateway_to_filter                 = [];
 				$gateway_to_filter['fkwcs_stripe'] = $gateways['fkwcs_stripe'];
 
@@ -923,8 +946,12 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 
 			?>
+
+
             <script src="https://js.stripe.com/v3/?ver=3.0"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript ?>
             <script>
+
+
                 (function ($) {
                     "use strict";
 
@@ -934,23 +961,31 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                             this.is_valid_card = false;
                             this.process_submit_card = null;
                             this.bucket = null;
-                            this.events();
+
                             this.payment_data =<?php echo wp_json_encode( $this->get_upe_elements( $order ) ); ?>;
                             this.credit_card_form_title = '<?php echo esc_js( WFOCU_Core()->funnels->get_funnel_option( 'upsell_failed_recovery_heading' ) ); ?>';
                             this.credit_card_failed_msg = '<?php echo esc_js( WFOCU_Core()->funnels->get_funnel_option( 'upsell_failed_recovery_btn_fail_msg' ) ); ?>';
                             this.element_data = this.payment_data.element_data;
                             this.element_options = this.payment_data.element_options;
                             this.billing_details = this.payment_data.billing_details;
-                            this.elements = wfocuStripe.elements(this.element_data);
+                            this.elements =  wfocuStripe.elements(this.element_data);
                             this.payment = this.elements.create('payment', this.element_options);
                             this.setup();
+                            this.events();
                             this.resolve = () => {
                             };
                             this.reject = () => {
                             };
 
                         }
-
+                        setup() {
+                            let current_upe_gateway = 'cart';
+                            let self = this;
+                            this.payment.on('change', function (event) {
+                                self.is_valid_card = event.complete;
+                                current_upe_gateway = event.value.type;
+                            });
+                        }
                         events() {
 
                             this.zero_upsell = '<?php echo esc_js( $order->get_payment_method() );?>';
@@ -961,6 +996,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                                  * Check if we need to mark inoffer transaction to prevent default behavior of page
                                  */
                                 if (0 !== Bucket.getTotal()) {
+                                    this.bucket = Bucket;
                                     Bucket.inOfferTransaction = true;
                                     this.initCharge();
                                 }
@@ -976,15 +1012,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
                         }
 
-                        setup() {
-                            let current_upe_gateway = 'cart';
-                            let self = this;
-                            this.payment.on('change', function (event) {
-                                self.is_valid_card = event.complete;
-                                current_upe_gateway = event.value.type;
-                            });
 
-                        }
 
                         showCreditCard(bucket, failedCase = false) {
                             const self = this;
@@ -1118,15 +1146,17 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                                 this.create_intent(payment_method, this.bucket.getBucketSendData());
                             }).catch((error) => {
                                 if (error) {
-                                   console.log(error);
+                                    console.log(error);
                                 }
                             });
                         }
 
                         submit_card() {
                             return new Promise((resolve, reject) => {
+
                                 let payment_submit = this.elements.submit();
                                 payment_submit.then((response) => {
+
                                     wfocuStripe.createPaymentMethod({
                                         elements: this.elements,
                                         params: {
@@ -1138,7 +1168,6 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                                             reject(result.error);  // Ensure the error is propagated
                                             return;
                                         }
-
                                         resolve(result.paymentMethod.id);
                                     }).catch((error) => {
                                         this.reject(error); // Pass error to this.reject()
@@ -1191,7 +1220,9 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                             let handle_card = wfocuStripe.confirmCardPayment(data.intent_secret);
                             handle_card.then(function (response) {
                                 if (response.error) {
+                                    $(document).trigger('wfocuStripeOnAuthentication', [false, false]);
                                     throw response.error;
+
                                 }
                                 if ('requires_capture' !== response.paymentIntent.status && 'succeeded' !== response.paymentIntent.status) {
                                     return;
@@ -1378,7 +1409,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
                             let action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', 'wfocu_front_handle_fkwcs_stripe_payments'), postData);
                             action.done((data) => {
                                 if (data.result !== "success") {
-                                    Bucket.swal.show({'html': Bucket.warningMessage});
+                                    this.bucket.swal.show({'html': this.bucket.warningMessage});
                                 } else {
                                     this.bucket.swal.show({'html': this.bucket.successMessage});
                                 }
@@ -1397,16 +1428,30 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
                     }
 
-                    window.wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
-                    let wfocu_upsell_payment = new ProcessUPEPayment();
 
-                    $(document).on('wfocuBucketCreated', (e, Bucket) => {
-                        wfocu_upsell_payment.setBucket(Bucket)
+
+
+                    $(document).ready(function () {
+                        window.wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
+                        window.fkwcsIsDomLoaded = true;
+                        let wfocu_upsell_payment = new ProcessUPEPayment();
+
+
+                    });
+
+                    $(window).on('load', function () {
+                        if (window.fkwcsIsDomLoaded) {
+                            return;
+                        }
+                        window.wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
+                        let wfocu_upsell_payment = new ProcessUPEPayment();
+
                     });
 
 
+
                 })(jQuery);
-            </script>
+			</script>
 			<?php
 		}
 

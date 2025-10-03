@@ -4,7 +4,12 @@ use FKWCS\Gateway\Stripe\Helper;
 
 global $wp;
 
-$total       = WC()->cart->total;
+if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+	$total = WC()->cart->total;
+} else {
+	$total = 0;
+}
+
 
 // If paying from order, we need to get total from order not cart.
 if ( isset( $_GET['pay_for_order'] ) && ! empty( $_GET['key'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended

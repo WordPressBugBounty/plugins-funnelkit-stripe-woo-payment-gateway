@@ -47,13 +47,14 @@ trait WC_Subscriptions_Trait {
 			return;
 		}
 		add_action( 'woocommerce_scheduled_subscription_payment_' . $this->id, [ $this, 'scheduled_subscription_payment' ], 10, 2 );
+		add_action( 'woocommerce_scheduled_subscription_payment', [ $this, 'attach_hooks_to_update_payment_method' ], - 999, 2 );
+
 		add_action( 'woocommerce_subscription_failing_payment_method_updated_' . $this->id, [ $this, 'update_failing_payment_method' ], 10, 2 );
 		add_action( 'wcs_resubscribe_order_created', [ $this, 'delete_resubscribe_meta' ], 10 );
 		add_action( 'wcs_renewal_order_created', [ $this, 'delete_renewal_meta' ], 10 );
 
-		add_action( 'wc_stripe_payment_fields_' . $this->id, [ $this, 'display_update_subs_payment_checkout' ] );
-		add_action( 'wc_stripe_add_payment_method_' . $this->id . '_success', [ $this, 'handle_add_payment_method_success' ], 10 );
-
+		add_action($this->id . '_after_payment_field_checkout', [$this, 'display_update_subs_payment_checkout']);
+		add_action('fkwcs_add_payment_method_' . $this->id . '_success', [$this, 'handle_add_payment_method_success'], 10);
 
 		// Display the payment method used for a subscription in the "My Subscriptions" table.
 		add_filter( 'woocommerce_my_subscriptions_payment_method', [ $this, 'maybe_render_subscription_payment_method' ], 10, 2 );
@@ -167,15 +168,19 @@ trait WC_Subscriptions_Trait {
 
 					$subscription->update_meta_data( '_fkwcs_setup_intent', $intent_data );
 					$subscription->save_meta_data();
+					if ( $this->id === 'fkwcs_stripe_cashapp' ) {
+						$this->save_payment_method_to_order( $subscription, $prepared_source );
+					}
 
-					// `get_return_url()` must be called immediately before returning a value.
-					return [
-						'result'                    => 'success',
-						'fkwcs_redirect'            => $this->get_return_url( $subscription ),
-						'fkwcs_setup_intent_secret' => $intent_secret['client_secret'],
-						'token_used'                => $this->is_using_saved_payment_method() ? 'yes' : 'no',
-					];
-				}
+						// `get_return_url()` must be called immediately before returning a value.
+						return [
+							'result'                    => 'success',
+							'fkwcs_redirect'            => $this->get_return_url( $subscription ),
+							'fkwcs_setup_intent_secret' => $intent_secret['client_secret'],
+							'token_used'                => $this->is_using_saved_payment_method() ? 'yes' : 'no',
+						];
+					}
+
 			}
 
 			$this->save_payment_method_to_order( $subscription, $prepared_source );
@@ -270,6 +275,23 @@ trait WC_Subscriptions_Trait {
 			if ( $this->has_authentication_already_failed( $renewal_order ) ) {
 				return;
 			}
+
+			// Check for existing successful intent - if the renewal order already has an intent_id, this could be a duplicate request.
+			// If the intent has already succeeded, don't continue with the payment.
+			$existing_intent = $this->get_intent_from_order( $renewal_order );
+			if ( $existing_intent ) {
+				if ( in_array( $existing_intent->status, array( 'succeeded', 'requires_capture', 'processing' ) ) ) {
+					if ( isset( $existing_intent->metadata['order_id'] ) && absint( $existing_intent->metadata['order_id'] ) === $renewal_order->get_id() ) {
+						Helper::log( "Info: Found existing successful intent {$existing_intent->id} for order {$renewal_order->get_id()}, skipping payment processing" );
+						// Process the successful payment
+						do_action( 'fkwcs_gateway_stripe_process_payment', $existing_intent, $renewal_order );
+						$this->process_final_order( isset( $existing_intent->charges ) ? end( $existing_intent->charges->data ) : $existing_intent, $renewal_order );
+
+						return;
+					}
+				}
+			}
+
 			Helper::log( "Info: Begin processing subscription payment for order {$order_id} for the amount of {$amount}" );
 
 
@@ -284,20 +306,23 @@ trait WC_Subscriptions_Trait {
 			}
 
 
-			if ( ( $this->is_no_such_source_error( $prepared_source->source_object ) || $this->is_no_linked_source_error( $prepared_source->source_object ) ) && apply_filters( 'fkwcs_stripe_use_default_customer_source', true ) ) {
+			if ( ( $this->is_no_such_source_error( $prepared_source->source_object ) || $this->is_no_linked_source_error( $prepared_source->source_object ) || $this->is_source_must_be_attached_error( $prepared_source->source_object ) ) && apply_filters( 'fkwcs_stripe_use_default_customer_source', true ) ) {
 
 				// Passing empty source will charge customer default.
 				$prepared_source->source = '';
 			}
 
-			if ( ( $this->is_no_such_source_error( $previous_error ) || $this->is_no_linked_source_error( $previous_error ) ) && apply_filters( 'fkwcs_stripe_use_default_customer_source', true ) ) {
+			if ( ( $this->is_no_such_source_error( $previous_error ) || $this->is_no_linked_source_error( $previous_error ) || $this->is_source_must_be_attached_error( $previous_error ) || $this->is_payment_method_attachment_error( $previous_error ) ) && apply_filters( 'fkwcs_stripe_use_default_customer_source', true ) ) {
 
 				// Passing empty source will charge customer default.
+				Helper::log( "Info: Payment method attachment error detected for order {$order_id}, switching to customer default payment method" );
 				$prepared_source->source = '';
 			}
+
+			
 
 			$this->lock_order_payment( $renewal_order );
-			$response                   = $this->create_and_confirm_intent_for_off_session( $renewal_order, $prepared_source );
+			$response                   = $this->create_and_confirm_intent_for_off_session( $renewal_order, $prepared_source, $previous_error );
 			$is_authentication_required = $this->is_authentication_required_for_payment( $response );
 
 			// It's only a failed payment if it's an error and it's not of the type 'authentication_required'.
@@ -387,7 +412,7 @@ trait WC_Subscriptions_Trait {
 					// The charge was successfully captured
 					do_action( 'fkwcs_gateway_stripe_process_payment', $response, $renewal_order );
 
-					// Use the last charge within the intent or the full response body in case of SEPA.
+					// Use the last charge within the intent or the full response body in case of SEPA  Or ACH.
 					$this->process_final_order( isset( $response->charges ) ? end( $response->charges->data ) : $response, $renewal_order );
 				}
 
@@ -704,7 +729,8 @@ trait WC_Subscriptions_Trait {
 		}
 
 		// Retrieve all possible payment methods for subscriptions.
-		$sources                   = array_merge( $this->get_payment_methods( $stripe_customer_id, 'card' ) );
+		$payment_type = isset( $this->payment_method_types ) ? $this->payment_method_types : 'card';
+		$sources = array_merge( $this->get_payment_methods( $stripe_customer_id, $payment_type ) );
 		$payment_method_to_display = __( 'N/A', 'funnelkit-stripe-woo-payment-gateway' );
 
 		if ( $sources ) {
@@ -720,9 +746,15 @@ trait WC_Subscriptions_Trait {
 					if ( $card ) {
 						/* translators: 1) card brand 2) last 4 digits */
 						$payment_method_to_display = sprintf( __( 'Via %1$s card ending in %2$s', 'funnelkit-stripe-woo-payment-gateway' ), ( isset( $card->brand ) ? $card->brand : __( 'N/A', 'funnelkit-stripe-woo-payment-gateway' ) ), $card->last4 );
-					} elseif ( $source->sepa_debit ) {
+					} elseif ( isset( $source->sepa_debit ) &&  $source->sepa_debit ) {
 						/* translators: 1) last 4 digits of SEPA Direct Debit */
 						$payment_method_to_display = sprintf( __( 'Via SEPA Direct Debit ending in %1$s', 'funnelkit-stripe-woo-payment-gateway' ), $source->sepa_debit->last4 );
+					} elseif (  isset( $source->us_bank_account ) &&  $source->us_bank_account ) {
+						/* translators: 1) last 4 digits of ACH Bank */
+						$payment_method_to_display = sprintf( __( 'Via %1$s ending in %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $source->us_bank_account->bank_name, $source->us_bank_account->last4 );
+					} elseif (  isset( $source->cashapp ) &&  $source->cashapp ) {
+						/* translators: 1) last 4 digits of ACH Bank */
+						$payment_method_to_display = sprintf( __( 'Via %1$s ', 'funnelkit-stripe-woo-payment-gateway' ), $source->type);
 					}
 					break;
 				}
@@ -913,7 +945,7 @@ trait WC_Subscriptions_Trait {
 	 *
 	 * @return bool true if payment intent must be authorized off session, false otherwise.
 	 */
-	protected function maybe_check_for_auth( $payment_intent ) {
+	public function maybe_check_for_auth( $payment_intent ) {
 		return ! empty( $payment_intent->status ) && 'processing' === $payment_intent->status && ! empty( $payment_intent->processing->card->customer_notification->completes_at );
 	}
 
@@ -988,6 +1020,17 @@ trait WC_Subscriptions_Trait {
 				}
 			}
 		}
+
+	}
+
+	/**
+	 * Keeping the filters attached for the @hook woocommerce_scheduled_subscription_payment
+	 * For all the unforeseen edge cases
+	 * @return void
+	 */
+	public function attach_hooks_to_update_payment_method() {
+		add_filter( 'woocommerce_order_get_payment_method', array( Stripe::get_instance(), 'change_payment_method' ), 99, 2 );
+		add_filter( 'woocommerce_subscription_get_payment_method', array( Stripe::get_instance(), 'change_payment_method' ), 99, 2 );
 
 	}
 

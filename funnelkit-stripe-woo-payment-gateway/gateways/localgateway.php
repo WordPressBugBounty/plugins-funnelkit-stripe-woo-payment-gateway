@@ -203,7 +203,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		if ( isset( $response->balance_transaction ) ) {
 			Helper::update_balance( $order, $response->balance_transaction );
 		}
-
+		$this->save_payment_method_details( $order, $response );
 		if ( true === $response->captured ) {
 			$order->payment_complete( $response->id );
 			/* translators: order id */
@@ -220,7 +220,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 			/* translators: transaction id */
 			Helper::log( sprintf( 'Charge authorized Order id - %1s', $order->get_id() ) );
 		}
-		if ( ! is_null( WC()->cart ) ) {
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 			WC()->cart->empty_cart();
 		}
 		$return_url = $this->get_return_url( $order );
@@ -229,6 +229,10 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		return $return_url;
 	}
 
+	public function save_payment_method_details( $order, $payment_intent ) {
+		//override if you need
+		return;
+	}
 	/**
 	 * Print the gateway field
 	 *
@@ -330,21 +334,23 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 
 
 				// Remove cart.
-				if ( ! is_null( WC()->cart ) ) {
+				if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 					WC()->cart->empty_cart();
 				}
 
 			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
+				$this->save_payment_method( $order, $intent );
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
-			} else if ( 'requires_payment_method' === $intent->status ) {
+			} else if ( 'requires_payment_method' === $intent->status  ) {
 
 
 				$redirect_url = wc_get_checkout_url();
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
-
 				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
 					$redirect_url = get_the_permalink( wc_clean( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				}
+
 				/**
 				 * Handle intent with no payment method here, we mark the order as failed and show users a notice
 				 */
@@ -373,34 +379,33 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		if ( true === self::$fragment_sent ) {
 			return $fragments;
 		}
-		$order_total                      = WC()->cart->get_total( false );
-		$fragments['fkwcs_paylater_data'] = [
-			'currency' => strtolower( get_woocommerce_currency() ),
-			'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
-		];
-		self::$fragment_sent              = true;
+		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			$order_total                      = WC()->cart->get_total( false );
+			$fragments['fkwcs_paylater_data'] = [
+				'currency' => strtolower( get_woocommerce_currency() ),
+				'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
+			];
+			self::$fragment_sent              = true;
+		}
 
 		return $fragments;
 	}
 
-	public function save_payment_method( $order, $intent ) {
-
-	}
-
 	public function localize_element_data( $data ) {
 
-		if ( !isset( WC()->cart ) ) {
+		if ( !isset( WC()->cart ) || ! WC()->cart instanceof \WC_Cart ) {
 			return $data;
 		}
-		$order_total                 = WC()->cart->get_total( false );
 		if ( is_wc_endpoint_url( 'order-pay' ) ) {
 			$order_id                    = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( $_GET['key'] ) ) : 0; // @codingStandardsIgnoreLine
 			$order                       = wc_get_order( $order_id );
-			$fkwcs_order_total           = $order->get_total();
-			$data['fkwcs_paylater_data'] = [
-				'currency' => strtolower( get_woocommerce_currency() ),
-				'amount'   => $fkwcs_order_total * 100
-			];
+			if ( $order && is_a( $order, 'WC_Order' ) ) {
+				$fkwcs_order_total           = $order->get_total();
+				$data['fkwcs_paylater_data'] = [
+					'currency' => strtolower( get_woocommerce_currency() ),
+					'amount'   => Helper::get_formatted_amount( $fkwcs_order_total )
+				];
+			}
 
 			return $data;
 		} else {
@@ -413,6 +418,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 			return $data;
 		}
 	}
+
 
 
 }
