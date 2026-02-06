@@ -324,8 +324,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 			$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 			$data['appearance']           = array(
-				"theme" => "stripe",
-				'rules' => apply_filters('fkwcs_stripe_payment_element_rules', (object)[], $this)
+				'theme' => 'stripe',
 			);
 			$options                      = [
 				'fields' => [

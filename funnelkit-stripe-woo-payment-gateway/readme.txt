@@ -1,10 +1,10 @@
 === FunnelKit Payment Gateway for Stripe WooCommerce ===
 Contributors: amans2k, xlplugins, teamwoofunnels
 Tags: stripe, apple pay, google pay, WooCommerce Stripe
-Requires at least: 5.4.0
-Tested up to: 6.8.3
+Requires at least: 5.4
+Tested up to: 6.9
 Requires PHP: 7.0
-Stable tag: 1.13.0
+Stable tag: 1.14.0.2
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -19,9 +19,9 @@ With this Stripe Payment Gateway for WooCommerce plugin, you can accept **credit
 
 Plus, it integrates with **one-click express payments**, such as Google Pay and Apple Pay.
 
-It also supports **local payment or bank redirect-gateway** options such as SEPA, P24, iDEAL, BanContact, and more.
+It also supports **local payment or bank redirect-gateway** options such as SEPA, P24, iDEAL, BanContact, ACH Direct Debit, EPS, Pix, Multibanco, MobilePay, and more.
 
-In addition, this plugin extends its support to **Buy Now Pay Later** payment gateways such as Affirm, Klarna, and Afterpay.
+In addition, this plugin extends its support to **Buy Now Pay Later** payment gateways such as Affirm, Klarna, and Afterpay, as well as **digital wallet** options like CashApp Pay and Alipay.
 
 This free WooCommerce Stripe plugin easily integrates with **FunnelKit’s Funnel Builder and One Click Upsells**, making the payment process simpler and more enjoyable.
 
@@ -145,6 +145,48 @@ It is supported by most Belgian banks and is a popular choice for eCommerce tran
 
 Przelewy24, commonly known as P24, is a popular bank redirect payment method in Poland. It is widely used for eCommerce transactions and provides Polish customers convenience when purchasing online.
 
+=== 11. ACH Direct Debit
+
+ACH (Automated Clearing House) Direct Debit is a popular payment method in the United States that allows customers to make payments directly from their bank accounts.
+
+This payment method is particularly useful for recurring payments, subscriptions, and high-value transactions, offering lower processing fees compared to credit card payments.
+
+=== 12. EPS
+
+EPS (Electronic Payment Standard) is a popular online payment method in Austria that allows customers to make secure payments directly from their bank accounts.
+
+It provides a convenient and trusted payment option for Austrian customers, ensuring secure transactions through direct bank integration.
+
+=== 13. Pix
+
+Pix is Brazil's instant payment system that allows customers to make instant payments 24/7 using their mobile phones, internet banking, or ATMs.
+
+This payment method provides Brazilian customers with a fast, secure, and convenient way to pay for online purchases without the need for credit cards.
+
+=== 14. Multibanco
+
+Multibanco is a popular payment method in Portugal that allows customers to pay for online purchases using their bank accounts through ATMs, internet banking, or mobile banking.
+
+It provides Portuguese customers with a familiar and secure payment option that integrates seamlessly with their existing banking infrastructure.
+
+=== 15. CashApp Pay
+
+CashApp Pay is a digital payment method that allows customers to make payments using their Cash App account, providing a quick and convenient checkout experience.
+
+This payment option is particularly popular among younger demographics and offers a seamless mobile-first payment experience.
+
+=== 16. MobilePay
+
+MobilePay is a popular mobile payment solution in Denmark, Finland, and Norway that allows customers to make payments using their smartphones.
+
+It provides Nordic customers with a fast, secure, and convenient way to pay for online purchases using their mobile devices.
+
+=== 17. Alipay
+
+Alipay is one of China's leading digital payment platforms that allows customers to make secure payments using their Alipay accounts.
+
+This payment method is essential for reaching Chinese customers and provides a trusted, widely-used payment solution in the Chinese market.
+
 The FunnelKit Team is committed to bringing more payment gateways to enhance your WooCommerce store experience.
 
 == ABOUT FUNNELKIT ==
@@ -202,7 +244,7 @@ If the express payment buttons are not showing up on your checkout page, please 
 Follow this [Troubleshooting document ](https://funnelkit.com/docs/stripe-gateway-for-woocommerce/troubleshooting/express-payment-buttons-not-showing/) to set up your payment providers.
 
 = What payment methods are supported by this WooCommerce Stripe gateway plugin? =
-Stripe Payment Gateway for WooCommerce is continuously evolving to add new features and new gateways to its system. Currently, it supports credit and debit cards, including Visa, MasterCard, American Express, Discover, etc., express payments (Apple Pay and Google Pay), and local payments such as SEPA, P24, iDEAL, and Bancontact. Furthermore, it’s compatible with Buy Now Pay Later methods like Affirm, Klarna and Afterpay.
+Stripe Payment Gateway for WooCommerce is continuously evolving to add new features and new gateways to its system. Currently, it supports credit and debit cards, including Visa, MasterCard, American Express, Discover, etc., express payments (Apple Pay and Google Pay), local payments such as SEPA, P24, iDEAL, Bancontact, ACH Direct Debit, EPS, Pix, Multibanco, and MobilePay. Furthermore, it's compatible with Buy Now Pay Later methods like Affirm, Klarna and Afterpay, as well as digital wallets like CashApp Pay and Alipay.
 
 = Is there any documentation to help me get started? =
 Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce](https://funnelkit.com/docs/stripe-gateway-for-woocommerce/) here.
@@ -216,6 +258,22 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+
+= 1.14.0.2 =
+* Fixed: UPE Payment element was not showing up correctly for the different language than default language for translatepress & Weglot plugin. (#1027)
+
+= 1.14.0.1 =
+* Fixed: iDEAL and EPS gateways not functioning properly when enabled without other payment gateways. (#1019)
+* Improved: Enhanced handling of idempotency key errors when processing payments with saved payment methods. (#1022)
+
+= 1.14.0 =
+* Fixed: [Important] Issue with script loading because of dependency updated with WooCommerce v10.3.0. (#984)
+
+= 1.13.1 =
+* Improved: Added minor tweaks to capture more logs for BNPL scenarios. (#989)
+* Improved: Gateways JS classes loading improved in the frontend. Improved performance. (#991)
+* Improved: Order exists checking on the order pay page in ACH gateway added. (#987)
+* Fixed: Cash App integration showing test mode description on checkout pages. (#987)
 
 = 1.13.0 =
 * Added: CashApp Pay payment method integration, offering an additional payment option for users. (#803)

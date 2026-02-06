@@ -12,7 +12,7 @@ class P24 extends LocalGateway {
 	public $id = 'fkwcs_stripe_p24';
 	public $payment_method_types = 'p24';
 	protected $payment_element = true;
-	
+
 	public $supports_success_webhook = true;
 
 	/**
@@ -21,7 +21,7 @@ class P24 extends LocalGateway {
 	 * @return void
 	 */
 	protected function init() {
-		$this->paylater_message_position='description';
+		$this->paylater_message_position   = 'description';
 		$this->method_title                = __( 'Stripe Przelewy 24 (P24) Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->method_description          = __( 'Accepts payments via Przelewy 24 (P24). The gateway should be enabled in your Stripe Account. Log into your Stripe account to review the <a href="https://dashboard.stripe.com/account/payments/settings" target="_blank">available gateways</a> <br/>Supported Currency: <strong>EUR, PLN</strong>', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->subtitle                    = __( 'P24 is an online banking payment method that enables your customers in e-commerce to make an online purchase', 'funnelkit-stripe-woo-payment-gateway' );
@@ -47,14 +47,15 @@ class P24 extends LocalGateway {
 	 *
 	 * @param object $intent The payment intent object
 	 * @param int $order_id The order ID
+	 *
 	 * @return string The redirect URL
 	 */
 	protected function handle_requires_action_status( $intent, $order_id ) {
 		$order = wc_get_order( $order_id );
-		
+
 		// Fire action hook for P24 requires_action status
 		do_action( 'fkwcs_p24_requires_action', $intent, $order_id, $order );
-		
+
 		// Redirect to return URL without marking order as succeeded
 		return $this->get_return_url( $order );
 	}
@@ -99,7 +100,7 @@ class P24 extends LocalGateway {
 					wp_redirect( $get_upsell_url );
 					exit();
 				}
-				
+
 				/**
 				 * bail out if the status is not pending or failed
 				 */
@@ -130,8 +131,10 @@ class P24 extends LocalGateway {
 
 			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
-			} elseif ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
-				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
+			} else if ( 'processing' === $intent->status ) {
+
+				$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
+				$redirect_url = $this->get_return_url( $order );
 			} elseif ( 'requires_payment_method' === $intent->status ) {
 				$redirect_url = wc_get_checkout_url();
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
@@ -206,10 +209,9 @@ class P24 extends LocalGateway {
 
 	}
 
-	public function delay_process_intent_success()
-	{
+	public function delay_process_intent_success() {
 
-		if (!class_exists('WFOCU_Common')) {
+		if ( ! class_exists( 'WFOCU_Common' ) ) {
 			return;
 		}
 		global $wpdb;
@@ -217,38 +219,38 @@ class P24 extends LocalGateway {
 
 		// @codingStandardsIgnoreStart
 
-		if (\WFOCU_Common::is_hpos_enabled()) {
+		if ( \WFOCU_Common::is_hpos_enabled() ) {
 			$order_table      = $wpdb->prefix . 'wc_orders';
 			$order_meta_table = $wpdb->prefix . 'wc_orders_meta';
-			$query            = $wpdb->prepare("SELECT ord.id as ID FROM {$order_table} ord
+			$query            = $wpdb->prepare( "SELECT ord.id as ID FROM {$order_table} ord
                                 INNER JOIN {$order_meta_table} om ON (ord.id = om.order_id AND om.meta_key = '_fkwcs_webhook_paid')
                                 WHERE ord.type = %s
-                                ORDER BY ord.date_created_gmt DESC LIMIT 0, 100", 'shop_order');
+                                ORDER BY ord.date_created_gmt DESC LIMIT 0, 100", 'shop_order' );
 		} else {
-			$query = $wpdb->prepare("SELECT p.ID FROM {$wpdb->posts} p
+			$query = $wpdb->prepare( "SELECT p.ID FROM {$wpdb->posts} p
                                 INNER JOIN {$wpdb->postmeta} pm ON (p.ID = pm.post_id AND pm.meta_key = '_fkwcs_webhook_paid')
                                 WHERE p.post_type = %s
-                                ORDER BY p.post_date DESC LIMIT 0, 100", 'shop_order');
+                                ORDER BY p.post_date DESC LIMIT 0, 100", 'shop_order' );
 		}
 
-		$query_results = $wpdb->get_results($query);
+		$query_results = $wpdb->get_results( $query );
 
 		// @codingStandardsIgnoreEnd
-		if (! empty($query_results) && is_array($query_results)) {
+		if ( ! empty( $query_results ) && is_array( $query_results ) ) {
 
-			$get_orders = array_map(function ($query_instance) {
-				return wc_get_order($query_instance->ID);
-			}, $query_results);
+			$get_orders = array_map( function ( $query_instance ) {
+				return wc_get_order( $query_instance->ID );
+			}, $query_results );
 
 			$i = 0;
-			if (! empty($get_orders)) {
+			if ( ! empty( $get_orders ) ) {
 
 				do {
-					if ((\WFOCU_Common::time_exceeded() || \WFOCU_Common::memory_exceeded())) {
+					if ( ( \WFOCU_Common::time_exceeded() || \WFOCU_Common::memory_exceeded() ) ) {
 						// Batch limits reached.
 						break;
 					}
-					$order = $get_orders[$i];
+					$order = $get_orders[ $i ];
 
 					try {
 
@@ -256,52 +258,52 @@ class P24 extends LocalGateway {
 						/**
 						 * Delete the metadata straight way to avoid any scenario of processing the order more than once
 						 */
-						$order->delete_meta_data('_fkwcs_webhook_paid');
+						$order->delete_meta_data( '_fkwcs_webhook_paid' );
 						$order->save_meta_data();
 
 
-						if ($order->get_payment_method() !== $this->id) {
+						if ( $order->get_payment_method() !== $this->id ) {
 							return;
 						}
 						/**
 						 * If the order is already paid, we should not process it again
 						 */
-						if (! is_null($order->get_date_paid())) {
+						if ( ! is_null( $order->get_date_paid() ) ) {
 							continue;
 						}
 
 						/**
 						 * @var $gateway FKWCS\Gateway\Stripe\CreditCard
 						 */
-						$gateway = WC()->payment_gateways()->payment_gateways()[$order->get_payment_method()];
+						$gateway = WC()->payment_gateways()->payment_gateways()[ $order->get_payment_method() ];
 
-						if (! $gateway instanceof \WC_Payment_Gateway) {
+						if ( ! $gateway instanceof \WC_Payment_Gateway ) {
 							continue;
 						}
-						$intent = $gateway->get_intent_from_order($order);
-						if (false === $intent) {
-							Helper::log(" Intent Not Found  - " . $order->get_id());
+						$intent = $gateway->get_intent_from_order( $order );
+						if ( false === $intent ) {
+							Helper::log( " Intent Not Found  - " . $order->get_id() );
 
 							continue;
 						}
-						if (method_exists($gateway, 'handle_intent_success')) {
-							Helper::log(" Upsell schedule Processing order  - " . $order->get_id());
+						if ( method_exists( $gateway, 'handle_intent_success' ) ) {
+							Helper::log( " Upsell schedule Processing order  - " . $order->get_id() );
 
-							$gateway->handle_intent_success($intent, $order);
+							$gateway->handle_intent_success( $intent, $order );
 						}
-					} catch (\Error | \Exception $e) {
-						if (isset($order) && $order instanceof \WC_Order) {
-							$order->delete_meta_data('_fkwcs_webhook_paid');
+					} catch ( \Error|\Exception $e ) {
+						if ( isset( $order ) && $order instanceof \WC_Order ) {
+							$order->delete_meta_data( '_fkwcs_webhook_paid' );
 							$order->save_meta_data();
 						}
-						Helper::log(" Upsell schedule Error occurred - " . $e->getMessage());
+						Helper::log( " Upsell schedule Error occurred - " . $e->getMessage() );
 					}
 
-					unset($get_orders[$i]);
-					$i++;
-				} while (! (\WFOCU_Common::time_exceeded() || \WFOCU_Common::memory_exceeded()) && ! empty($get_orders));
+					unset( $get_orders[ $i ] );
+					$i ++;
+				} while ( ! ( \WFOCU_Common::time_exceeded() || \WFOCU_Common::memory_exceeded() ) && ! empty( $get_orders ) );
 			}
 		}
 	}
-	
+
 }

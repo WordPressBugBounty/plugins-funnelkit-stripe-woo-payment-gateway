@@ -646,7 +646,7 @@ abstract class Helper {
 			$need_shipping = WC()->cart->needs_shipping();
 		}
 
-		return [
+		$data = array_merge( self::localize_global_data(), array(
 			'is_product_page'         => is_product() || wc_post_content_has_shortcode( 'product_page' ),
 			'is_cart'                 => is_cart(),
 			'admin_ajax'              => admin_url( 'admin-ajax.php' ),
@@ -717,7 +717,9 @@ abstract class Helper {
 				]
 			],
 			'shipping_error'          => __( 'Shipping address is invalid or no shipping methods are available. Please update your address.', 'funnelkit-stripe-woo-payment-gateway' ),
-		];
+			)
+		);
+		return $data;
 	}
 
 	/**
@@ -914,5 +916,49 @@ abstract class Helper {
 		} catch ( \Throwable $e ) {
 			// Silently fail to prevent breaking main functionality
 		}
+	}
+
+	/**
+	 * Get the handle for the Stripe SDK
+	 *
+	 * @return string
+	 *
+	 * @since 1.2.0
+	 */
+	public static function get_stripesdk_handle() {
+		return wp_script_is( 'stripe', 'registered' ) ? 'stripe' : 'fkwcs-stripe-external';
+	}
+
+	public static function localize_global_data() {
+		$data = [];
+		if ( is_wc_endpoint_url( 'order-pay' ) ) {
+			$order_id = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( $_GET['key'] ) ) : 0; // @codingStandardsIgnoreLine
+			$order    = wc_get_order( $order_id );
+
+			// Return early if order is not valid
+			if ( ! $order || ! is_a( $order, '\WC_Order' ) ) {
+				return $data;
+			}
+
+			$fkwcs_order_total           = $order->get_total();
+			$data['fkwcs_paylater_data'] = array(
+				'currency' => strtolower( get_woocommerce_currency() ),
+				'amount'   => Helper::get_formatted_amount( $fkwcs_order_total ),
+			);
+
+			return $data;
+		}
+
+		if ( is_null( WC()->cart ) || ! WC()->cart instanceof \WC_Cart ) {
+			return $data;
+		}
+
+		$order_total                 = WC()->cart->get_total( false );
+		$data['fkwcs_paylater_data'] = array(
+			'currency' => strtolower( get_woocommerce_currency() ),
+			'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) ),
+		);
+
+		return $data;
 	}
 }

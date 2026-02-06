@@ -219,16 +219,15 @@ class Ideal extends Abstract_Payment_Gateway {
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			"theme" => "stripe",
-			'rules' => apply_filters('fkwcs_stripe_payment_element_rules', (object)[], $this)
+			'theme' => 'stripe'
 		);
 
-		$options                      = [
+		$options            = [
 			'fields' => [
 				'billingDetails' => ( true === is_wc_endpoint_url( 'order-pay' ) || true === is_wc_endpoint_url( 'add-payment-method' ) ) ? 'auto' : 'never'
 			]
 		];
-		$options['wallets']           = [ 'applePay' => 'never', 'googlePay' => 'never' ];
+		$options['wallets'] = [ 'applePay' => 'never', 'googlePay' => 'never' ];
 
 		return apply_filters( 'fkwcs_stripe_payment_element_data_ideal', [ 'element_data' => $data, 'element_options' => $options ], $this );
 
@@ -294,8 +293,9 @@ class Ideal extends Abstract_Payment_Gateway {
 
 		return $return_url;
 	}
+
 	protected function get_successful_intent_statuses() {
-		return ['succeeded']; // Only 'succeeded', no 'requires_capture'
+		return [ 'succeeded' ]; // Only 'succeeded', no 'requires_capture'
 	}
 
 

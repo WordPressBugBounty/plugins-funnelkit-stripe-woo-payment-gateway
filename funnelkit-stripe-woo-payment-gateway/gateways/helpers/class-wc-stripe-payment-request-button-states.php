@@ -1,4 +1,5 @@
 <?php
+
 namespace FKWCS\Gateway\Stripe\Helpers;
 /**
  * Class WC_Stripe_Payment_Request_Button_States
@@ -12,8 +13,8 @@ namespace FKWCS\Gateway\Stripe\Helpers;
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
-#[\AllowDynamicProperties]
 
+#[\AllowDynamicProperties]
 /**
  * Known issues/inconsistencies:
  *    1. WC provides a dropdown list of states, but there's no state field in Chrome for the following countries:

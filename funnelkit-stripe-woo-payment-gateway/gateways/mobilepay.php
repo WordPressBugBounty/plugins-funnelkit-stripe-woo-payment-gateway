@@ -25,10 +25,10 @@ class mobilepay extends LocalGateway {
 		$this->subtitle           = __( 'MobilePay is an online banking payment method that enables your customers in e-commerce to make an online purchase', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->init_form_fields();
 		$this->init_settings();
-		$this->title       = $this->get_option( 'title' );
-		$this->description = $this->get_option( 'description' );
-		$this->enabled     = $this->get_option( 'enabled' );
-		$this->capture_method        = $this->get_option( 'charge_type' );
+		$this->title          = $this->get_option( 'title' );
+		$this->description    = $this->get_option( 'description' );
+		$this->enabled        = $this->get_option( 'enabled' );
+		$this->capture_method = $this->get_option( 'charge_type' );
 	}
 
 	protected function override_defaults() {
@@ -42,21 +42,21 @@ class mobilepay extends LocalGateway {
 
 	public function init_form_fields() {
 
-		$settings                = [
-			'enabled'          => [
+		$settings = [
+			'enabled'     => [
 				'label'   => ' ',
 				'type'    => 'checkbox',
 				'title'   => $this->setting_enable_label,
 				'default' => 'no',
 			],
-			'title'            => [
+			'title'       => [
 				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'text',
 				'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_title_default,
 				'desc_tip'    => true,
 			],
-			'description'      => [
+			'description' => [
 				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'textarea',
 				'css'         => 'width:25em',
@@ -64,7 +64,7 @@ class mobilepay extends LocalGateway {
 				'default'     => $this->setting_description_default,
 				'desc_tip'    => true,
 			],
-			'charge_type'           => [
+			'charge_type' => [
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
 				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),

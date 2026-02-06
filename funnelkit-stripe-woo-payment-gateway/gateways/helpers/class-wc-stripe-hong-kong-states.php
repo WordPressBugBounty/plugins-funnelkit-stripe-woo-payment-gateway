@@ -1,8 +1,10 @@
 <?php
+
 namespace FKWCS\Gateway\Stripe\Helpers;
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
+
 #[\AllowDynamicProperties]
 /**
  * Class WC_Stripe_Hong_Kong_States
@@ -340,7 +342,8 @@ class WC_Stripe_Hong_Kong_States {
 	/**
 	 * Checks if the given state is a valid region (equivalent to WC state) in Hong Kong.
 	 *
-	 * @param string $state  The state to be evaluated.
+	 * @param string $state The state to be evaluated.
+	 *
 	 * @return bool  True if the provided state is valid, false otherwise.
 	 */
 	public static function is_valid_state( $state ) {

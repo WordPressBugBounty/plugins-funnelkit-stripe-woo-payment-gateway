@@ -181,16 +181,15 @@ class Multibanco extends LocalGateway {
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			"theme" => "stripe",
-			'rules' => apply_filters('fkwcs_stripe_payment_element_rules', (object)[], $this)
+			'theme' => 'stripe'
 		);
 
-		$options                      = [
+		$options            = [
 			'fields' => [
 				'billingDetails' => 'never'
 			]
 		];
-		$options['wallets']           = [ 'applePay' => 'never', 'googlePay' => 'never' ];
+		$options['wallets'] = [ 'applePay' => 'never', 'googlePay' => 'never' ];
 
 		return apply_filters( 'fkwcs_stripe_payment_element_data_multibanco', [ 'element_data' => $data, 'element_options' => $options ], $this );
 
@@ -259,6 +258,10 @@ class Multibanco extends LocalGateway {
 
 			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
+			} else if ( 'processing' === $intent->status ) {
+
+				$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
+				$redirect_url = $this->get_return_url( $order );
 			} else if ( 'requires_payment_method' === $intent->status ) {
 
 
@@ -316,7 +319,7 @@ class Multibanco extends LocalGateway {
 		exit;
 	}
 
-	public function handle_refund_response_status( $refund_response, $reason, $amount ,$refund_time , $refund_user_info, $order ) {
+	public function handle_refund_response_status( $refund_response, $reason, $amount, $refund_time, $refund_user_info, $order ) {
 		if ( 'succeeded' === $refund_response->status ) {
 			return true;
 		} elseif ( 'pending' === $refund_response->status ) {

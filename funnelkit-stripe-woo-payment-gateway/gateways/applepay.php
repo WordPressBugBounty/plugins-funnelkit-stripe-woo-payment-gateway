@@ -68,7 +68,7 @@ class ApplePay extends CreditCard {
 		$this->merchant_id          = $this->get_option( 'merchant_id' );
 		$this->description          = $this->get_option( 'description' );
 		$this->statement_descriptor = $this->get_option( 'statement_descriptor' );
-		$this->capture_method        = $this->get_option( 'charge_type' );
+		$this->capture_method       = $this->get_option( 'charge_type' );
 		if ( false === $this->is_configured() ) {
 			return;
 		}
@@ -118,7 +118,7 @@ class ApplePay extends CreditCard {
 				'default'     => __( 'Pay with Apple Pay', 'funnelkit-stripe-woo-payment-gateway' ),
 				'desc_tip'    => true,
 			],
-			'charge_type'           => [
+			'charge_type' => [
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
 				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),
@@ -195,7 +195,7 @@ class ApplePay extends CreditCard {
 
 	public function get_method_description() {
 
-		
+
 		$description = $this->method_description;
 
 		$description .= sprintf( __( '<p>Note: Apple Pay Gateway visibility is dependent on Apple Pay supported browsers. <a href=%s>Learn more</a>', 'funnelkit-stripe-woo-payment-gateway' ), 'https://funnelkit.com/docs/stripe-gateway-for-woocommerce/troubleshooting/express-payment-buttons-not-showing/#apple-pay' );

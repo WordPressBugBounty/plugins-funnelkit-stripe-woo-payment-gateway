@@ -13,15 +13,15 @@ class EPS extends LocalGateway {
 	 * Sets up method title, description, supported currencies, countries,
 	 * and initializes form fields and settings. Also adds localization filter.
 	 *
-	 * @since 1.0.0
 	 * @return void
+	 * @since 1.0.0
 	 */
 	protected function init() {
 		$this->method_title       = __( 'Stripe EPS Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->method_description = __( 'Accepts payments via EPS. The gateway should be enabled in your Stripe Account. Log into your Stripe account to review the <a href="https://dashboard.stripe.com/account/payments/settings" target="_blank">available gateways</a> <br/>Supported Currency: <strong>EUR</strong>', 'funnelkit-stripe-woo-payment-gateway' );
 
-		$this->supported_currency          = [ 'EUR'];
-		$this->specific_country = [
+		$this->supported_currency          = [ 'EUR' ];
+		$this->specific_country            = [
 			'AT', // Austria
 			'AU', // Australia
 			'BE', // Belgium
@@ -82,12 +82,12 @@ class EPS extends LocalGateway {
 	 * title, description, and country-specific settings. Handles country restrictions
 	 * based on Stripe account settings and removes unsupported options.
 	 *
-	 * @since 1.0.0
 	 * @return void
+	 * @since 1.0.0
 	 */
 	public function init_form_fields() {
 
-		$settings                = [
+		$settings = [
 			'enabled'     => [
 				'label'   => ' ',
 				'type'    => 'checkbox',
@@ -135,12 +135,13 @@ class EPS extends LocalGateway {
 	 * Appends EPS payment configuration to the localized data array
 	 * that gets passed to frontend JavaScript for Stripe Elements integration.
 	 *
-	 * @since 1.0.0
 	 * @param array $data Existing localized data array
+	 *
 	 * @return array Modified data array with EPS payment element data
+	 * @since 1.0.0
 	 */
 	public function localize_element_data( $data ) {
-		if ( !$this->is_available() ) {
+		if ( ! $this->is_available() ) {
 			return $data;
 		}
 		$data['fkwcs_payment_data_eps'] = $this->payment_element_data();
@@ -156,8 +157,8 @@ class EPS extends LocalGateway {
 	 * for EPS payments, including payment method types, appearance settings,
 	 * and field configurations (billing details disabled, wallets disabled).
 	 *
-	 * @since 1.0.0
 	 * @return array Payment element configuration with element_data and element_options
+	 * @since 1.0.0
 	 */
 	public function payment_element_data() {
 
@@ -179,6 +180,7 @@ class EPS extends LocalGateway {
 		return apply_filters( 'fkwcs_stripe_payment_element_data_eps', [ 'element_data' => $data, 'element_options' => $options ], $this );
 
 	}
+
 	/**
 	 * Verify intent secret and redirect to the thankyou page
 	 *

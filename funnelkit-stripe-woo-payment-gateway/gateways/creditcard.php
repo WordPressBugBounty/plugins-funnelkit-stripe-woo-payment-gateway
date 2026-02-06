@@ -123,7 +123,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 * @return boolean
 	 */
 	public function is_page_supported() {
-		return is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page() || (function_exists('wcs_is_view_subscription_page') && wcs_is_view_subscription_page()); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page() || ( function_exists( 'wcs_is_view_subscription_page' ) && wcs_is_view_subscription_page() ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -902,16 +902,15 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			"theme" => "stripe",
-			'rules' => apply_filters('fkwcs_stripe_payment_element_rules', (object)[], $this)
+			'theme' => 'stripe',
 		);
 
-		$options                      = [
+		$options            = [
 			'fields' => [
 				'billingDetails' => ( true === is_wc_endpoint_url( 'order-pay' ) || true === is_wc_endpoint_url( 'add-payment-method' ) ) ? 'auto' : 'never'
 			]
 		];
-		$options['wallets']           = [ 'applePay' => 'never', 'googlePay' => 'never' ];
+		$options['wallets'] = [ 'applePay' => 'never', 'googlePay' => 'never' ];
 
 		return apply_filters( 'fkwcs_stripe_payment_element_data', [ 'element_data' => $data, 'element_options' => $options ], $this );
 
@@ -1069,9 +1068,13 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 * @return bool
 	 */
 	private function is_payment_request_for_supported_method() {
-		return isset( $_POST['payment_request_type'], $_POST['payment_method'] ) && in_array( $_POST['payment_request_type'], array( 'google_pay', 'apple_pay' ), true ) && 'fkwcs_stripe' === $_POST['payment_method'] && did_action( 'woocommerce_before_checkout_process' ); 		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		return isset( $_POST['payment_request_type'], $_POST['payment_method'] ) && in_array( $_POST['payment_request_type'], array(
+				'google_pay',
+				'apple_pay'
+			), true ) && 'fkwcs_stripe' === $_POST['payment_method'] && did_action( 'woocommerce_before_checkout_process' );        // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
 	}
+
 	/**
 	 * Sync gateway tokens from the API, generic method that handled cache detection too
 	 * This method will check for existing tokens and then will sync them with the stripe API
@@ -1281,6 +1284,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 *
 	 * @param object $intent The payment intent object
 	 * @param \WC_Order $order The order object
+	 *
 	 * @return bool True if payment should be completed, false otherwise
 	 */
 	protected function should_complete_payment_on_thankyou( $intent, $order ) {
@@ -1290,6 +1294,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 		if ( $charge && wc_string_to_bool( $charge->captured ) ) {
 			// Charge was captured, safe to complete payment
 			Helper::log( 'CreditCard Gateway: Charge captured, payment completion allowed for order ' . $order->get_id() );
+
 			return true;
 		} else {
 			// Charge was not captured (authorization only), should be on-hold

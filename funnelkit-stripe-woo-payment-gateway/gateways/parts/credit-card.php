@@ -8,7 +8,7 @@ if ( ! empty( $this->description ) ) {
 }
 
 $display_tokenization = $this->supports( 'tokenization' ) && is_checkout() && is_user_logged_in(); //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UndefinedVariable
-if ( $display_tokenization && 'yes' === $this->enable_saved_cards) {
+if ( $display_tokenization && 'yes' === $this->enable_saved_cards ) {
 	?>
     <div class="fkwcs-saved-payment-methods">
 		<?php $this->saved_payment_methods(); //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UndefinedVariable		?>

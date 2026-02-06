@@ -119,8 +119,8 @@ class GooglePay extends CreditCard {
 		$this->btn_color            = $this->get_option( 'button_color' );
 		$this->btn_theme            = $this->get_option( 'button_theme' );
 
-		$this->capture_method        = $this->get_option( 'charge_type' );
-        if ( false === $this->is_configured() ) {
+		$this->capture_method = $this->get_option( 'charge_type' );
+		if ( false === $this->is_configured() ) {
 			return;
 		}
 		add_action( 'wp_enqueue_scripts', [ $this, 'register_stripe_js' ] );
@@ -142,7 +142,6 @@ class GooglePay extends CreditCard {
 	}
 
 	public function get_method_description() {
-		
 
 
 		$gpay_console_url     = esc_url( 'https://pay.google.com/business/console' );
@@ -206,7 +205,7 @@ class GooglePay extends CreditCard {
 				'default'     => __( 'Pay with your Google Pay', 'funnelkit-stripe-woo-payment-gateway' ),
 				'desc_tip'    => true,
 			],
-			'charge_type'           => [
+			'charge_type'          => [
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
 				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),
@@ -330,7 +329,7 @@ class GooglePay extends CreditCard {
 			$data['gpay_single_product'] = $this->get_product_data();
 		}
 
-		if ( $this->is_cart() || $this->is_checkout() || ($this->is_product() && WC()->cart instanceof \WC_Cart && !WC()->cart->is_empty()) ) {
+		if ( $this->is_cart() || $this->is_checkout() || ( $this->is_product() && WC()->cart instanceof \WC_Cart && ! WC()->cart->is_empty() ) ) {
 			$data['gpay_cart_data'] = $this->ajax_get_cart_details( true );
 		}
 

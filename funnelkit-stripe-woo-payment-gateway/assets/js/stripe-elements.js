@@ -4310,23 +4310,57 @@ jQuery(function ($) {
             }
 
             const stripe = Stripe(pubKey, {locale: fkwcs_data.locale, 'betas': betas});
-            available_gateways.card = new FKWCS_Stripe(stripe, 'fkwcs_stripe');
-            available_gateways.p24 = new FKWCS_P24(stripe, 'fkwcs_stripe_p24');
-            available_gateways.us_bank_account = new FKWCS_ach(stripe, 'fkwcs_stripe_ach');
-            available_gateways.sepa_debit = new FKWCS_Sepa(stripe, 'fkwcs_stripe_sepa');
-            available_gateways.ideal = new FKWCS_Ideal(stripe, 'fkwcs_stripe_ideal');
-            available_gateways.pix = new FKWCS_PIX(stripe, 'fkwcs_stripe_pix');
-            available_gateways.bancontact = new FKWCS_BanContact(stripe, 'fkwcs_stripe_bancontact');
-            available_gateways.multibanco = new FKWCS_Multibanco(stripe, 'fkwcs_stripe_multibanco');
-            available_gateways.eps = new FKWCS_EPS(stripe, 'fkwcs_stripe_eps');
-            available_gateways.affirm = new FKWCS_AFFIRM(stripe, 'fkwcs_stripe_affirm');
-            available_gateways.klarna = new FKWCS_KLARNA(stripe, 'fkwcs_stripe_klarna');
-            available_gateways.afterpay = new FKWCS_AFTERPAY(stripe, 'fkwcs_stripe_afterpay');
-            available_gateways.mobilepay = new FKWCS_MOBILEPAY(stripe, 'fkwcs_stripe_mobilepay');
-            available_gateways.cashapp = new FKWCS_CASHAPP(stripe, 'fkwcs_stripe_cashapp');
-            available_gateways.google_pay = new FKWCS_GOOGLEPAY(stripe, 'fkwcs_stripe_google_pay');
-            available_gateways.apple_pay = new FKWCS_ApplePay(stripe, 'fkwcs_stripe_apple_pay');
-            available_gateways.alipay = new FKWCS_AliPay(stripe, 'fkwcs_stripe_alipay');
+			if (fkwcs_data.enable_gateways?.fkwcs_stripe === 'yes') {
+                available_gateways.card = new FKWCS_Stripe(stripe, 'fkwcs_stripe');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_p24 === 'yes') {
+                available_gateways.p24 = new FKWCS_P24(stripe, 'fkwcs_stripe_p24');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_ach === 'yes') {
+                available_gateways.us_bank_account = new FKWCS_ach(stripe, 'fkwcs_stripe_ach');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_sepa === 'yes') {
+                available_gateways.sepa_debit = new FKWCS_Sepa(stripe, 'fkwcs_stripe_sepa');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_ideal === 'yes') {
+                available_gateways.ideal = new FKWCS_Ideal(stripe, 'fkwcs_stripe_ideal');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_pix === 'yes') {
+                available_gateways.pix = new FKWCS_PIX(stripe, 'fkwcs_stripe_pix');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_bancontact === 'yes') {
+                available_gateways.bancontact = new FKWCS_BanContact(stripe, 'fkwcs_stripe_bancontact');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_multibanco === 'yes') {
+                available_gateways.multibanco = new FKWCS_Multibanco(stripe, 'fkwcs_stripe_multibanco');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_eps === 'yes') {
+                available_gateways.eps = new FKWCS_EPS(stripe, 'fkwcs_stripe_eps');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_affirm === 'yes') {
+                available_gateways.affirm = new FKWCS_AFFIRM(stripe, 'fkwcs_stripe_affirm');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_klarna === 'yes') {
+                available_gateways.klarna = new FKWCS_KLARNA(stripe, 'fkwcs_stripe_klarna');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_afterpay === 'yes') {
+                available_gateways.afterpay = new FKWCS_AFTERPAY(stripe, 'fkwcs_stripe_afterpay');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_mobilepay === 'yes') {
+                available_gateways.mobilepay = new FKWCS_MOBILEPAY(stripe, 'fkwcs_stripe_mobilepay');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_cashapp === 'yes') {
+                available_gateways.cashapp = new FKWCS_CASHAPP(stripe, 'fkwcs_stripe_cashapp');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_google_pay === 'yes') {
+                available_gateways.google_pay = new FKWCS_GOOGLEPAY(stripe, 'fkwcs_stripe_google_pay');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_apple_pay === 'yes') {
+                available_gateways.apple_pay = new FKWCS_ApplePay(stripe, 'fkwcs_stripe_apple_pay');
+            }
+            if (fkwcs_data.enable_gateways?.fkwcs_stripe_alipay === 'yes') {
+                available_gateways.alipay = new FKWCS_AliPay(stripe, 'fkwcs_stripe_alipay');
+            }
 
             $(document).trigger('fkwcs_gateway_loaded', {
                 "Gateway": Gateway,

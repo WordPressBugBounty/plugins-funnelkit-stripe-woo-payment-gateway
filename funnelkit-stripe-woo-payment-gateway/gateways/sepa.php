@@ -67,7 +67,6 @@ class Sepa extends Abstract_Payment_Gateway {
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_stripe_js' ] );
 
 
-
 	}
 
 	/**
@@ -236,9 +235,9 @@ class Sepa extends Abstract_Payment_Gateway {
 			$this->save_payment_method_checkbox();
 		}
 
-		if ( $this->test_mode ) {
+		if ( 'test' === $this->test_mode ) {
 			echo '<div class="fkwcs-test-description"><p>';
-			esc_js( $this->get_test_mode_description() );
+			echo esc_html( $this->get_test_mode_description() );
 			echo '</p></div>';
 		}
 		do_action( 'fkwcs_stripe_payment_fields_stripe_sepa', $this->id );
@@ -353,7 +352,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			/* translators: %1$1s order id, %2$2s order total amount  */
 			Helper::log( sprintf( 'Begin processing payment with saved payment method for order %1$1s for the amount of %2$2s', $order_id, $order->get_total() ) );
 
-			$request = [
+			$request             = [
 				'payment_method'       => $payment_method->id,
 				'payment_method_types' => [ $this->payment_method_types ],
 				'amount'               => Helper::get_stripe_amount( $order->get_total() ),
@@ -363,7 +362,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			];
 			$request['metadata'] = $this->add_metadata( $order );
 			$request             = $this->set_shipping_data( $request, $order );
-			$intent = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
+			$intent              = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
 
 			$this->save_intent_to_order( $order, $intent );
 
@@ -459,6 +458,10 @@ class Sepa extends Abstract_Payment_Gateway {
 			$redirect_to = $this->process_final_order( end( $intent->charges->data[0] ), $order_id );
 			wp_safe_redirect( $redirect_to );
 			exit;
+		} else if ( 'processing' === $intent->status ) {
+
+			$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
+			$redirect_url = $this->get_return_url( $order );
 		} else if ( 'requires_payment_method' === $intent->status ) {
 
 
@@ -494,7 +497,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			/** translators: transaction id, other info */
 			$order->update_status( 'on-hold', sprintf( __( 'Stripe charge awaiting payment: %1$s. %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id, $others_info ) );
 
-			do_action( 'fkwcs_'.$this->id.'_before_redirect', $order_id );
+			do_action( 'fkwcs_' . $this->id . '_before_redirect', $order_id );
 
 			$redirect_to = $this->get_return_url( $order );
 			Helper::log( "Redirecting to :" . $redirect_to );
@@ -538,7 +541,7 @@ class Sepa extends Abstract_Payment_Gateway {
 		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 			WC()->cart->empty_cart();
 		}
-		do_action( 'fkwcs_'.$this->id.'_before_redirect', $order_id );
+		do_action( 'fkwcs_' . $this->id . '_before_redirect', $order_id );
 		$return_url = $this->get_return_url( $order );
 		Helper::log( "Return URL3: $return_url" );
 
@@ -667,6 +670,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
 		];
 	}
+
 	/**
 	 * After verify intent got called its time to save payment method to the order
 	 *
@@ -694,6 +698,7 @@ class Sepa extends Abstract_Payment_Gateway {
 		$prepared_payment_method = Helper::prepare_payment_method( $payment_method, $token );
 		$this->save_payment_method_to_order( $order, $prepared_payment_method );
 	}
+
 	/**
 	 * Tokenize card payment
 	 *
@@ -709,7 +714,7 @@ class Sepa extends Abstract_Payment_Gateway {
 		if ( ! empty( $token_exists ) ) {
 
 			$token_obj = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
-			$token_obj->set_gateway_id($this->id );
+			$token_obj->set_gateway_id( $this->id );
 			$token_obj->save();
 			if ( ! is_null( $token_obj ) ) {
 				return $token_obj;
@@ -753,7 +758,7 @@ class Sepa extends Abstract_Payment_Gateway {
 	 */
 	public function is_page_supported() {
 
-		return  is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -762,27 +767,29 @@ class Sepa extends Abstract_Payment_Gateway {
 	 *
 	 * @param object $intent The payment intent object
 	 * @param \WC_Order $order The order object
+	 *
 	 * @return bool True if payment should be completed, false otherwise
 	 */
 	protected function should_complete_payment_on_thankyou( $intent, $order ) {
 		// For SEPA, check if the charge was actually captured
 		$charge = $this->get_latest_charge_from_intent( $intent );
-		
+
 		if ( $charge && true === $charge->captured ) {
 			// Charge was captured, safe to complete payment
 			Helper::log( 'SEPA Gateway: Charge captured, payment completion allowed for order ' . $order->get_id() );
+
 			return true;
 		} else {
 			// Charge was not captured (authorization only), should be on-hold
 			Helper::log( 'SEPA Gateway: Charge not captured (authorization only), payment completion blocked for order ' . $order->get_id() );
-			
+
 			// Set order to on-hold if not already
 			if ( ! $order->has_status( 'on-hold' ) ) {
 				$order->set_transaction_id( $intent->id );
 				$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization. Attempting to refund the order in part or in full will release the authorization and cancel the payment.', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id ) );
 				Helper::log( 'SEPA Gateway: Order ' . $order->get_id() . ' set to on-hold for authorization-only charge' );
 			}
-			
+
 			return false;
 		}
 	}

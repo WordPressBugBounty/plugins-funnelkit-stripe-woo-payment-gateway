@@ -41,10 +41,10 @@ class Affirm extends LocalGateway {
 		$this->subtitle           = __( 'affirm is an online banking payment method that enables your customers in e-commerce to make an online purchase', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->init_form_fields();
 		$this->init_settings();
-		$this->title       = $this->get_option( 'title' );
-		$this->description = $this->get_option( 'description' );
-		$this->enabled     = $this->get_option( 'enabled' );
-		$this->capture_method        = $this->get_option( 'charge_type' );
+		$this->title          = $this->get_option( 'title' );
+		$this->description    = $this->get_option( 'description' );
+		$this->enabled        = $this->get_option( 'enabled' );
+		$this->capture_method = $this->get_option( 'charge_type' );
 
 	}
 
@@ -61,7 +61,7 @@ class Affirm extends LocalGateway {
 
 	public function init_form_fields() {
 
-		$settings = [
+		$settings                = [
 			'enabled'          => [
 				'label'   => ' ',
 				'type'    => 'checkbox',
@@ -83,7 +83,7 @@ class Affirm extends LocalGateway {
 				'default'     => $this->setting_description_default,
 				'desc_tip'    => true,
 			],
-			'charge_type'           => [
+			'charge_type'      => [
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
 				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),
@@ -121,12 +121,12 @@ class Affirm extends LocalGateway {
 		}
 
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
-		if (isset($countries_fields['allowed_countries']['options']['all'])) {
-			unset($countries_fields['allowed_countries']['options']['all']);
+		if ( isset( $countries_fields['allowed_countries']['options']['all'] ) ) {
+			unset( $countries_fields['allowed_countries']['options']['all'] );
 		}
 
-		if (isset($countries_fields['allowed_countries']['options']['all_except'])) {
-			unset($countries_fields['allowed_countries']['options']['all_except']);
+		if ( isset( $countries_fields['allowed_countries']['options']['all_except'] ) ) {
+			unset( $countries_fields['allowed_countries']['options']['all_except'] );
 		}
 		if ( isset( $countries_fields['except_countries'] ) ) {
 			unset( $countries_fields['except_countries'] );

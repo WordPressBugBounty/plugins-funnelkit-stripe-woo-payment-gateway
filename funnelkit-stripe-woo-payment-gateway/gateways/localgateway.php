@@ -19,13 +19,10 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 	private static $fragment_sent = false;
 	public $capture_method = 'automatic';
 
-
 	public function __construct() {
 		$this->override_defaults();
 		parent::__construct();
 		$this->init_supports();
-
-
 	}
 
 	protected function override_defaults() {
@@ -53,8 +50,6 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		add_filter( 'woocommerce_payment_successful_result', [ $this, 'modify_successful_payment_result' ], 999, 2 );
 		add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'merge_cart_details' ], 1000 );
 		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
-
-
 	}
 
 	/**
@@ -75,8 +70,6 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 	 * @return void
 	 */
 	public function init_form_fields() {
-
-
 		$settings = [
 			'enabled'     => [
 				'label'   => ' ',
@@ -100,8 +93,6 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 				'default'     => '',
 				'desc_tip'    => true,
 			],
-
-
 		];
 
 		$this->form_fields = apply_filters( $this->id . '_payment_form_fields', array_merge( $settings, $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country ) ) );
@@ -126,7 +117,6 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		$icons_str = '';
 		$icons_str .= ! empty( $icons[ $this->payment_method_types ] ) ? $icons[ $this->payment_method_types ] : '';
 
-
 		return apply_filters( 'woocommerce_gateway_icon', $icons_str, $this->id );
 	}
 
@@ -139,7 +129,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 	 * @throws \Exception If payment will not be accepted.
 	 *
 	 */
-	public function process_payment( $order_id) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+	public function process_payment( $order_id ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		try {
 			$order = wc_get_order( $order_id );
 
@@ -187,7 +177,6 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		}
 	}
 
-
 	/**
 	 * Save Meta Data Like Balance Charge ID & status
 	 * Add respective  order notes according to stripe charge status
@@ -214,7 +203,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		} else {
 			$order->set_transaction_id( $response->id );
 			$order->save();
-			
+
 			/* translators: transaction id */
 			$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization. Attempting to refund the order in part or in full will release the authorization and cancel the payment.', 'funnelkit-stripe-woo-payment-gateway' ), $response->id ) );
 			/* translators: transaction id */
@@ -233,18 +222,17 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 		//override if you need
 		return;
 	}
+
 	/**
 	 * Print the gateway field
 	 *
 	 * @return void
 	 */
 	public function payment_fields() {
-
 		do_action( $this->id . '_before_payment_field_checkout' );
 		include __DIR__ . '/parts/local.php';
 		do_action( $this->id . '_after_payment_field_checkout' );
 	}
-
 
 	public function modify_successful_payment_result( $result, $order_id ) {
 		if ( empty( $order_id ) ) {
@@ -278,7 +266,6 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 			$redirect = sprintf( '#fkwcs-confirm-pi-%s:%s:%d:%s:%s', $result['fkwcs_intent_secret'], rawurlencode( $verification_url ), $order->get_id(), $this->id, $is_token_used );
 		}
 
-
 		return [
 			'result'   => 'success',
 			'redirect' => $redirect,
@@ -300,9 +287,7 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 
 			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( $_GET['order_key'] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				throw new \Exception( __( 'Invalid Order Key.', 'funnelkit-stripe-woo-payment-gateway' ) );
-
 			}
-
 		} catch ( \Exception $e ) {
 			/* translators: Error message text */
 			$message = sprintf( __( 'Payment verification error: %s', 'funnelkit-stripe-woo-payment-gateway' ), $e->getMessage() );
@@ -312,7 +297,6 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 
 		try {
 			$intent = $this->get_intent_from_order( $order );
-
 			if ( false === $intent ) {
 				throw new \Exception( 'Intent Not Found' );
 			}
@@ -326,12 +310,10 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 				exit;
 			}
 
-
 			if ( 'setup_intent' === $intent->object && 'succeeded' === $intent->status ) {
 				$order->payment_complete();
 				do_action( 'fkwcs_' . $this->id . '_before_redirect', $order_id );
 				$redirect_url = $this->get_return_url( $order );
-
 
 				// Remove cart.
 				if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
@@ -339,15 +321,14 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 				}
 
 			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
-				$this->save_payment_method( $order, $intent );
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
-			} else if ( 'requires_payment_method' === $intent->status  ) {
-
-
+			} else if ( 'processing' === $intent->status ) {
+				$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
+				$redirect_url = $this->get_return_url( $order );
+			} else if ( 'requires_payment_method' === $intent->status ) {
 				$redirect_url = wc_get_checkout_url();
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-
 					$redirect_url = get_the_permalink( wc_clean( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				}
 
@@ -357,13 +338,11 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 				if ( $order->has_status( 'failed' ) ) {
 					wp_safe_redirect( $redirect_url );
 					exit;
-
 				}
 
 				// Load the right message and update the status.
 				$status_message = isset( $intent->last_payment_error ) /* translators: 1) The error message that was received from Stripe. */ ? sprintf( __( 'Stripe SCA authentication failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->last_payment_error->message ) : __( 'Stripe SCA authentication failed.', 'funnelkit-stripe-woo-payment-gateway' );
 				$this->mark_order_failed( $order, $status_message );
-
 			}
 			Helper::log( "Redirecting to :" . $redirect_url );
 		} catch ( \Exception $e ) {
@@ -385,40 +364,46 @@ abstract class LocalGateway extends Abstract_Payment_Gateway {
 				'currency' => strtolower( get_woocommerce_currency() ),
 				'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
 			];
-			self::$fragment_sent              = true;
+
+			self::$fragment_sent = true;
 		}
 
 		return $fragments;
 	}
 
 	public function localize_element_data( $data ) {
-
-		if ( !isset( WC()->cart ) || ! WC()->cart instanceof \WC_Cart ) {
+		if ( ! $this->is_available() ) {
 			return $data;
 		}
+
 		if ( is_wc_endpoint_url( 'order-pay' ) ) {
-			$order_id                    = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( $_GET['key'] ) ) : 0; // @codingStandardsIgnoreLine
-			$order                       = wc_get_order( $order_id );
-			if ( $order && is_a( $order, 'WC_Order' ) ) {
-				$fkwcs_order_total           = $order->get_total();
-				$data['fkwcs_paylater_data'] = [
-					'currency' => strtolower( get_woocommerce_currency() ),
-					'amount'   => Helper::get_formatted_amount( $fkwcs_order_total )
-				];
+			$order_id = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( $_GET['key'] ) ) : 0; // @codingStandardsIgnoreLine
+			$order    = wc_get_order( $order_id );
+
+			// Return early if order is not valid
+			if ( ! $order || ! is_a( $order, '\WC_Order' ) ) {
+				return $data;
 			}
 
-			return $data;
-		} else {
-			$order_total                 = WC()->cart->get_total( false );
+			$fkwcs_order_total           = $order->get_total();
 			$data['fkwcs_paylater_data'] = [
 				'currency' => strtolower( get_woocommerce_currency() ),
-				'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
+				'amount'   => Helper::get_formatted_amount( $fkwcs_order_total )
 			];
 
 			return $data;
 		}
+
+		if ( is_null( WC()->cart ) || ! WC()->cart instanceof \WC_Cart ) {
+			return $data;
+		}
+
+		$order_total                 = WC()->cart->get_total( false );
+		$data['fkwcs_paylater_data'] = [
+			'currency' => strtolower( get_woocommerce_currency() ),
+			'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
+		];
+
+		return $data;
 	}
-
-
-
 }

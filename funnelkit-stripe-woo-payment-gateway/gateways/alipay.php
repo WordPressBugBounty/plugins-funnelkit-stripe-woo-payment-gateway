@@ -137,6 +137,6 @@ class AliPay extends LocalGateway {
 
 		$countries_fields['specific_countries']['options'] = $this->specific_country;
 
-		$this->form_fields                                 = apply_filters( $this->id . '_payment_form_fields', array_merge( $settings, $countries_fields ) );
+		$this->form_fields = apply_filters( $this->id . '_payment_form_fields', array_merge( $settings, $countries_fields ) );
 	}
 }

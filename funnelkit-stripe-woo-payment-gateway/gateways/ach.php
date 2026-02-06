@@ -31,12 +31,12 @@ class ACH extends LocalGateway {
 	 * @return void
 	 */
 	public function init_supports() {
-		$this->supports = apply_filters( 'fkwcs_ach_payment_supports', array_merge( $this->supports, [
+		$this->supports = apply_filters( 'fkwcs_ach_payment_supports', array_merge( $this->supports, array(
 			'products',
 			'refunds',
 			'tokenization',
-			'add_payment_method'
-		] ) );
+			'add_payment_method',
+		) ) );
 	}
 
 	/**
@@ -44,7 +44,6 @@ class ACH extends LocalGateway {
 	 *
 	 * @return void
 	 */
-
 	protected function init() {
 		$this->paylater_message_position   = 'description';
 		$this->method_title                = __( 'Stripe ACH Gateway', 'funnelkit-stripe-woo-payment-gateway' );
@@ -53,8 +52,8 @@ class ACH extends LocalGateway {
 		$this->title                       = $this->get_option( 'title' );
 		$this->description                 = $this->get_option( 'description' );
 		$this->enabled                     = $this->get_option( 'enabled' );
-		$this->supported_currency          = [ 'USD' ];
-		$this->specific_country            = [ 'US' ];
+		$this->supported_currency          = array( 'USD' );
+		$this->specific_country            = array( 'US' );
 		$this->setting_enable_label        = __( 'Enable Stripe ACH Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = __( 'Stripe ACH', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_description_default = __( 'Pay with ACH', 'funnelkit-stripe-woo-payment-gateway' );
@@ -62,8 +61,8 @@ class ACH extends LocalGateway {
 		$this->init_form_fields();
 		$this->init_settings();
 		$this->enable_saved_cards = $this->get_option( 'enable_saved_cards' );
-		add_filter( 'woocommerce_payment_methods_list_item', [ $this, 'get_saved_payment_methods_list' ], 10, 2 );
-		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
+		add_filter( 'woocommerce_payment_methods_list_item', array( $this, 'get_saved_payment_methods_list' ), 10, 2 );
+		add_filter( 'fkwcs_localized_data', array( $this, 'localize_element_data' ), 999 );
 	}
 
 	/**
@@ -72,38 +71,38 @@ class ACH extends LocalGateway {
 	 * @return void
 	 */
 	public function init_form_fields() {
-		$settings          = apply_filters( 'fkwcs_ach_payment_form_fields', [
-			'enabled'            => [
+		$settings          = apply_filters( 'fkwcs_ach_payment_form_fields', array(
+			'enabled'            => array(
 				'label'   => ' ',
 				'type'    => 'checkbox',
 				'title'   => $this->setting_enable_label,
 				'default' => 'no',
-			],
-			'title'              => [
+			),
+			'title'              => array(
 				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'text',
 				'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_title_default,
 				'id'          => $this->setting_title_default,
 				'desc_tip'    => true,
-			],
-			'description'        => [
+			),
+			'description'        => array(
 				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'textarea',
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => '',
 				'desc_tip'    => true,
-			],
-			'enable_saved_cards' => [
+			),
+			'enable_saved_cards' => array(
 				'label'       => __( 'Enable Payment via Saved Bank', 'funnelkit-stripe-woo-payment-gateway' ),
 				'title'       => __( 'Saved Bank', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'checkbox',
 				'description' => __( 'Save Bank details for future orders', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => 'yes',
 				'desc_tip'    => true,
-			]
-		] );
+			),
+		) );
 		$this->form_fields = apply_filters( $this->id . '_payment_form_fields', array_merge( $settings, $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country ) ) );
 	}
 
@@ -116,7 +115,6 @@ class ACH extends LocalGateway {
 	 *
 	 * @return array|void
 	 * @throws \Exception If payment will not be accepted.
-	 *
 	 */
 	public function process_payment( $order_id, $retry = true, $force_save_source = false, $previous_error = false, $use_order_source = false ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		do_action( 'fkwcs_before_process_payment', $order_id );
@@ -131,31 +129,31 @@ class ACH extends LocalGateway {
 				if ( ! $this->is_using_saved_payment_method() ) {
 					$intent_data = $this->create_setup_intent( '', $customer_id, $order );
 					if ( $intent_data ) {
-						$intent_data_insert = [
+						$intent_data_insert = array(
 							'id'            => $intent_data['id'],
 							'client_secret' => $intent_data['client_secret'],
-						];
+						);
 
 						$order->update_meta_data( '_fkwcs_setup_intent', $intent_data_insert );
 						$order->save_meta_data();
 						$return_url = $this->get_return_url( $order );
 
-						return [
+						return array(
 							'result'                    => 'success',
 							'fkwcs_redirect'            => $return_url,
 							'fkwcs_setup_intent_secret' => $intent_data->client_secret,
 							'token_used'                => $this->is_using_saved_payment_method() ? 'yes' : 'no',
-							'save_card'                 => $force_save_source
-						];
+							'save_card'                 => $force_save_source,
+						);
 					} else {
-						return [
+						return array(
 							'result'   => 'fail',
 							'redirect' => '',
-						];
+						);
 					}
 				} else {
 					return $this->process_change_subscription_payment_method( $order_id );
-                }
+				}
 			}
 			if ( $this->is_using_saved_payment_method() ) {
 				return $this->process_payment_using_saved_token( $order_id );
@@ -163,16 +161,16 @@ class ACH extends LocalGateway {
 			/** This will throw exception if not valid */
 			$this->validate_minimum_order_amount( $order );
 			$idempotency_key  = $order->get_order_key() . time();
-			$data             = [
+			$data             = array(
 				'amount'               => Helper::get_formatted_amount( $order->get_total() ),
 				'currency'             => $this->get_currency(),
 				'description'          => $this->get_order_description( $order ),
 				'metadata'             => $this->get_metadata( $order_id ),
-				'payment_method_types' => [ $this->payment_method_types ],
+				'payment_method_types' => array( $this->payment_method_types ),
 				'customer'             => $customer_id,
 				'capture_method'       => $this->capture_method,
-				'setup_future_usage' => 'off_session',
-			];
+				'setup_future_usage'   => 'off_session',
+			);
 			$data['metadata'] = $this->add_metadata( $order );
 			$data             = $this->set_shipping_data( $data, $order, $this->shipping_address_required );
 			$intent_data      = $this->get_payment_intent( $order, $idempotency_key, $data );
@@ -185,17 +183,17 @@ class ACH extends LocalGateway {
 				 */
 				$return_url = $this->get_return_url( $order );
 
-				return [
+				return array(
 					'result'              => 'success',
 					'fkwcs_redirect'      => $return_url,
 					'save_card'           => $force_save_source,
 					'fkwcs_intent_secret' => $intent_data->client_secret,
-				];
+				);
 			} else {
-				return [
+				return array(
 					'result'   => 'fail',
 					'redirect' => '',
-				];
+				);
 			}
 		} catch ( \Exception $e ) {
 			Helper::log( $e->getMessage(), 'warning' );
@@ -217,7 +215,7 @@ class ACH extends LocalGateway {
 			$token = $this->find_saved_token();
 
 			$stripe_api     = $this->get_client();
-			$response       = $stripe_api->payment_methods( 'retrieve', [ $token->get_token() ] );
+			$response       = $stripe_api->payment_methods( 'retrieve', array( $token->get_token() ) );
 			$payment_method = $response['success'] ? $response['data'] : false;
 
 			$prepared_payment_method = Helper::prepare_payment_method( $payment_method, $token );
@@ -229,28 +227,28 @@ class ACH extends LocalGateway {
 			/* translators: %1$1s order id, %2$2s order total amount  */
 			Helper::log( sprintf( 'Begin processing payment with saved payment method for order %1$1s for the amount of %2$2s', $order_id, $order->get_total() ) );
 
-			$request             = [
+			$request             = array(
 				'confirm'                => false,
 				'payment_method'         => $payment_method->id,
-				'payment_method_types'   => [ $this->payment_method_types ],
+				'payment_method_types'   => array( $this->payment_method_types ),
 				'amount'                 => Helper::get_stripe_amount( $order->get_total() ),
 				'currency'               => strtolower( $order->get_currency() ),
 				'description'            => $this->get_order_description( $order ),
 				'customer'               => $payment_method->customer,
-				'expand'                 => [
+				'expand'                 => array(
 					'payment_method',
-					'charges.data.balance_transaction'
-				],
-				'payment_method_options' => [
-					'us_bank_account' => [
-						'financial_connections' => [
-							'permissions' => [ 'payment_method' ]
-						],
-						'verification_method'   => 'automatic'
-					]
-				]
+					'charges.data.balance_transaction',
+				),
+				'payment_method_options' => array(
+					'us_bank_account' => array(
+						'financial_connections' => array(
+							'permissions' => array( 'payment_method' ),
+						),
+						'verification_method'   => 'automatic',
+					),
+				),
 
-			];
+			);
 			$request['metadata'] = $this->add_metadata( $order );
 			$request             = $this->set_shipping_data( $request, $order );
 			$intent              = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
@@ -258,10 +256,10 @@ class ACH extends LocalGateway {
 			if ( $intent->status === 'requires_confirmation' || $intent->status === 'requires_action' ) {
 				try {
 					$stripe_api       = $this->get_client();
-					$confirm_response = $stripe_api->payment_intents( 'confirm', [ $intent->id ] );
+					$confirm_response = $stripe_api->payment_intents( 'confirm', array( $intent->id ) );
 
 					if ( isset( $confirm_response['error'] ) ) {
-						throw new \Exception( "Payment confirmation failed: " . $confirm_response['error']['message'] );
+						throw new \Exception( 'Payment confirmation failed: ' . $confirm_response['error']['message'] );
 					}
 
 					global $woocommerce;
@@ -285,40 +283,40 @@ class ACH extends LocalGateway {
 							$return_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 							$order->update_status( 'failed', __( 'Payment failed. Please try another payment method.', 'funnelkit-stripe-woo-payment-gateway' ) );
 							wc_add_notice( __( 'Payment failed. Please try another payment method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
-							throw new \Exception( "Payment failed: Payment method was declined or insufficient funds." );
+							throw new \Exception( 'Payment failed: Payment method was declined or insufficient funds.' );
 							break;
 
 						case 'requires_action':
-							return apply_filters( 'fkwcs_card_payment_return_intent_data', [
+							return apply_filters( 'fkwcs_card_payment_return_intent_data', array(
 								'result'              => 'success',
 								'token'               => 'yes',
 								'fkwcs_redirect'      => $return_url,
 								'payment_method'      => $intent->id,
 								'fkwcs_intent_secret' => $intent->client_secret,
-							] );
+							) );
 							break;
 
 						case 'canceled':
 							$return_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 							$order->update_status( 'failed', __( 'Payment was canceled by the user or expired.', 'funnelkit-stripe-woo-payment-gateway' ) );
 							wc_add_notice( __( 'Payment was canceled. Please try again.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
-							throw new \Exception( "Payment failed: Payment intent was canceled." );
+							throw new \Exception( 'Payment failed: Payment intent was canceled.' );
 							break;
 
 						default:
 							$return_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 							$order->update_status( 'failed', __( 'An unknown error occurred. Please contact support.', 'funnelkit-stripe-woo-payment-gateway' ) );
 							wc_add_notice( __( 'An unknown error occurred. Please try again.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
-							throw new \Exception( "Unexpected Payment Intent status: " . $confirm_response->status );
+							throw new \Exception( 'Unexpected Payment Intent status: ' . $confirm_response->status );
 					}
 
-					return [
+					return array(
 						'result'   => 'success',
 						'redirect' => $return_url,
-					];
+					);
 
 				} catch ( \Exception $e ) {
-					Helper::log( "Payment confirmation failed : " . $e->getMessage() );
+					Helper::log( 'Payment confirmation failed : ' . $e->getMessage() );
 					wc_add_notice( $e->getMessage(), 'error' );
 
 				}
@@ -337,10 +335,10 @@ class ACH extends LocalGateway {
 			}
 
 			/** Return thank you page redirect URL */
-			return [
+			return array(
 				'result'   => 'success',
 				'redirect' => $return_url,
-			];
+			);
 
 		} catch ( \Exception $e ) {
 			wc_add_notice( $e->getMessage(), 'error' );
@@ -348,16 +346,15 @@ class ACH extends LocalGateway {
 			/* translators: error message */
 			$order->update_status( 'failed' );
 
-			return [
+			return array(
 				'result'   => 'fail',
 				'redirect' => '',
-			];
+			);
 		}
 	}
 
 	/**
 	 * override verify intent after confirm call for redirection.
-	 *
 	 */
 	public function verify_intent() {
 		global $woocommerce;
@@ -371,7 +368,6 @@ class ACH extends LocalGateway {
 				throw new \Exception( __( 'Invalid Order Key.', 'funnelkit-stripe-woo-payment-gateway' ) );
 
 			}
-
 		} catch ( \Exception $e ) {
 			/* translators: Error message text */
 			$message = sprintf( __( 'Payment verification error: %s', 'funnelkit-stripe-woo-payment-gateway' ), $e->getMessage() );
@@ -385,7 +381,7 @@ class ACH extends LocalGateway {
 			if ( false === $intent ) {
 				throw new \Exception( 'Intent Not Found' );
 			}
-            $this->save_payment_method( $order, $intent );
+			$this->save_payment_method( $order, $intent );
 			if ( ! $order->has_status( apply_filters( 'fkwcs_stripe_allowed_payment_processing_statuses', [ 'pending', 'failed' ], $order ) ) ) {
 				/**
 				 * bail out if the status is not pending or failed
@@ -395,22 +391,22 @@ class ACH extends LocalGateway {
 				exit;
 			}
 
-
 			if ( 'setup_intent' === $intent->object && 'succeeded' === $intent->status ) {
 				$order->payment_complete();
 				do_action( 'fkwcs_' . $this->id . '_before_redirect', $order_id );
 				$redirect_url = $this->get_return_url( $order );
 
-
 				// Remove cart.
 				if ( ! is_null( WC()->cart ) ) {
 					WC()->cart->empty_cart();
 				}
-
-			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
+			} elseif ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
-			} else if ( 'requires_payment_method' === $intent->status ) {
+			} else if ( 'processing' === $intent->status ) {
 
+				$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
+				$redirect_url = $this->get_return_url( $order );
+			} else if ( 'requires_payment_method' === $intent->status ) {
 
 				$redirect_url = wc_get_checkout_url();
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
@@ -431,7 +427,7 @@ class ACH extends LocalGateway {
 				$status_message = isset( $intent->last_payment_error ) /* translators: 1) The error message that was received from Stripe. */ ? sprintf( __( 'Stripe SCA authentication failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->last_payment_error->message ) : __( 'Stripe SCA authentication failed.', 'funnelkit-stripe-woo-payment-gateway' );
 				$order->update_status( 'failed', $status_message );
 
-			} else if ( 'pending' === $intent->status || 'processing' === $intent->status ) {
+			} elseif ( 'pending' === $intent->status || 'processing' === $intent->status ) {
 				$order_stock_reduced = Helper::get_meta( $order, '_order_stock_reduced' );
 
 				if ( ! $order_stock_reduced ) {
@@ -445,12 +441,12 @@ class ACH extends LocalGateway {
 				$order->update_status( 'on-hold', sprintf( __( 'Stripe charge awaiting payment: %1$s. %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id, $others_info ) );
 
 				$redirect_to = $this->get_return_url( $order );
-				Helper::log( "Redirecting to :" . $redirect_to );
+				Helper::log( 'Redirecting to :' . $redirect_to );
 
 				wp_safe_redirect( $redirect_to );
 				exit;
 			}
-			Helper::log( "Redirecting to :" . $redirect_url );
+			Helper::log( 'Redirecting to :' . $redirect_url );
 		} catch ( \Exception $e ) {
 			$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 			wc_add_notice( esc_html( $e->getMessage() ), 'error' );
@@ -498,7 +494,7 @@ class ACH extends LocalGateway {
 		$source = wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
 
 		$stripe_api    = $this->get_client();
-		$response      = $stripe_api->payment_methods( 'retrieve', [ $source ] );
+		$response      = $stripe_api->payment_methods( 'retrieve', array( $source ) );
 		$source_object = $response['success'] ? $response['data'] : false;
 
 		if ( isset( $source_object ) ) {
@@ -514,7 +510,7 @@ class ACH extends LocalGateway {
 			$source_id = $source_object->id;
 		}
 
-		$response = $stripe_api->payment_methods( 'attach', [ $source_id, [ 'customer' => $customer_id ] ] );
+		$response = $stripe_api->payment_methods( 'attach', array( $source_id, array( 'customer' => $customer_id ) ) );
 		$response = $response['success'] ? $response['data'] : false;
 		$user     = wp_get_current_user();
 		$user_id  = ( $user->ID && $user->ID > 0 ) ? $user->ID : false;
@@ -533,10 +529,10 @@ class ACH extends LocalGateway {
 		do_action( 'fkwcs_add_payment_method_' . ( isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : '' ) . '_success', $source_id, $source_object ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Helper::log( 'New payment method added successfully' );
 
-		return [
+		return array(
 			'result'   => 'success',
 			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
-		];
+		);
 	}
 
 	/**
@@ -546,7 +542,6 @@ class ACH extends LocalGateway {
 	 * @param object $payment_method payment method object.
 	 *
 	 * @return object token object.
-	 *
 	 */
 	public function create_payment_token_for_user( $user_id, $payment_method, $is_live ) {
 		global $wpdb;
@@ -554,7 +549,7 @@ class ACH extends LocalGateway {
 		if ( ! empty( $token_exists ) ) {
 
 			$token_obj = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
-			$token_obj->set_gateway_id($this->id );
+			$token_obj->set_gateway_id( $this->id );
 			$token_obj->save();
 			if ( ! is_null( $token_obj ) ) {
 				return $token_obj;
@@ -625,7 +620,7 @@ class ACH extends LocalGateway {
 	}
 
 	public function get_tokens() {
-		$tokens = [];
+		$tokens = array();
 
 		try {
 			if ( is_user_logged_in() && $this->supports( 'tokenization' ) ) {
@@ -676,9 +671,8 @@ class ACH extends LocalGateway {
 	 */
 	public function save_payment_method( $order, $intent ) {
 
-
 		$payment_method = $intent->payment_method;
-		$response       = $this->get_client()->payment_methods( 'retrieve', [ $payment_method ] );
+		$response       = $this->get_client()->payment_methods( 'retrieve', array( $payment_method ) );
 		$payment_method = $response['success'] ? $response['data'] : false;
 
 		$token = null;
@@ -705,60 +699,61 @@ class ACH extends LocalGateway {
 	}
 
 	public function localize_element_data( $data ) {
-
-		if ( ! isset( WC()->cart ) ) {
+		if ( ! $this->is_available() ) {
 			return $data;
 		}
+
 		if ( is_wc_endpoint_url( 'order-pay' ) ) {
-			$order_id                    = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( $_GET['key'] ) ) : 0; // @codingStandardsIgnoreLine
-			$order                       = wc_get_order( $order_id );
-			$fkwcs_order_total           = $order->get_total();
-			$data['fkwcs_paylater_data'] = [
+			$order_id = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( $_GET['key'] ) ) : 0; // @codingStandardsIgnoreLine
+			$order    = wc_get_order( $order_id );
+
+			// Return early if order is not valid
+			if ( ! $order || ! is_a( $order, '\WC_Order' ) ) {
+				return $data;
+			}
+
+			$data['fkwcs_paylater_data'] = array(
 				'currency' => strtolower( get_woocommerce_currency() ),
-				'amount'   => $fkwcs_order_total * 100
-			];
-		} else {
+				'amount'   => $order->get_total() * 100,
+			);
+		} elseif ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 			$order_total                 = WC()->cart->get_total( false );
-			$data['fkwcs_paylater_data'] = [
+			$data['fkwcs_paylater_data'] = array(
 				'currency' => strtolower( get_woocommerce_currency() ),
-				'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) )
-			];
+				'amount'   => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_formatted_amount( $order_total ), $order_total, WC()->cart ) ),
+			);
 
 		}
-		$data['fkwcs_ach_payment_data'] = $this->payment_element_data( $this->payment_method_types );
+		$data['fkwcs_ach_payment_data'] = $this->payment_element_data();
 
 		return $data;
 	}
 
 	public function get_element_options() {
-
 		$order_amount = WC()->cart->get_total( 'edit' );
 		$amount       = Helper::get_minimum_amount();
 		if ( $order_amount >= $amount ) {
 			$amount = $order_amount;
 		}
 
-
 		return array(
-			"mode"               => "payment",
-			"currency"           => strtolower( $this->get_currency() ),
-			"setup_future_usage" => 'off_session',
-			"amount"             => Helper::get_formatted_amount( $amount ), //keeping it as sample
+			'mode'               => 'payment',
+			'currency'           => strtolower( $this->get_currency() ),
+			'setup_future_usage' => 'off_session',
+			'amount'             => Helper::get_formatted_amount( $amount ), // keeping it as sample
 		);
 	}
 
 
 	public function payment_element_data() {
-
 		$data    = $this->get_payment_element_options();
-		$methods = [ $this->payment_method_types ];
+		$methods = array( $this->payment_method_types );
 		if ( isset( $this->settings['link_none'] ) && 'yes' !== $this->settings['link_none'] ) {
 			$methods = $this->get_payment_method_types();
 		}
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 
-		return apply_filters( 'fkwcs_stripe_ach_payment_element_data', [ 'element_data' => $data ], $this );
-
+		return apply_filters( 'fkwcs_stripe_ach_payment_element_data', array( 'element_data' => $data ), $this );
 	}
 }

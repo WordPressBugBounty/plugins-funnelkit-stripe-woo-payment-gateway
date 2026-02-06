@@ -14,8 +14,8 @@ class Pix extends LocalGateway {
 	 * Sets up method title, description, supported currencies, countries,
 	 * and initializes form fields and settings. Also adds localization filter.
 	 *
-	 * @since 1.0.0
 	 * @return void
+	 * @since 1.0.0
 	 */
 	protected function init() {
 		$this->method_title       = esc_html__( 'Stripe Pix Gateway', 'funnelkit-stripe-woo-payment-gateway' );
@@ -29,15 +29,16 @@ class Pix extends LocalGateway {
 		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
 
 	}
-	
+
 	protected function override_defaults() {
-		$this->supported_currency          = [ 'BRL' , 'USD'];
-		$this->specific_country = [ 'BR', 'US'];
+		$this->supported_currency          = [ 'BRL', 'USD' ];
+		$this->specific_country            = [ 'BR', 'US' ];
 		$this->setting_enable_label        = esc_html__( 'Enable Stripe Pix Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = esc_html__( 'Stripe Pix', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_description_default = esc_html__( 'Pay with Pix', 'funnelkit-stripe-woo-payment-gateway' );
 
 	}
+
 	/**
 	 * Initialize and configure the admin form fields for Pix gateway.
 	 *
@@ -45,12 +46,12 @@ class Pix extends LocalGateway {
 	 * title, description, and country-specific settings. Handles country restrictions
 	 * based on Stripe account settings and removes unsupported options.
 	 *
-	 * @since 1.0.0
 	 * @return void
+	 * @since 1.0.0
 	 */
 	public function init_form_fields() {
 
-		$settings                = [
+		$settings = [
 			'enabled'     => [
 				'label'   => ' ',
 				'type'    => 'checkbox',
@@ -99,12 +100,13 @@ class Pix extends LocalGateway {
 	 * Appends Pix payment configuration to the localized data array
 	 * that gets passed to frontend JavaScript for Stripe Elements integration.
 	 *
-	 * @since 1.0.0
 	 * @param array $data Existing localized data array
+	 *
 	 * @return array Modified data array with Pix payment element data
+	 * @since 1.0.0
 	 */
 	public function localize_element_data( $data ) {
-		if ( !$this->is_available() ) {
+		if ( ! $this->is_available() ) {
 			return $data;
 		}
 		$data['fkwcs_payment_data_pix'] = $this->payment_element_data();
@@ -120,8 +122,8 @@ class Pix extends LocalGateway {
 	 * for Pix payments, including payment method types, appearance settings,
 	 * and field configurations (billing details disabled, wallets disabled).
 	 *
-	 * @since 1.0.0
 	 * @return array Payment element configuration with element_data and element_options
+	 * @since 1.0.0
 	 */
 	public function payment_element_data() {
 
@@ -131,23 +133,23 @@ class Pix extends LocalGateway {
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			"theme" => "stripe",
-			'rules' => apply_filters('fkwcs_stripe_payment_element_rules', (object)[], $this)
+			'theme' => 'stripe'
 		);
 
-		$options                      = [
+		$options            = [
 			'fields' => [
 				'billingDetails' => 'never'
 			]
 		];
-		$options['wallets']           = [ 'applePay' => 'never', 'googlePay' => 'never' ];
+		$options['wallets'] = [ 'applePay' => 'never', 'googlePay' => 'never' ];
 
 		return apply_filters( 'fkwcs_stripe_payment_element_data_Pix', [ 'element_data' => $data, 'element_options' => $options ], $this );
 
 	}
+
 	public function save_payment_method_details( $order, $charge_response ) {
 		try {
-			if ( isset( $charge_response->billing_details->tax_id ) && !empty( $charge_response->billing_details->tax_id ) ) {
+			if ( isset( $charge_response->billing_details->tax_id ) && ! empty( $charge_response->billing_details->tax_id ) ) {
 				$order->update_meta_data( '_fkwcs_pix_tax_id', $charge_response->billing_details->tax_id );
 				$order->save();
 
@@ -155,7 +157,7 @@ class Pix extends LocalGateway {
 			} else {
 				Helper::log( 'No tax ID found in charge response billing details' );
 			}
-		} catch ( Exception | Error $e ) {
+		} catch ( Exception|Error $e ) {
 			Helper::log( 'Error saving Pix payment method details: ' . $e->getMessage() );
 		}
 	}
