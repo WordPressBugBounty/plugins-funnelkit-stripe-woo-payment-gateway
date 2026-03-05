@@ -534,6 +534,27 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		if ( apply_filters( 'fkwcs_execute_payment_intent', true, $order, $prepared_source, $data ) ) {
 			$stripe_api = $this->get_client();
 
+			try {
+				if (
+				$this->is_application_fee_supported() &&
+				class_exists( '\Sublium_WCS\Includes\Helpers\AccessPermission' ) &&
+				\Sublium_WCS\Includes\Helpers\AccessPermission::is_application_fee_applicable()
+				) {
+					// Use Sublium's calculation for application fee based on full order amount
+					$application_fee_amount = \Sublium_WCS\Includes\Helpers\AccessPermission::get_application_fee_by_order( $order );
+					if ( $application_fee_amount > 0 ) {
+						$data['application_fee_amount'] = Helper::get_stripe_amount(
+							$application_fee_amount,
+							strtolower( $order->get_currency() ),
+							100,
+							false
+						);
+					}
+				}
+			} catch ( \Throwable $e ) {
+				Helper::log( 'Application fee calculation error in make_payment_by_source: ' . $e->getMessage() );
+			}
+
 			// Add idempotency key with retry count logic
 			$idempotency_key = $prepared_source->source . '_' . $order->get_order_key();
 			$retry_count     = Helper::get_meta( $order, '_fkwcs_retry_count' );
@@ -568,6 +589,21 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
+	 * Determine whether the application fee is supported.
+	 *
+	 * @since 1.8.2
+	 *
+	 * @return bool
+	 */
+	public function is_application_fee_supported() {
+		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', array() );
+		if ( empty( $stripe_account_settings ) ) {
+			return true;
+		}
+		return ! in_array( $stripe_account_settings['country'], array( 'br', 'in', 'mx' ), true );
+	}
+
+	/**
 	 * Get payment intent from order meta
 	 *
 	 * @param \WC_Order $order
@@ -579,6 +615,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function get_payment_intent( $order, $idempotency_key, $args ) {
 		$stripe_api  = $this->set_client_by_order_payment_mode( $order );
+		$retry_count = Helper::get_meta( $order, '_fkwcs_retry_count' );
 
 		// Use enhanced validation to check if existing intent can be reused
 		$existing_intent = $this->validate_existing_intent( $order );
@@ -607,13 +644,33 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			unset( $args['customer'] );
 		}
 
-		$args = apply_filters( 'fkwcs_payment_intent_data', $args, $order );
-
-		$retry_count = Helper::get_meta( $order, '_fkwcs_retry_count' );
 		if ( ! empty( $retry_count ) ) {
 			$idempotency_key = $idempotency_key . '_' . $retry_count;
 		}
 
+		$args = apply_filters( 'fkwcs_payment_intent_data', $args, $order );
+
+		try {
+			if (
+				$this->is_application_fee_supported() &&
+				class_exists( '\Sublium_WCS\Includes\Helpers\AccessPermission' ) &&
+				\Sublium_WCS\Includes\Helpers\AccessPermission::is_application_fee_applicable()
+			) {
+				// Use Sublium's calculation for application fee based on full order amount
+				$application_fee_amount = \Sublium_WCS\Includes\Helpers\AccessPermission::get_application_fee_by_order( $order );
+
+				if ( $application_fee_amount > 0 ) {
+					$args['application_fee_amount'] = Helper::get_stripe_amount(
+						$application_fee_amount,
+						strtolower( $order->get_currency() ),
+						100,
+						false
+					);
+				}
+			}
+		} catch ( \Throwable $e ) {
+			Helper::log( 'Application fee calculation error in get_payment_intent: ' . $e->getMessage() );
+		}
 		$args     = array(
 			array( $args ),
 			array( 'idempotency_key' => $idempotency_key ),
@@ -621,6 +678,11 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$response = $stripe_api->payment_intents( 'create', $args );
 		$intent   = $this->handle_client_response( $response );
 
+		if ( empty( $retry_count ) ) {
+			$order->update_meta_data( '_fkwcs_retry_count', 1 );
+		} else {
+			$order->update_meta_data( '_fkwcs_retry_count', absint( $retry_count ) + 1 );
+		}
 		$this->save_intent_to_order( $order, $intent );
 
 		return $intent;
@@ -656,7 +718,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			if ( in_array( $payment_intent->status, $invalid_statuses, true ) ) {
 				return false;
 			}
-
 
 			// Verify intent belongs to this specific order
 			if ( ! empty( $payment_intent->metadata['order_id'] ) ) {
@@ -1120,6 +1181,189 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
+	 * Check if a payment intent is disputed
+	 *
+	 * Checks if the provided payment intent has any active dispute.
+	 * This method checks for all dispute statuses that should block order completion.
+	 *
+	 * @param object    $intent The payment intent object to check for disputes.
+	 * @param \WC_Order $order The order object (used for logging purposes).
+	 *
+	 * @return array {
+	 *     Dispute information array
+	 *
+	 *     @type bool   $is_disputed    Whether the payment intent is disputed
+	 *     @type string $dispute_status The dispute status (if disputed)
+	 *     @type string $dispute_id     The dispute ID (if disputed)
+	 *     @type string $charge_id      The charge ID (if available)
+	 * }
+	 */
+	public function is_payment_intent_disputed( $intent, $order ) {
+		// Default return value - not disputed
+		$result = array(
+			'is_disputed'    => false,
+			'dispute_status' => '',
+			'dispute_id'     => '',
+			'charge_id'      => '',
+		);
+
+		try {
+			// If intent not provided or is false, return not disputed
+			if ( false === $intent || empty( $intent ) ) {
+				return $result;
+			}
+
+			// Skip dispute check for setup intents as they don't have charges
+			if ( isset( $intent->object ) && 'setup_intent' === $intent->object ) {
+				return $result;
+			}
+
+			// Get the latest charge from the intent
+			$charge = $this->get_latest_charge_from_intent( $intent );
+
+			// If no charge exists, return not disputed
+			if ( empty( $charge ) ) {
+				return $result;
+			}
+
+			// Check if charge has disputed flag
+			if ( ! isset( $charge->disputed ) || false === $charge->disputed ) {
+				return $result;
+			}
+
+			// Check if dispute object exists
+			if ( ! isset( $charge->dispute ) || empty( $charge->dispute ) ) {
+				Helper::log(
+					sprintf(
+						'is_payment_intent_disputed: Charge %s marked as disputed but no dispute object found for order %d',
+						isset( $charge->id ) ? $charge->id : 'unknown',
+						$order->get_id()
+					),
+					'warning'
+				);
+				return $result;
+			}
+
+			$dispute = $charge->dispute;
+
+			// Handle case where dispute is a string ID (not expanded by Stripe)
+			// This happens when the payment intent is retrieved without expand parameter
+			if ( is_string( $dispute ) ) {
+				Helper::log(
+					sprintf(
+						'is_payment_intent_disputed: Dispute returned as ID (%s), retrieving full dispute object for order %d',
+						$dispute,
+						$order->get_id()
+					),
+					'info'
+				);
+
+				// Retrieve the full dispute object
+				$client           = $this->get_client();
+				$dispute_response = $client->disputes( 'retrieve', array( $dispute ) );
+
+				if ( ! $dispute_response['success'] || empty( $dispute_response['data'] ) ) {
+					Helper::log(
+						sprintf(
+							'is_payment_intent_disputed: Failed to retrieve dispute %s for order %d: %s. Treating as disputed to be safe.',
+							$dispute,
+							$order->get_id(),
+							isset( $dispute_response['message'] ) ? $dispute_response['message'] : 'Unknown error'
+						),
+						'error'
+					);
+
+					// If we can't retrieve the dispute but the charge is marked as disputed,
+					// treat it as disputed to be safe (block completion)
+					$result = array(
+						'is_disputed'    => true,
+						'dispute_status' => 'unknown',
+						'dispute_id'     => $dispute,
+						'charge_id'      => isset( $charge->id ) ? $charge->id : '',
+					);
+
+					return $result;
+				}
+
+				// Replace string ID with full dispute object
+				$dispute = $dispute_response['data'];
+			}
+
+			// Define dispute statuses that should block order completion
+			$blocking_statuses = array(
+				'warning_needs_response',
+				'warning_under_review',
+				'under_review',
+				'charge_refunded',
+				'lost',
+				'needs_response',
+			);
+
+			// Check if dispute status exists before comparison
+			if ( ! isset( $dispute->status ) ) {
+				Helper::log(
+					sprintf(
+						'is_payment_intent_disputed: Dispute object exists but status property missing for order %d',
+						$order->get_id()
+					),
+					'warning'
+				);
+				return $result;
+			}
+
+			// Check if dispute status is one that should block completion
+			if ( in_array( $dispute->status, $blocking_statuses, true ) ) {
+				$result = array(
+					'is_disputed'    => true,
+					'dispute_status' => $dispute->status,
+					'dispute_id'     => isset( $dispute->id ) ? $dispute->id : '',
+					'charge_id'      => isset( $charge->id ) ? $charge->id : '',
+				);
+
+				Helper::log(
+					sprintf(
+						'Dispute detected for order %d. Payment intent: %s, Charge: %s, Dispute ID: %s, Status: %s. Order completion should be blocked.',
+						$order->get_id(),
+						isset( $intent->id ) ? $intent->id : 'unknown',
+						isset( $charge->id ) ? $charge->id : 'unknown',
+						isset( $dispute->id ) ? $dispute->id : 'unknown',
+						$dispute->status
+					),
+					'warning'
+				);
+			}
+			// Dispute exists but is in a resolved state (won, warning_closed) - allow completion silently
+
+			return $result;
+
+		} catch ( \Throwable $e ) {
+			// Log the error but don't block legitimate orders due to API failures
+			Helper::log(
+				sprintf(
+					'Failed to check dispute status for order %d: %s. Allowing completion with warning.',
+					$order->get_id(),
+					$e->getMessage()
+				),
+				'error'
+			);
+
+			// Add order note to document the API failure
+			if ( $order instanceof \WC_Order ) {
+				$order->add_order_note(
+					sprintf(
+						/* translators: %s: Error message */
+						__( 'Unable to verify dispute status due to Stripe API error: %s. Payment allowed to complete.', 'funnelkit-stripe-woo-payment-gateway' ),
+						$e->getMessage()
+					)
+				);
+			}
+
+			// Return not disputed to allow legitimate orders through on API failure
+			return $result;
+		}
+	}
+
+	/**
 	 * Prepare order source for API call
 	 *
 	 * @param $order \WC_Order
@@ -1286,7 +1530,28 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 		$request['metadata'] = $this->add_metadata( $order );
 		$request             = apply_filters( 'fkwcs_payment_intent_data', $request, $order );
-		$client              = $this->get_client();
+		try {
+			if (
+				$this->is_application_fee_supported() &&
+				class_exists( '\Sublium_WCS\Includes\Helpers\AccessPermission' ) &&
+				\Sublium_WCS\Includes\Helpers\AccessPermission::is_application_fee_applicable()
+			) {
+				// Use Sublium's calculation for application fee based on full order amount
+				$application_fee_amount = \Sublium_WCS\Includes\Helpers\AccessPermission::get_application_fee_by_order( $order );
+
+				if ( $application_fee_amount > 0 ) {
+					$request['application_fee_amount'] = Helper::get_stripe_amount(
+						$application_fee_amount,
+						strtolower( $order->get_currency() ),
+						100,
+						false
+					);
+				}
+			}
+		} catch ( \Throwable $e ) {
+			Helper::log( 'Application fee calculation error in create_and_confirm_intent_for_off_session: ' . $e->getMessage() );
+		}
+		$client = $this->get_client();
 
 		// Add idempotency key with retry count logic
 		$idempotency_key = $prepared_source->source . '_' . $order->get_order_key();
@@ -2842,17 +3107,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				remove_filter( 'woocommerce_new_order_note_data', array( $this, 'add_transition_suffix_in_note' ), 9999 );
 
 			}
-
-			// Increment and save retry count when order is marked as failed
-			$retry_count = Helper::get_meta( $order, '_fkwcs_retry_count' );
-			if ( empty( $retry_count ) ) {
-				$retry_count = 1;
-			} else {
-				$retry_count = absint( $retry_count ) + 1;
-			}
-			$order->update_meta_data( '_fkwcs_retry_count', $retry_count );
-			$order->save_meta_data();
-
 			do_action( 'fkwcs_order_failed', $order->get_id(), $message );
 		} catch ( \Exception $e ) {
 			/* translators: error message */
@@ -2931,6 +3185,21 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				return;
 			}
 
+			// Check if webhook has already processed a dispute for this order
+			// If so, don't override the status that the webhook set
+			$status_before_dispute = Helper::get_meta( $order, 'fkwcs_status_before_dispute' );
+			if ( ! empty( $status_before_dispute ) && 'on-hold' === $order->get_status() ) {
+				Helper::log(
+					sprintf(
+						'Thankyou hook: Order %d is on-hold due to webhook-processed dispute (previous status: %s). Skipping payment completion to preserve webhook status.',
+						$order_id,
+						$status_before_dispute
+					)
+				);
+
+				return;
+			}
+
 			$intent              = $this->get_intent_from_order( $order );
 			$successful_statuses = wc_get_is_paid_statuses();
 
@@ -2953,6 +3222,13 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 				// Handle successful statuses
 				if ( in_array( $intent->status, $gateway_successful_statuses, true ) && ! in_array( $order->get_status(), $successful_statuses, true ) && $order->get_status() !== $expected_status ) {
+					// Check if payment intent is disputed
+					$dispute_info = $this->is_payment_intent_disputed( $intent, $order );
+
+					if ( $dispute_info['is_disputed'] ) {
+						return false;
+					}
+
 					// Allow gateways to perform additional checks before payment completion
 					$should_complete_payment = $this->should_complete_payment_on_thankyou( $intent, $order );
 
@@ -3022,8 +3298,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return bool True if payment should be completed, false otherwise
 	 */
 	protected function should_complete_payment_on_thankyou( $intent, $order ) {
-		// Default implementation - always return true
-		// Gateways can override this to add additional checks
+
+		// Gateways can still override this to add additional checks
 		return true;
 	}
 }

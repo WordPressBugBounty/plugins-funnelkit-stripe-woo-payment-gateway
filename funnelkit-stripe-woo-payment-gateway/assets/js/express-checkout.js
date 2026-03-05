@@ -399,6 +399,10 @@
                             productData[field.name] = field.value;
                         }
                     }
+                    // Include Sublium subscription plan data
+                    if (field.name === 'sublium-option-plan') {
+                        productData[field.name] = field.value;
+                    }
                 });
                 return $.ajax({
                     type: 'POST', data: productData, url: this.ajaxEndpoint(this.add_to_cart_end_point),

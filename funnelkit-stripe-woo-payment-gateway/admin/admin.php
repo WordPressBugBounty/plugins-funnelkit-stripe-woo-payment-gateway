@@ -1248,12 +1248,13 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	 * @return void
 	 */
 	public function handle_redirect() {
-		$redirect_url = apply_filters( 'fkwcs_stripe_connect_redirect_url', admin_url( '/admin.php?page=wc-settings&tab=fkwcs_api_settings' ) );
 
 		if ( isset( $_GET['tab'] ) && wc_clean( $_GET['tab'] ) === 'fkwcs_api_settings' && isset( $_GET['error'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			if ( false === current_user_can( 'manage_woocommerce' ) ) {
 				return;
 			}
+			$redirect_url = apply_filters( 'fkwcs_stripe_connect_redirect_url', admin_url( '/admin.php?page=wc-settings&tab=fkwcs_api_settings' ) );
+
 			$this->settings['fkwcs_con_status'] = 'failed';
 			$this->update_options( $this->settings );
 			wp_safe_redirect( $redirect_url );
@@ -1265,6 +1266,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 				return;
 			}
 			$response = $_GET; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$redirect_url = apply_filters( 'fkwcs_stripe_connect_redirect_url', admin_url( '/admin.php?page=wc-settings&tab=fkwcs_api_settings' ) );
 
 			if ( ! empty( $response['response'] ) ) {
 				$live_details = [];

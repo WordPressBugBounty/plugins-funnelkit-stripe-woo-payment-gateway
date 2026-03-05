@@ -275,6 +275,18 @@ class Client {
 	}
 
 	/**
+	 * Executes Stripe disputes query
+	 *
+	 * @param string $method method to be used.
+	 * @param array  $args parameter.
+	 *
+	 * @return array
+	 */
+	public function disputes( $method, $args ) {
+		return $this->execute( 'disputes', $method, $args );
+	}
+
+	/**
 	 * Basic details of logged in user
 	 *
 	 * @return array current user data.

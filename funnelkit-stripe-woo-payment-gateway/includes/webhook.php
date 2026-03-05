@@ -674,6 +674,8 @@ class Webhook {
 
 		if ( in_array( $order->get_payment_method(), [
 				'fkwcs_stripe',
+				'fkwcs_stripe_apple_pay',
+				'fkwcs_stripe_google_pay',
 				'fkwcs_stripe_pix',
 				'fkwcs_stripe_afterpay',
 				'fkwcs_stripe_affirm',

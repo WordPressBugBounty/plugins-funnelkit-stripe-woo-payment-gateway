@@ -272,17 +272,24 @@ trait Funnelkit_Stripe_Smart_Buttons {
 
 		/** First empty the cart to prevent wrong calculation */
 		WC()->cart->empty_cart();
-
+		$cart_item_data = [];
+		if ( isset( $_POST['sublium-option-plan'] ) && ! empty( $_POST['sublium-option-plan'] ) ) {
+			$plan_id = absint( wc_clean( $_POST['sublium-option-plan'] ) );
+			if ( $plan_id > 0 ) {
+				$cart_item_data['sublium_plan'] = $plan_id;
+				$cart_item_data['subscription_plan'] = $plan_id;
+			}
+		}
 		if ( ( 'variable' === $product_type || 'variable-subscription' === $product_type ) && isset( $_POST['attributes'] ) ) {
 			$attributes = wc_clean( wp_unslash( $_POST['attributes'] ) );
 
 			$data_store   = \WC_Data_Store::load( 'product' );
 			$variation_id = $data_store->find_matching_product_variation( $product, $attributes );
-			WC()->cart->add_to_cart( $product->get_id(), $qty, $variation_id, $attributes );
+			WC()->cart->add_to_cart( $product->get_id(), $qty, $variation_id, $attributes, $cart_item_data );
 		}
 
 		if ( 'simple' === $product_type || 'subscription' === $product_type ) {
-			WC()->cart->add_to_cart( $product->get_id(), $qty );
+			WC()->cart->add_to_cart( $product->get_id(), $qty, 0, [], $cart_item_data );
 		}
 		\WC_AJAX::get_refreshed_fragments();
 	}

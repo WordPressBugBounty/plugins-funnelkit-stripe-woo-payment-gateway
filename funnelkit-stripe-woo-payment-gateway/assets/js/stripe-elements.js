@@ -440,12 +440,22 @@ jQuery(function ($) {
             $('form#add_payment_method').unblock();
         }
 
+        getOrderKeyFromUrl() {
+            if (fkwcs_data.order_key) return fkwcs_data.order_key;
+            let urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get("key") || urlParams.get("order_key") || null;
+        }
+
         logError(error, order_id = '') {
             let body = $('body');
+            let order_key = order_id ? this.getOrderKeyFromUrl() : '';
+            let postData = {
+                "action": 'fkwcs_js_errors', "_security": fkwcs_data.js_nonce, "order_id": order_id, "error": error
+            };
+            if (order_key) postData.order_key = order_key;
             $.ajax({
-                type: 'POST', url: fkwcs_data.admin_ajax, data: {
-                    "action": 'fkwcs_js_errors', "_security": fkwcs_data.js_nonce, "order_id": order_id, "error": error
-                }, beforeSend: () => {
+                type: 'POST', url: fkwcs_data.admin_ajax, data: postData,
+                beforeSend: () => {
                     body.css('cursor', 'progress');
                 }, success(response) {
                     if (response.success === false) {
@@ -675,7 +685,7 @@ jQuery(function ($) {
         isSupportedCountries() {
             return false;
         }
-        createIntent(type) {
+        createIntent() {
             if (!this.processingSubmit()) {
                 return;
             }
@@ -688,12 +698,13 @@ jQuery(function ($) {
             });
             let self = this;
             let order_id = self.getOrderIdFromUrl();
+            let order_key = self.getOrderKeyFromUrl();
             let orderData = {
                 action: 'fkwcs_create_payment_intent',
                 order_id: order_id,
+                order_key: order_key,
                 gateway_id: this.gateway_id,
-                security: fkwcs_data.nonce,
-                type: type
+                security: fkwcs_data.nonce
             };
             $.ajax({
                 url: fkwcs_data.ajax_url,
@@ -1911,7 +1922,7 @@ jQuery(function ($) {
             if (this.gateway_id === this.selectedGateway()) {
                 let source = this.hasSource();
                 if ('' === source) {
-                    this.createIntent('order_review');
+                    this.createIntent();
                     e.preventDefault();
                     return false;
                 }
@@ -1921,16 +1932,17 @@ jQuery(function ($) {
         confirmStripePayment(clientSecret, redirectURL, intent_type, authenticationAlready = false, order_id = false) {
 
             if (this.gateway_id === this.selectedGateway()) {
-                this.elements.submit();
-                this.stripe.confirmPayment({
-                    elements: this.elements,
-                    clientSecret: clientSecret,
-                    confirmParams: {
-                        return_url: `${homeURL}${redirectURL}`,
-                        payment_method_data: {
-                            billing_details: this.getBillingAddress()
+                this.elements.submit().then(() => {
+                    this.stripe.confirmPayment({
+                        elements: this.elements,
+                        clientSecret: clientSecret,
+                        confirmParams: {
+                            return_url: `${homeURL}${redirectURL}`,
+                            payment_method_data: {
+                                billing_details: this.getBillingAddress()
+                            }
                         }
-                    }
+                    });
                 });
             }
 
@@ -2274,7 +2286,7 @@ jQuery(function ($) {
             if ('test' === fkwcs_data.mode) {
                 delete data.merchantId;
             }
-            
+
                         // Always attach callback if shipping is required (Google Pay requirement)
             if (this.shippingAddressRequired()) {
                 data.paymentDataCallbacks.onPaymentDataChanged = this.paymentDataChanged.bind(this);
@@ -2567,12 +2579,12 @@ jQuery(function ($) {
             if ('yes' !== fkwcs_data.shipping_required) {
                 return false;
             }
-            
+
             // Check if we're on a page that doesn't need shipping
             if ('yes' === fkwcs_data.is_change_payment_page || 'yes' === fkwcs_data.is_pay_for_order_page) {
                 return 'yes' === fkwcs_data.gpay_cart_data.shipping_required;
             }
-            
+
             // On checkout page, check if shipping fields are required
             if (this.isCheckoutPage()) {
                 let type = 'billing';
@@ -2580,7 +2592,7 @@ jQuery(function ($) {
                     type = 'shipping';
                 }
                 let field = ['address_1', 'city', 'postcode', 'state', 'country'];
-                
+
                 for (let i = 0; i < field.length; i++) {
                     let key = field[i];
                     let required = this.field_required(`${type}_${key}`);
@@ -2589,7 +2601,7 @@ jQuery(function ($) {
                     }
                 }
             }
-            
+
             // Default to true for non-checkout pages
             return true;
         }
@@ -2609,7 +2621,7 @@ jQuery(function ($) {
         get_address_object(prefix) {
             let address = {};
             let field = ['address_1', 'city', 'postcode', 'state', 'country'];
-            
+
             for (let i = 0; i < field.length; i++) {
                 let key = field[i];
                 let element = $(`#${prefix}_${key}`);
@@ -2617,13 +2629,13 @@ jQuery(function ($) {
                     address[key] = element.val();
                 }
             }
-            
+
             return address;
         }
 
         is_valid_address(address, prefix, exclude_fields) {
             let field = ['address_1', 'city', 'postcode', 'state', 'country'];
-            
+
             for (let i = 0; i < field.length; i++) {
                 let key = field[i];
                 if (exclude_fields && exclude_fields.indexOf(key) !== -1) {
@@ -2648,7 +2660,7 @@ jQuery(function ($) {
             if (shipping_address) {
                 this.populate_shipping_fields(shipping_address);
             }
-            
+
             // Trigger any additional update events
             $('body').trigger('fkwcs_google_pay_shipping_updated', response);
         }
@@ -2661,7 +2673,7 @@ jQuery(function ($) {
                 'administrativeArea': 'shipping_state',
                 'countryCode': 'shipping_country'
             };
-            
+
             for (let google_field in address_map) {
                 let woo_field = address_map[google_field];
                 let element = $(`#${woo_field}`);
@@ -2688,7 +2700,7 @@ jQuery(function ($) {
         get_display_items() {
             // Get display items for Google Pay
             let display_items = [];
-            
+
             // Add subtotal if available
             let subtotal_element = $('.cart-subtotal .woocommerce-Price-amount.amount');
             if (subtotal_element.length) {
@@ -2702,7 +2714,7 @@ jQuery(function ($) {
                     });
                 }
             }
-            
+
             // Add shipping if available
             let shipping_element = $('.shipping .woocommerce-Price-amount.amount');
             if (shipping_element.length) {
@@ -2716,7 +2728,7 @@ jQuery(function ($) {
                     });
                 }
             }
-            
+
             return display_items;
         }
 
@@ -3587,15 +3599,9 @@ jQuery(function ($) {
 
                 let source = this.hasSource();
                 if ('' === source) {
-                    if (this.isOrderPayPage()) {
-                        this.createIntent('order_review');
+                        this.createIntent();
                         e.preventDefault();
                         return false;
-                    } else {
-                        this.createIntent('order_review');
-                        e.preventDefault();
-                        return false;
-                    }
                 }
             }
         }
@@ -3777,7 +3783,7 @@ jQuery(function ($) {
             if (this.gateway_id === this.selectedGateway()) {
                 let source = this.hasSource();
                 if ('' === source) {
-                    this.createIntent('order_review');
+                    this.createIntent();
                     e.preventDefault();
                     return false;
                 }
@@ -3787,16 +3793,17 @@ jQuery(function ($) {
 
         confirmStripePayment(clientSecret, redirectURL, intent_type, authenticationAlready = false, order_id = false) {
             if (this.gateway_id === this.selectedGateway()) {
-                this.elements.submit();
-                this.stripe.confirmPayment({
-                    elements: this.elements,
-                    clientSecret: clientSecret,
-                    confirmParams: {
-                        return_url: `${homeURL}${redirectURL}`,
-                        payment_method_data: {
-                            billing_details: this.getBillingAddress()
+                this.elements.submit().then(() => {
+                    this.stripe.confirmPayment({
+                        elements: this.elements,
+                        clientSecret: clientSecret,
+                        confirmParams: {
+                            return_url: `${homeURL}${redirectURL}`,
+                            payment_method_data: {
+                                billing_details: this.getBillingAddress()
+                            }
                         }
-                    }
+                    });
                 });
             }
         }
@@ -3870,7 +3877,7 @@ jQuery(function ($) {
             if (this.gateway_id === this.selectedGateway()) {
                 let source = this.hasSource();
                 if ('' === source) {
-                    this.createIntent('order_review');
+                    this.createIntent();
                     e.preventDefault();
                     return false;
                 }
@@ -3879,28 +3886,29 @@ jQuery(function ($) {
 
         confirmStripePayment(clientSecret, redirectURL, intent_type, authenticationAlready = false, order_id = false) {
             if (this.gateway_id === this.selectedGateway()) {
-                this.elements.submit();
-                this.stripe.confirmPayment({
-                    elements: this.elements,
-                    clientSecret: clientSecret,
-                    confirmParams: {
-                        return_url: `${homeURL}${redirectURL}`,
-                        payment_method_data: {
-                            billing_details: this.getBillingAddress()
+                this.elements.submit().then(() => {
+                    this.stripe.confirmPayment({
+                        elements: this.elements,
+                        clientSecret: clientSecret,
+                        confirmParams: {
+                            return_url: `${homeURL}${redirectURL}`,
+                            payment_method_data: {
+                                billing_details: this.getBillingAddress()
+                            }
                         }
-                    }
-                }).then((result) => {
-                    if (result.error) {
-                        this.logError(result.error, order_id);
-                        this.showError(result.error);
+                    }).then((result) => {
+                        if (result.error) {
+                            this.logError(result.error, order_id);
+                            this.showError(result.error);
+                            this.unblockElement();
+                        } else {
+                            window.location.href = result.payment_intent.next_action.redirect_to_url.url;
+                        }
+                    }).catch((error) => {
+                        this.logError(error, order_id);
+                        this.showError(error);
                         this.unblockElement();
-                    } else {
-                        window.location.href = result.payment_intent.next_action.redirect_to_url.url;
-                    }
-                }).catch((error) => {
-                    this.logError(error, order_id);
-                    this.showError(error);
-                    this.unblockElement();
+                    });
                 });
             }
         }
@@ -3915,10 +3923,29 @@ jQuery(function ($) {
             return document.querySelector("input[name='wc-fkwcs_stripe_ach-payment-token']:checked")?.value || false;
         }
 
+        isZeroDollarPayment() {
+            let amount_data = this.getAmountCurrency();
+            return amount_data.amount === 0;
+        }
+
         setupGateway() {
+            if (typeof fkwcs_data.fkwcs_ach_payment_data === 'undefined') {
+                return;
+            }
             let paymentData = fkwcs_data.fkwcs_ach_payment_data;
             this.element_data = paymentData.element_data;
-            this.elements = this.stripe.elements(this.element_data);
+            let isZeroDollar = this.isZeroDollarPayment();
+
+            if (isZeroDollar) {
+                this.elements = this.stripe.elements({
+                    mode: 'setup',
+                    currency: this.element_data.currency,
+                    payment_method_types: ['us_bank_account'],
+                    paymentMethodCreation: 'manual'
+                });
+            } else {
+                this.elements = this.stripe.elements(this.element_data);
+            }
             this.ach = this.elements.create('payment', {
                 fields: {
                     billingDetails: {
@@ -4065,7 +4092,7 @@ jQuery(function ($) {
                             e.preventDefault();
                             return false;
                         } else {
-                            this.createIntent('order_review');
+                            this.createIntent();
                             e.preventDefault();
                             return false;
                         }
@@ -4074,7 +4101,7 @@ jQuery(function ($) {
             }
         }
 
-        createIntent(type) {
+        createIntent() {
             if (!this.processingSubmit()) {
                 setTimeout(() => {
                     const overlay = document.querySelector('.blockUI.blockOverlay');
@@ -4093,9 +4120,11 @@ jQuery(function ($) {
             });
             let self = this;
             let order_id = self.getOrderIdFromUrl();
+            let order_key = self.getOrderKeyFromUrl();
             let orderData = {
                 action: 'fkwcs_create_payment_intent',
                 order_id: order_id,
+                order_key: order_key,
                 gateway_id: this.gateway_id,
                 security: fkwcs_data.nonce
             };
@@ -4270,7 +4299,7 @@ jQuery(function ($) {
             if (this.gateway_id === this.selectedGateway()) {
                 let source = this.hasSource();
                 if ('' === source) {
-                    this.createIntent('order_review');
+                    this.createIntent();
                     e.preventDefault();
                     return false;
                 }
@@ -4280,16 +4309,17 @@ jQuery(function ($) {
 
         confirmStripePayment(clientSecret, redirectURL, intent_type, authenticationAlready = false, order_id = false) {
             if (this.gateway_id === this.selectedGateway()) {
-                this.elements.submit();
-                this.stripe.confirmPayment({
-                    elements: this.elements,
-                    clientSecret: clientSecret,
-                    confirmParams: {
-                        return_url: `${homeURL}${redirectURL}`,
-                        payment_method_data: {
-                            billing_details: this.getBillingAddress()
+                this.elements.submit().then(() => {
+                    this.stripe.confirmPayment({
+                        elements: this.elements,
+                        clientSecret: clientSecret,
+                        confirmParams: {
+                            return_url: `${homeURL}${redirectURL}`,
+                            payment_method_data: {
+                                billing_details: this.getBillingAddress()
+                            }
                         }
-                    }
+                    });
                 });
             }
         }

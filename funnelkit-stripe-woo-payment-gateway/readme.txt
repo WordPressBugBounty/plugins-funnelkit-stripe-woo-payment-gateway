@@ -1,10 +1,10 @@
 === FunnelKit Payment Gateway for Stripe WooCommerce ===
 Contributors: amans2k, xlplugins, teamwoofunnels
 Tags: stripe, apple pay, google pay, WooCommerce Stripe
-Requires at least: 5.4
-Tested up to: 6.9
+Requires at least: 5.4.0
+Tested up to: 6.9.0
 Requires PHP: 7.0
-Stable tag: 1.14.0.2
+Stable tag: 1.14.0.3
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -258,6 +258,12 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+
+= 1.14.0.3 =
+* Improved: Added support for third-party apps to customize the redirect URL after Stripe Connect for greater flexibility. (#6872)
+* Improved: Enhanced handling of JavaScript errors related to iDeal and Multibanco in specific scenarios. (#1103)
+* Improved: Refined CSS styling for the Google Pay button when using direct integration without an iframe. (#1053)
+* Fixed: Resolved an issue when adding a new card from the Add Payment Method page while using Stripe Link. (#1096)
 
 = 1.14.0.2 =
 * Fixed: UPE Payment element was not showing up correctly for the different language than default language for translatepress & Weglot plugin. (#1027)
