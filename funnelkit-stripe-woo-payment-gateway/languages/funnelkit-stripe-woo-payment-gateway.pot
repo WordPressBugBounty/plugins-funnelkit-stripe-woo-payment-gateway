@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: FunnelKit Payment Gateway for Stripe WooCommerce 1.14.0.3\n"
+"Project-Id-Version: FunnelKit Payment Gateway for Stripe WooCommerce 1.14.0.4\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/funnelkit-stripe-woo-payment-gateway\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-03-02T15:22:02+00:00\n"
+"POT-Creation-Date: 2026-05-11T12:06:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: funnelkit-stripe-woo-payment-gateway\n"
@@ -49,7 +49,7 @@ msgid "Credit Cards"
 msgstr ""
 
 #: admin/admin.php:289
-#: admin/admin.php:692
+#: admin/admin.php:698
 msgid "Express Checkout"
 msgstr ""
 
@@ -207,7 +207,7 @@ msgid "Your test secret key is used to authenticate Stripe requests for testing 
 msgstr ""
 
 #: admin/admin.php:425
-#: admin/admin.php:1804
+#: admin/admin.php:1836
 msgid "Test Connection"
 msgstr ""
 
@@ -313,7 +313,7 @@ msgid "Stripe"
 msgstr ""
 
 #. translators: HTML for the  express checkout section heading
-#: admin/admin.php:695
+#: admin/admin.php:701
 #, php-format
 msgid ""
 "Accept payment using Apple Pay, Google Pay and Browser Payment using Express Buttons.\n"
@@ -321,153 +321,153 @@ msgid ""
 "Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Browser Payment method."
 msgstr ""
 
-#: admin/admin.php:701
+#: admin/admin.php:707
 msgid "Enable Express Checkout"
 msgstr ""
 
-#: admin/admin.php:707
+#: admin/admin.php:713
 msgid "Show button on"
 msgstr ""
 
-#: admin/admin.php:711
+#: admin/admin.php:717
 msgid "Choose page to display Express Checkout buttons."
 msgstr ""
 
-#: admin/admin.php:713
+#: admin/admin.php:719
 msgid "Product"
 msgstr ""
 
-#: admin/admin.php:714
+#: admin/admin.php:720
 msgid "Cart"
 msgstr ""
 
-#: admin/admin.php:715
+#: admin/admin.php:721
 #: gateways/googlepay.php:253
 msgid "Checkout"
 msgstr ""
 
-#: admin/admin.php:720
+#: admin/admin.php:726
 msgid "Button text"
 msgstr ""
 
-#: admin/admin.php:723
+#: admin/admin.php:729
 msgid "Add label text for the Express Checkout button."
 msgstr ""
 
-#: admin/admin.php:728
+#: admin/admin.php:734
 msgid "Button theme"
 msgstr ""
 
-#: admin/admin.php:731
+#: admin/admin.php:737
 msgid "Select theme for Express Checkout button."
 msgstr ""
 
-#: admin/admin.php:734
+#: admin/admin.php:740
 msgid "Dark"
 msgstr ""
 
-#: admin/admin.php:735
+#: admin/admin.php:741
 msgid "Light"
 msgstr ""
 
-#: admin/admin.php:736
+#: admin/admin.php:742
 msgid "Light Outline"
 msgstr ""
 
-#: admin/admin.php:742
+#: admin/admin.php:748
 msgid "Button Preview"
 msgstr ""
 
-#: admin/admin.php:748
-#: admin/admin.php:749
+#: admin/admin.php:754
+#: admin/admin.php:755
 msgid "Enable Stripe Link"
 msgstr ""
 
-#: admin/admin.php:752
+#: admin/admin.php:758
 msgid "Enable Stripe link button to show as Express checkout button when Google Pay and Apple Pay are not available."
 msgstr ""
 
-#: admin/admin.php:762
-#: admin/admin.php:1834
+#: admin/admin.php:768
+#: admin/admin.php:1866
 msgid "Re-verify Domain"
 msgstr ""
 
-#: admin/admin.php:765
+#: admin/admin.php:771
 msgid "Click the button above to re-verify domain for Apple Pay."
 msgstr ""
 
-#: admin/admin.php:770
+#: admin/admin.php:776
 msgid "Product page options"
 msgstr ""
 
-#: admin/admin.php:772
+#: admin/admin.php:778
 msgid "Advanced customization options for Product page."
 msgstr ""
 
-#: admin/admin.php:776
-#: admin/admin.php:832
+#: admin/admin.php:782
+#: admin/admin.php:838
 msgid "Button position"
 msgstr ""
 
-#: admin/admin.php:780
+#: admin/admin.php:786
 msgid "Select the position of Express Checkout button. This option will work only for Product page."
 msgstr ""
 
-#: admin/admin.php:783
+#: admin/admin.php:789
 msgid "Above Add to Cart"
 msgstr ""
 
-#: admin/admin.php:784
+#: admin/admin.php:790
 msgid "Below Add to Cart"
 msgstr ""
 
-#: admin/admin.php:785
+#: admin/admin.php:791
 msgid "Inline Button"
 msgstr ""
 
-#: admin/admin.php:790
-#: admin/admin.php:812
-#: admin/admin.php:878
+#: admin/admin.php:796
+#: admin/admin.php:818
+#: admin/admin.php:884
 msgid "Separator text"
 msgstr ""
 
-#: admin/admin.php:793
+#: admin/admin.php:799
 msgid "Add separator text for the Express Checkout button. This will help to distinguish between Express Checkout and other buttons."
 msgstr ""
 
-#: admin/admin.php:805
+#: admin/admin.php:811
 msgid "Cart page options"
 msgstr ""
 
-#: admin/admin.php:807
+#: admin/admin.php:813
 msgid "Advanced customization options for Cart page."
 msgstr ""
 
-#: admin/admin.php:816
+#: admin/admin.php:822
 msgid "Add separator text for Cart page. If empty will show default separator text."
 msgstr ""
 
-#: admin/admin.php:825
+#: admin/admin.php:831
 msgid "Checkout page options"
 msgstr ""
 
-#: admin/admin.php:827
+#: admin/admin.php:833
 msgid "Advanced customization options for Checkout page."
 msgstr ""
 
-#: admin/admin.php:836
+#: admin/admin.php:842
 msgid "Select the position of Express Checkout button. This option will work only for Checkout page."
 msgstr ""
 
-#: admin/admin.php:839
+#: admin/admin.php:845
 msgid "Above checkout form"
 msgstr ""
 
-#: admin/admin.php:840
+#: admin/admin.php:846
 msgid "Above billing details"
 msgstr ""
 
-#: admin/admin.php:845
+#: admin/admin.php:851
 #: admin/parts/html-stripe-charge-info-modal.php:44
 #: gateways/ach.php:82
 #: gateways/affirm.php:72
@@ -490,149 +490,149 @@ msgstr ""
 msgid "Title"
 msgstr ""
 
-#: admin/admin.php:849
+#: admin/admin.php:855
 msgid "Add a title above Express Checkout button on Checkout page."
 msgstr ""
 
-#: admin/admin.php:855
+#: admin/admin.php:861
 msgid "Button width"
 msgstr ""
 
-#: admin/admin.php:859
+#: admin/admin.php:865
 msgid "Select width for button (in px). Default width 100%"
 msgstr ""
 
-#: admin/admin.php:864
+#: admin/admin.php:870
 msgid "Alignment"
 msgstr ""
 
-#: admin/admin.php:868
+#: admin/admin.php:874
 msgid "This setting will align title, tagline and button based on selection on Checkout page."
 msgstr ""
 
-#: admin/admin.php:871
+#: admin/admin.php:877
 msgid "Left"
 msgstr ""
 
-#: admin/admin.php:872
+#: admin/admin.php:878
 msgid "Center"
 msgstr ""
 
-#: admin/admin.php:873
+#: admin/admin.php:879
 msgid "Right"
 msgstr ""
 
-#: admin/admin.php:882
+#: admin/admin.php:888
 msgid "Add separator text for Checkout page. If empty will show default separator text."
 msgstr ""
 
-#: admin/admin.php:1052
+#: admin/admin.php:1058
 msgid "Pay Now"
 msgstr ""
 
-#: admin/admin.php:1053
+#: admin/admin.php:1059
 msgid "NOTE: Title and Tagline appears only on Checkout page."
 msgstr ""
 
-#: admin/admin.php:1054
+#: admin/admin.php:1060
 #, php-format
 msgid "No payment method detected. Either your browser is not supported or you do not have save cards. For more details read %1$1sdocument$2$2s."
 msgstr ""
 
-#: admin/admin.php:1064
+#: admin/admin.php:1070
 msgid "Something went wrong! Please reload the page and try again."
 msgstr ""
 
-#: admin/admin.php:1065
+#: admin/admin.php:1071
 msgid "Save changes"
 msgstr ""
 
-#: admin/admin.php:1066
+#: admin/admin.php:1072
 msgid "Please enter all keys to connect to stripe."
 msgstr ""
 
-#: admin/admin.php:1067
+#: admin/admin.php:1073
 msgid "You must enter your API keys or connect the plugin before performing a connection test. Mode:"
 msgstr ""
 
-#: admin/admin.php:1068
+#: admin/admin.php:1074
 msgid "Keys Unavailable."
 msgstr ""
 
-#: admin/admin.php:1069
+#: admin/admin.php:1075
 msgid "Your Stripe account has been disconnected."
 msgstr ""
 
-#: admin/admin.php:1070
+#: admin/admin.php:1076
 msgid "You can connect other Stripe account now."
 msgstr ""
 
-#: admin/admin.php:1071
+#: admin/admin.php:1077
 msgid "Sorry, we are unable to re-verify domain at the moment. "
 msgstr ""
 
-#: admin/admin.php:1072
+#: admin/admin.php:1078
 msgid "<p class=\"description\">This will enable Test mode only for the admin users. While other users will continue to process payments in Live mode. </p><p class=\"description\"> <strong>Please note that this setting should always be switched back to live mode once testing is completed to avoid such issues in the future.</strong></br>"
 msgstr ""
 
-#: admin/admin.php:1104
+#: admin/admin.php:1110
 msgid "This fee, Stripe collects for the transaction."
 msgstr ""
 
-#: admin/admin.php:1105
+#: admin/admin.php:1111
 msgid "Stripe Fee:"
 msgstr ""
 
-#: admin/admin.php:1142
+#: admin/admin.php:1148
 msgid "This net total that will be credited to your stripe bank account."
 msgstr ""
 
-#: admin/admin.php:1143
+#: admin/admin.php:1149
 msgid "Stripe Payout:"
 msgstr ""
 
-#: admin/admin.php:1162
+#: admin/admin.php:1168
 msgid "Settings"
 msgstr ""
 
-#: admin/admin.php:1163
+#: admin/admin.php:1169
 msgid "Documentation"
 msgstr ""
 
-#: admin/admin.php:1179
+#: admin/admin.php:1185
 msgid "Learn more"
 msgstr ""
 
-#: admin/admin.php:1228
+#: admin/admin.php:1234
 msgid "Apple Pay is not supported on this browser. "
 msgstr ""
 
-#: admin/admin.php:1229
+#: admin/admin.php:1235
 msgid "Apple Pay is supported on this browser. "
 msgstr ""
 
-#: admin/admin.php:1233
+#: admin/admin.php:1239
 msgid "Google Pay is not  supported on this browser. "
 msgstr ""
 
-#: admin/admin.php:1234
+#: admin/admin.php:1240
 msgid "Google Pay is supported on this browser. "
 msgstr ""
 
-#: admin/admin.php:1346
+#: admin/admin.php:1378
 msgid "FunnelKit Stripe Payment Gateway requires the PHP cURL extension to be installed and enabled. Please contact your hosting provider or server administrator to enable the cURL extension for PHP."
 msgstr ""
 
 #. translators: %1$1s %2$2s %3$3s: HTML Markup
-#: admin/admin.php:1417
+#: admin/admin.php:1449
 msgid "Your manually managed API keys are valid."
 msgstr ""
 
-#: admin/admin.php:1420
+#: admin/admin.php:1452
 msgid "It is highly recommended to Connect with Stripe for easier setup and improved security."
 msgstr ""
 
-#: admin/admin.php:1421
+#: admin/admin.php:1453
 #: admin/parts/connect.php:5
 #: admin/app/dist/3.e279f704ea13b41f83aa.js:1
 #: admin/app/src/stripe-gateway/pages/dashboard.js:58
@@ -640,41 +640,41 @@ msgid "Connect with Stripe"
 msgstr ""
 
 #. translators: $1s Account name, $2s html markup, $3s account id, $4s html markup
-#: admin/admin.php:1425
+#: admin/admin.php:1457
 #, php-format
 msgid "Account %2$1s is connected."
 msgstr ""
 
-#: admin/admin.php:1434
+#: admin/admin.php:1466
 msgid "Disconnect &amp; connect other account?"
 msgstr ""
 
-#: admin/admin.php:1439
+#: admin/admin.php:1471
 msgid "Manage API keys manually"
 msgstr ""
 
 #. translators: 1 - 4 html entities
-#: admin/admin.php:1590
+#: admin/admin.php:1622
 #, php-format
 msgid "Unable to create domain association folder to domain root due to file permissions. Please create %1$1s.well-known%2$2s directory under domain root and place %3$3sdomain verification file%4$4s under it and refresh."
 msgstr ""
 
-#: admin/admin.php:1598
+#: admin/admin.php:1630
 msgid "Unable to copy domain association file to domain root."
 msgstr ""
 
-#: admin/admin.php:1701
+#: admin/admin.php:1733
 msgid "No SSL was detected, Stripe live mode requires SSL."
 msgstr ""
 
 #. translators: %1$s Webhook secret page link, %2$s Webhook guide page link
-#: admin/admin.php:1711
+#: admin/admin.php:1743
 #, php-format
 msgid "Stripe requires using the %1$swebhook%2$s. %3$sWebhook Guide%4$s "
 msgstr ""
 
 #. translators: %1s - %3s HTML Entities, %4s Error Message
-#: admin/admin.php:1722
+#: admin/admin.php:1754
 #, php-format
 msgid ""
 "Unable to verify domain. The path <b>%1$s</b> does not have write permissions. <br/> <strong>Solution:</strong> To verify domain, please contact your host to provide write permission and re-verify again.  Alternatively, you can also manually verify the domain by following this guide. For further help, <a target=\"_blank\" href=\"%2$s\"> contact support.</a>\n"
@@ -683,182 +683,182 @@ msgid ""
 "<a href=\"javascript:void(0)\" class=\"button button-primary fkwcs_apple_pay_domain_verification\" > I have given file writing permission, re-verify </a>  <a href=\"javascript:void(0)\" class=\"button fkwcs_dismiss_notice\" data-notice=\"fkwcs_apple_pay\"> I will verify manually </a> <a href=\"javascript:void(0)\" class=\"fkwcs_dismiss_notice\" data-notice=\"fkwcs_apple_pay\"> Dismiss </a> "
 msgstr ""
 
-#: admin/admin.php:1734
+#: admin/admin.php:1766
 msgid "Stripe Payment Gateway for WooCommerce requires PHP version 7.0+. Please reach out to your host to upgrade the PHP version."
 msgstr ""
 
 #. translators: 1: Opening strong tag, 2: Closing strong tag
-#: admin/admin.php:1744
+#: admin/admin.php:1776
 #, php-format
 msgid "%1$sStripe Payment Gateway for WooCommerce%2$s is in Test mode, please ensure it is switched to Live mode after testing."
 msgstr ""
 
-#: admin/admin.php:1748
+#: admin/admin.php:1780
 msgid "Switch to Live mode"
 msgstr ""
 
-#: admin/admin.php:1748
+#: admin/admin.php:1780
 msgid "I'll do it later"
 msgstr ""
 
-#: admin/admin.php:1862
+#: admin/admin.php:1894
 msgid "Stripe keys are reset successfully."
 msgstr ""
 
-#: admin/admin.php:1877
+#: admin/admin.php:1909
 msgid "Webhook could not be created"
 msgstr ""
 
-#: admin/admin.php:1900
+#: admin/admin.php:1932
 msgid "Webhook created Successfully"
 msgstr ""
 
-#: admin/admin.php:1917
+#: admin/admin.php:1949
 msgid "Domain verification successful"
 msgstr ""
 
-#: admin/admin.php:1920
+#: admin/admin.php:1952
 msgid "Domain verification failed. Please check logs for more info."
 msgstr ""
 
-#: admin/admin.php:2011
-#: admin/admin.php:2020
+#: admin/admin.php:2043
+#: admin/admin.php:2052
 msgid "Webhook Deleted successfully"
 msgstr ""
 
-#: admin/admin.php:2015
+#: admin/admin.php:2047
 msgid "Webhook could not be deleted"
 msgstr ""
 
-#: admin/admin.php:2038
-#: admin/admin.php:2099
+#: admin/admin.php:2070
+#: admin/admin.php:2131
 msgid "Test Mode:"
 msgstr ""
 
-#: admin/admin.php:2040
+#: admin/admin.php:2072
 msgid "Please enter secret key to test."
 msgstr ""
 
-#: admin/admin.php:2046
-#: admin/admin.php:2102
+#: admin/admin.php:2078
+#: admin/admin.php:2134
 msgid "Live Mode:"
 msgstr ""
 
-#: admin/admin.php:2048
+#: admin/admin.php:2080
 msgid "Please enter secret key to live."
 msgstr ""
 
-#: admin/admin.php:2052
+#: admin/admin.php:2084
 msgid "Error: Empty String provided for keys"
 msgstr ""
 
 #. translators: %1$1s mode
-#: admin/admin.php:2060
+#: admin/admin.php:2092
 #, php-format
 msgid "My first %1s customer (created for API docs)"
 msgstr ""
 
-#: admin/admin.php:2064
+#: admin/admin.php:2096
 msgid "Connected to Stripe successfully"
 msgstr ""
 
-#: admin/admin.php:2160
+#: admin/admin.php:2192
 msgid "An Error occurred while creating webhook. Error: "
 msgstr ""
 
-#: admin/admin.php:2487
+#: admin/admin.php:2519
 msgid " Switch to classic cart/checkout"
 msgstr ""
 
-#: admin/admin.php:2487
+#: admin/admin.php:2519
 msgid "Dismiss"
 msgstr ""
 
-#: admin/admin.php:2494
+#: admin/admin.php:2526
 msgid "We noticed that you're using the new Cart/Checkout experience in WooCommerce. Full compatibility is in the works with FunnelKit Stripe. We suggest switching to the Classic Checkout experience in the meantime, it's well tested and 100% compatible with our plugin and others as well."
 msgstr ""
 
-#: admin/admin.php:2607
+#: admin/admin.php:2639
 msgid "Cards & Express Checkouts"
 msgstr ""
 
-#: admin/admin.php:2611
-#: admin/admin.php:2635
+#: admin/admin.php:2643
+#: admin/admin.php:2667
 msgid "Transaction"
 msgstr ""
 
-#: admin/admin.php:2612
-#: admin/admin.php:2636
+#: admin/admin.php:2644
+#: admin/admin.php:2668
 #: admin/parts/html-stripe-charge-info-modal.php:35
 #: includes/webhook.php:352
 msgid "Amount"
 msgstr ""
 
-#: admin/admin.php:2631
+#: admin/admin.php:2663
 msgid "All payment methods"
 msgstr ""
 
-#: admin/admin.php:2731
+#: admin/admin.php:2763
 msgid "Stripe Tax keys updated successfully."
 msgstr ""
 
-#: admin/admin.php:2740
+#: admin/admin.php:2772
 msgid "Stripe Tax keys inserted successfully."
 msgstr ""
 
-#: admin/admin.php:2774
+#: admin/admin.php:2806
 msgid "Order not found"
 msgstr ""
 
-#: admin/admin.php:2779
+#: admin/admin.php:2811
 msgid "Payment cannot be captured for partially or fully refunded orders."
 msgstr ""
 
-#: admin/admin.php:2797
-#: admin/admin.php:2817
+#: admin/admin.php:2829
+#: admin/admin.php:2849
 msgid "No Payment Intent found."
 msgstr ""
 
-#: admin/admin.php:2803
+#: admin/admin.php:2835
 msgid "The payment cannot be captured"
 msgstr ""
 
-#: admin/admin.php:2808
+#: admin/admin.php:2840
 msgid "WooCommerce Stripe In-Person Payments"
 msgstr ""
 
 #. translators: %s: the error message.
-#: admin/admin.php:2825
+#: admin/admin.php:2857
 #, php-format
 msgid "Payment capture failed to complete with the following message: %s"
 msgstr ""
 
 #. translators: %s: the error message.
-#: admin/admin.php:2825
+#: admin/admin.php:2857
 msgid "Unknown error"
 msgstr ""
 
-#: admin/admin.php:2911
+#: admin/admin.php:2943
 msgid "FunnelKit Stripe Notice: "
 msgstr ""
 
-#: admin/admin.php:2911
+#: admin/admin.php:2943
 #, php-format
 msgid "Your Stripe account address is in %s. Express Checkout is unfortunately not supported in %s. %s"
 msgstr ""
 
-#: admin/admin.php:2911
+#: admin/admin.php:2943
 msgid "Learn More"
 msgstr ""
 
 #. translators: %s: Support link HTML
-#: admin/admin.php:2985
+#: admin/admin.php:3017
 #, php-format
 msgid "Need Help? %s"
 msgstr ""
 
 #. translators: %s: Support link HTML
-#: admin/admin.php:2985
+#: admin/admin.php:3017
 #: admin/app/dist/2.4d04165269263cdd39b5.js:1
 #: admin/app/dist/5.e099f8e99630ee69eb2b.js:1
 #: admin/app/src/stripe-gateway/pages/failed-page.js:80

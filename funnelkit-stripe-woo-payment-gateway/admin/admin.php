@@ -613,9 +613,15 @@ class Admin {
 	 * @return string
 	 */
 	public function get_connect_url() {
+		$transient_key = 'fkwcs_connect_state_' . get_current_user_id();
+		$state_token   = get_transient( $transient_key );
+		if ( empty( $state_token ) ) {
+			$state_token = wp_generate_password( 32, false );
+			set_transient( $transient_key, $state_token, 30 * MINUTE_IN_SECONDS );
+		}
 
 		$custom_args = [
-			'redirect' => admin_url( 'admin.php?page=wc-settings&tab=fkwcs_api_settings' ),
+			'redirect' => admin_url( 'admin.php?page=wc-settings&tab=fkwcs_api_settings&fkwcs_state=' . $state_token ),
 		];
 
 		$get_unique_id = get_option( 'fkwcs_wp_stripe', '' );
@@ -1253,6 +1259,9 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			if ( false === current_user_can( 'manage_woocommerce' ) ) {
 				return;
 			}
+			if ( ! $this->verify_connect_state() ) {
+				return;
+			}
 			$redirect_url = apply_filters( 'fkwcs_stripe_connect_redirect_url', admin_url( '/admin.php?page=wc-settings&tab=fkwcs_api_settings' ) );
 
 			$this->settings['fkwcs_con_status'] = 'failed';
@@ -1263,6 +1272,9 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 		if ( isset( $_GET['tab'] ) && $_GET['tab'] === 'fkwcs_api_settings' && isset( $_GET['response'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			if ( false === current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+			if ( ! $this->verify_connect_state() ) {
 				return;
 			}
 			$response = $_GET; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -1314,7 +1326,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 			$this->update_options( $this->settings );
 
 			if ( ! empty( $response['wp_hash'] ) ) {
-				update_option( 'fkwcs_wp_hash', $response['wp_hash'], 'no' );
+				update_option( 'fkwcs_wp_hash', sanitize_text_field( wp_unslash( $response['wp_hash'] ) ), 'no' );
 			}
 			do_action( 'fkwcs_after_connect_with_stripe', $this->settings['fkwcs_con_status'] );
 			wp_safe_redirect( $redirect_url );
@@ -1322,6 +1334,26 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 		}
 
 
+	}
+
+	/**
+	 * Verify the CSRF state token from the Stripe Connect OAuth callback.
+	 *
+	 * @return bool
+	 */
+	private function verify_connect_state() {
+		$state_token = isset( $_GET['fkwcs_state'] ) ? sanitize_text_field( wp_unslash( $_GET['fkwcs_state'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( empty( $state_token ) ) {
+			return false;
+		}
+		$transient_key = 'fkwcs_connect_state_' . get_current_user_id();
+		$stored_token  = get_transient( $transient_key );
+		if ( empty( $stored_token ) || ! hash_equals( $stored_token, $state_token ) ) {
+			return false;
+		}
+		delete_transient( $transient_key );
+
+		return true;
 	}
 
 	/**
@@ -2693,7 +2725,7 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 
 		// Check if the user is an administrator, on the correct page, and the fkwcs_sync_stripe_tax parameter exists
-		if ( is_admin() && current_user_can( 'manage_options' ) && isset( $_GET['page'], $_GET['tab'], $_GET['fkwcs_sync_stripe_tax'] ) && sanitize_text_field( $_GET['page'] ) === 'wc-settings' && sanitize_text_field( $_GET['tab'] ) === 'fkwcs_api_settings' && $_GET['fkwcs_sync_stripe_tax'] === 'true' ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( is_admin() && current_user_can( 'manage_options' ) && isset( $_GET['page'], $_GET['tab'], $_GET['fkwcs_sync_stripe_tax'], $_GET['_wpnonce'] ) && sanitize_text_field( wp_unslash( $_GET['page'] ) ) === 'wc-settings' && sanitize_text_field( wp_unslash( $_GET['tab'] ) ) === 'fkwcs_api_settings' && sanitize_text_field( wp_unslash( $_GET['fkwcs_sync_stripe_tax'] ) ) === 'true' && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'fkwcs_sync_stripe_tax' ) ) {
 
 			$option_key = 'fkwcs_secret_key';
 			$secret_key = get_option( $option_key );
