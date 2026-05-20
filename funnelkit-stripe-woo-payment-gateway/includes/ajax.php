@@ -46,30 +46,45 @@ class AJAX {
 
 	public function create_intent() {
 
-		if ( empty( wc_clean( $_POST['fkwcs_nonce'] ) ) || ! wp_verify_nonce( wc_clean( $_POST['fkwcs_nonce'] ), 'fkwcs_nonce' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
-			wp_send_json(
+		if ( empty( wc_clean( wp_unslash( $_POST['fkwcs_nonce'] ) ) ) || ! wp_verify_nonce( wc_clean( wp_unslash( $_POST['fkwcs_nonce'] ) ), 'fkwcs_nonce' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verification is being performed, frontend AJAX handler for checkout processing
+			wp_send_json_error(
 				array(
 					'status'  => false,
 					'message' => 'Something went wrong',
 				)
 			);
+			return;
 		}
+
 		Helper::log( 'Entering::' . __FUNCTION__ );
-		$source = $_POST['fkwcs_source'];
+
+		$gateway_id       = isset( $_POST['gateway_id'] ) ? sanitize_text_field( wp_unslash( $_POST['gateway_id'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above
+		$payment_gateways = WC()->payment_gateways()->payment_gateways();
+
+		if ( empty( $gateway_id ) || ! isset( $payment_gateways[ $gateway_id ] ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid payment gateway.', 'funnelkit-stripe-woo-payment-gateway' ) ) );
+			return;
+		}
+
+		$gateway = $payment_gateways[ $gateway_id ];
+		if ( ! ( $gateway instanceof Abstract_Payment_Gateway ) || ! method_exists( $gateway, 'create_setup_intent' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid payment gateway.', 'funnelkit-stripe-woo-payment-gateway' ) ) );
+			return;
+		}
+
+		$source = isset( $_POST['fkwcs_source'] ) ? sanitize_text_field( wp_unslash( $_POST['fkwcs_source'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above
 		if ( ! empty( $source ) ) {
 			$source = htmlspecialchars( sanitize_text_field( $source ) );
 		}
-		if ( ! empty( $_POST['gateway_id'] ) ) {
-			$gateway_id = sanitize_text_field( $_POST['gateway_id'] );
-		}
-		$response = WC()->payment_gateways()->payment_gateways()[ $gateway_id ]->create_setup_intent( $source );
 
-		$resp = array(
-			'status' => 'success',
-			'data'   => $response,
+		$response = $gateway->create_setup_intent( $source );
+
+		wp_send_json(
+			array(
+				'status' => 'success',
+				'data'   => $response,
+			)
 		);
-
-		wp_send_json( $resp );
 	}
 
 	public function verify_intent_card() {
@@ -160,18 +175,18 @@ class AJAX {
 			wp_send_json( array( 'status' => 'false' ) );
 		}
 
-		if ( isset( $_POST['order_id'] ) && ! empty( $_POST['order_id'] ) ) {
-			$order_id  = absint( $_POST['order_id'] );
-			$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
+		if ( isset( $_POST['order_id'] ) && ! empty( $_POST['order_id'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above, frontend AJAX handler for error logging
+			$order_id  = absint( wp_unslash( $_POST['order_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above, frontend AJAX handler for error logging
+			$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above, frontend AJAX handler for error logging
 
 			if ( $this->verify_order_ownership_for_log_error( $order_id, $order_key ) ) {
 				$order = wc_get_order( $order_id );
 				if ( $order instanceof \WC_Order && false === $order->is_paid() && ! $order->has_status( 'wfocu-pri-order' ) ) {
 					$error_message = '';
-					if ( isset( $_POST['error']['payment_intent']['id'] ) ) {
-						$error_message .= __( 'Intent ID', 'funnelkit-stripe-woo-payment-gateway' ) . ':' . wc_clean( $_POST['error']['payment_intent']['id'] );
+					if ( isset( $_POST['error']['payment_intent']['id'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above, frontend AJAX handler for error logging
+						$error_message .= __( 'Intent ID', 'funnelkit-stripe-woo-payment-gateway' ) . ':' . wc_clean( wp_unslash( $_POST['error']['payment_intent']['id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above, frontend AJAX handler for error logging
 					}
-					$localized_message = Helper::get_localized_error_message( wc_clean( $_POST['error'] ) );
+					$localized_message = Helper::get_localized_error_message( wc_clean( wp_unslash( $_POST['error'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above, frontend AJAX handler for error logging
 
 					$error_message .= "\n\n" . $localized_message;
 
@@ -188,72 +203,16 @@ class AJAX {
 		wp_send_json( array( 'status' => 'true' ) );
 	}
 
-	/**
-	 * Verify order ownership for log_frontend_error (checkout + order-pay).
-	 * Uses session order_awaiting_payment for checkout (no order_key needed) or
-	 * order_key for order-pay page. Prevents IDOR.
-	 *
-	 * @param int    $order_id  Order ID.
-	 * @param string $order_key Order key (optional, from URL for order-pay).
-	 * @return bool True if ownership is verified.
-	 */
-	private function verify_order_ownership_for_log_error( $order_id, $order_key ) {
-		if ( empty( $order_id ) ) {
-			return false;
-		}
 
-		$order = wc_get_order( $order_id );
-		if ( ! $order instanceof \WC_Order ) {
-			return false;
-		}
 
-		// Checkout flow: order must match session (order_awaiting_payment or store_api_draft_order for Blocks).
-		if ( WC()->session ) {
-			$session_order_id = absint( WC()->session->get( 'order_awaiting_payment', 0 ) );
-			if ( 0 === $session_order_id ) {
-				$session_order_id = absint( WC()->session->get( 'store_api_draft_order', 0 ) );
-			}
-			if ( $session_order_id === $order_id ) {
-				return true;
-			}
-		}
-
-		// Order-pay flow: order_key must be valid (user arrived from email link, no session order).
-		if ( ! empty( $order_key ) && $order->key_is_valid( $order_key ) ) {
-			return true;
-		}
-
-		return false;
-	}
-
-	/**
-	 * Verify that the current request owns the order via order_key.
-	 * Prevents IDOR by ensuring only the order owner can perform actions on it.
-	 *
-	 * @param int    $order_id  Order ID.
-	 * @param string $order_key Order key (from URL or session).
-	 * @return bool True if ownership is verified.
-	 */
-	private function verify_order_ownership( $order_id, $order_key ) {
-		if ( empty( $order_id ) || empty( $order_key ) ) {
-			return false;
-		}
-
-		$order = wc_get_order( $order_id );
-		if ( ! $order instanceof \WC_Order ) {
-			return false;
-		}
-
-		return $order->key_is_valid( $order_key );
-	}
 
 	public function fkwcs_create_payment_intent() {
 		global $wp;
 		check_ajax_referer( 'fkwcs_nonce', 'security' );
 
-		$order_id   = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
-		$order_key  = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
-		$gateway_id = isset( $_POST['gateway_id'] ) ? sanitize_text_field( wp_unslash( $_POST['gateway_id'] ) ) : '';
+		$order_id   = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer, frontend AJAX handler for checkout processing
+		$order_key  = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer, frontend AJAX handler for checkout processing
+		$gateway_id = isset( $_POST['gateway_id'] ) ? sanitize_text_field( wp_unslash( $_POST['gateway_id'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer, frontend AJAX handler for checkout processing
 
 		try {
 			$order = wc_get_order( $order_id );
@@ -336,6 +295,73 @@ class AJAX {
 			Helper::log( 'Cash App Pay: Payment intent creation failed - ' . $e->getMessage() );
 			wp_send_json_error( array( 'message' => $e->getMessage() ) );
 		}
+	}
+
+	/**
+	 * Verify that the current request owns the order via order_key.
+	 * For logged-in users, also checks that the order belongs to their account.
+	 *
+	 * @param int    $order_id  Order ID.
+	 * @param string $order_key Order key from POST.
+	 * @return bool
+	 */
+	private function verify_order_ownership( $order_id, $order_key ) {
+		if ( empty( $order_id ) || empty( $order_key ) ) {
+			return false;
+		}
+
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return false;
+		}
+
+		if ( ! $order->key_is_valid( $order_key ) ) {
+			return false;
+		}
+
+		if ( is_user_logged_in() ) {
+			$customer_id = $order->get_customer_id();
+			if ( $customer_id > 0 && get_current_user_id() !== $customer_id ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Verify order ownership for log_frontend_error.
+	 * Accepts checkout-session orders (matched via WC session) or order-pay orders (valid order_key).
+	 *
+	 * @param int    $order_id  Order ID.
+	 * @param string $order_key Order key from POST (optional, for order-pay flow).
+	 * @return bool
+	 */
+	private function verify_order_ownership_for_log_error( $order_id, $order_key ) {
+		if ( empty( $order_id ) ) {
+			return false;
+		}
+
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return false;
+		}
+
+		if ( WC()->session ) {
+			$session_order_id = absint( WC()->session->get( 'order_awaiting_payment', 0 ) );
+			if ( 0 === $session_order_id ) {
+				$session_order_id = absint( WC()->session->get( 'store_api_draft_order', 0 ) );
+			}
+			if ( $session_order_id === $order_id ) {
+				return true;
+			}
+		}
+
+		if ( ! empty( $order_key ) && $order->key_is_valid( $order_key ) ) {
+			return true;
+		}
+
+		return false;
 	}
 }
 

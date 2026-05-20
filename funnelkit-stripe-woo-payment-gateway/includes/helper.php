@@ -813,16 +813,17 @@ abstract class Helper {
 		$token_exists = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_payment_tokens where token =%s", $payment_method->id ), ARRAY_A );
 		if ( ! empty( $token_exists ) ) {
 
-			$token                                 = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
-			self::$token_cache[ $token->get_id() ] = $token;
+			$token = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
+			if ( ! is_null( $token ) ) {
+				self::$token_cache[ $token->get_id() ] = $token;
 
-			$token->set_gateway_id( $gateway_id );
-			$token->update_meta_data( 'mode', ( $is_live ) ? 'live' : 'test' );
-			$token->save_meta_data();
-			$token->save();
+				$token->set_gateway_id( $gateway_id );
+				$token->update_meta_data( 'mode', ( $is_live ) ? 'live' : 'test' );
+				$token->save_meta_data();
+				$token->save();
 
-			return $token;
-
+				return $token;
+			}
 		}
 
 		$token = new \WC_Payment_Token_CC();

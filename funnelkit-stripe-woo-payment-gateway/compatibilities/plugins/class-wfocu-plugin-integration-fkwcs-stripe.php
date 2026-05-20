@@ -1457,22 +1457,37 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 
 
-					$(document).ready(function () {
-						window.wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
-						window.fkwcsIsDomLoaded = true;
-						let wfocu_upsell_payment = new ProcessUPEPayment();
+					// Prevent double initialization - check if already initialized
+					if (window.fkwcsIsDomLoaded || window.wfocu_upsell_payment) {
+						return;
+					}
 
-
-					});
-
-					$(window).on('load', function () {
-						if (window.fkwcsIsDomLoaded) {
+					// Initialize based on document state to ensure single execution
+					function initProcessUPEPayment() {
+						// Double-check to prevent race conditions
+						if (window.fkwcsIsDomLoaded || window.wfocu_upsell_payment) {
 							return;
 						}
 						window.wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
-						let wfocu_upsell_payment = new ProcessUPEPayment();
+						window.fkwcsIsDomLoaded = true;
+						window.wfocu_upsell_payment = new ProcessUPEPayment();
+					}
 
-					});
+					// Use document.readyState to determine which event to use
+					// This ensures we only attach to one event handler
+					// 'complete' = page fully loaded (window.load already fired, ready executes immediately)
+					// 'interactive' = DOM ready (ready executes immediately)
+					// 'loading' = still loading (ready will fire when DOM is ready)
+					if (document.readyState === 'complete' || document.readyState === 'interactive' || document.readyState === 'loading') {
+						$(document).ready(function () {
+							initProcessUPEPayment();
+						});
+					} else {
+						// Fallback: if readyState is in unexpected state, use window.load
+						$(window).on('load', function () {
+							initProcessUPEPayment();
+						});
+					}
 
 
 

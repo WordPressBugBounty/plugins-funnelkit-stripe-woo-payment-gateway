@@ -555,7 +555,8 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 			$this->validate_minimum_order_amount( $order );
 			$request = apply_filters( 'fkwcs_payment_intent_data', $request, $order );
-			$intent  = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
+			unset( $request['application_fee_amount'], $request['application_fee'], $request['transfer_data'], $request['on_behalf_of'] );
+			$intent = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
 
 			$this->save_intent_to_order( $order, $intent );
 

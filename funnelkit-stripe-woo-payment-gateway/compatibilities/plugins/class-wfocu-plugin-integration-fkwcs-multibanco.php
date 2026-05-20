@@ -9,12 +9,12 @@ use FKWCS\Gateway\Stripe\Helper;
 if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exists( 'WFOCU_Gateway' ) ) {
 	class WFOCU_Plugin_Integration_Fkwcs_Multibanco extends FKWCS_LocalGateway_Upsell {
 		protected static $instance = null;
-		public $key = 'fkwcs_stripe_multibanco';
-		public $token = false;
-		public $has_intent_secret = [];
+		public $key                = 'fkwcs_stripe_multibanco';
+		public $token              = false;
+		public $has_intent_secret  = array();
 		public $current_intent;
-		public $current_order_id = null;
-		protected $payment_method_type = 'multibanco';
+		public $current_order_id         = null;
+		protected $payment_method_type   = 'multibanco';
 		protected $need_shipping_address = false;
 
 		/**
@@ -35,7 +35,6 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			add_action( 'wfocu_front_primary_order_cancelled', array( $this, 'remove_intent_meta_form_cancelled_order' ) );
 			add_filter( 'woocommerce_payment_successful_result', array( $this, 'maybe_flag_has_intent_secret' ), 9999, 2 );
 			add_filter( 'wfocu_front_order_status_after_funnel', array( $this, 'replace_recorded_status_with_ipn_response' ), 10, 2 );
-
 		}
 
 		/**
@@ -63,7 +62,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 		 * during the upsell flow.
 		 *
 		 * @param array $result Payment result array from WooCommerce
-		 * @param int $order_id Order ID (unused but required by filter)
+		 * @param int   $order_id Order ID (unused but required by filter)
 		 *
 		 * @return array Unmodified payment result array
 		 * @since 1.0.0
@@ -73,7 +72,6 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			if ( isset( $result['intent_secret'] ) || isset( $result['setup_intent_secret'] ) || isset( $result['payment_intent_secret'] ) ) {
 				$this->has_intent_secret = $result;
 			}
-
 
 			return $result;
 		}
@@ -128,25 +126,23 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 				if ( 'card_error' === $intent->error->type ) {
 					$localized_message = $intent->error->message;
 				}
-				throw new \Exception( "fkwcs Stripe : " . $localized_message, 102, $this->key );
+				throw new \Exception( 'fkwcs Stripe : ' . $localized_message, 102, $this->key );
 			}
 
 			if ( ! empty( $intent ) ) {
 				if ( 'requires_action' === $intent->status ) {
-					throw new \Exception( "fkwcs Stripe : Auth required for the charge but unable to complete.", 102, $this->key );
+					throw new \Exception( 'fkwcs Stripe : Auth required for the charge but unable to complete.', 102, $this->key );
 				}
 			}
 
 			$response = end( $intent->charges->data );
 			if ( is_wp_error( $response ) ) {
 				WFOCU_Core()->log->log( 'Order #' . WFOCU_WC_Compatibility::get_order_id( $order ) . ': Payment Failed For Stripe' );
-			} else {
-				if ( ! empty( $response->error ) ) {
+			} elseif ( ! empty( $response->error ) ) {
 					throw new \Exception( $response->error->message, 102, $this->key );
-				} else {
-					WFOCU_Core()->data->set( '_transaction_id', $response->id );
-					$is_successful = true;
-				}
+			} else {
+				WFOCU_Core()->data->set( '_transaction_id', $response->id );
+				$is_successful = true;
 			}
 
 			if ( true === $is_successful ) {
@@ -164,7 +160,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 		 * Logs creation attempts and validates response structure.
 		 *
 		 * @param WC_Order $order WooCommerce order object
-		 * @param object $prepared_source Prepared payment source with customer/source data
+		 * @param object   $prepared_source Prepared payment source with customer/source data
 		 *
 		 * @return object Payment intent object or error object on failure
 		 * @since 1.0.0
@@ -179,7 +175,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 				'description'          => $full_request['description'],
 				'metadata'             => $full_request['metadata'],
 				'capture_method'       => 'automatic',
-				'payment_method_types' => [ $this->payment_method_type ],
+				'payment_method_types' => array( $this->payment_method_type ),
 				'confirmation_method'  => 'automatic',
 				'confirm'              => false,
 			);
@@ -195,13 +191,13 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			$intent   = isset( $response['data'] ) ? $response['data'] : (object) $response;
 
 			if ( ! empty( $intent->error ) ) {
-				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . " - Offer payment intent create failed, Reason: " . print_r( $intent->error, true ) );
+				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . ' - Offer payment intent create failed, Reason: ' . print_r( $intent->error, true ) );
 
 				return $intent;
 			}
 
 			if ( ! isset( $intent->status ) ) {
-				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . " - Invalid intent response: " . print_r( $intent, true ) );
+				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . ' - Invalid intent response: ' . print_r( $intent, true ) );
 
 				return (object) array( 'error' => array( 'message' => 'Invalid intent response' ) );
 			}
@@ -218,7 +214,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 		 * method data including billing details. Handles confirmation response and
 		 * validates the resulting intent status.
 		 *
-		 * @param object $intent Payment intent object to confirm
+		 * @param object   $intent Payment intent object to confirm
 		 * @param WC_Order $order WooCommerce order object
 		 *
 		 * @return object Confirmed payment intent object or error object on failure
@@ -230,7 +226,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			$stripe_api = $gateway->get_client();
 
 			$confirm_args = array(
-				'payment_method_types' => [ $this->payment_method_type ],
+				'payment_method_types' => array( $this->payment_method_type ),
 				'payment_method_data'  => array(
 					'type'            => $this->payment_method_type,
 					'billing_details' => array(
@@ -245,13 +241,13 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			$c_intent = isset( $response['data'] ) ? $response['data'] : (object) $response;
 
 			if ( ! empty( $c_intent->error ) ) {
-				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . " - Confirm intent failed, Reason: " . print_r( $c_intent->error, true ) );
+				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . ' - Confirm intent failed, Reason: ' . print_r( $c_intent->error, true ) );
 
 				return $c_intent;
 			}
 
 			if ( ! isset( $c_intent->status ) ) {
-				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . " - Invalid confirm intent response: " . print_r( $c_intent, true ) );
+				WFOCU_Core()->log->log( 'Order #' . $order->get_id() . ' - Invalid confirm intent response: ' . print_r( $c_intent, true ) );
 
 				return (object) array( 'error' => array( 'message' => 'Invalid confirm intent response' ) );
 			}
@@ -269,7 +265,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 		 * requirements and applies filters for customization.
 		 *
 		 * @param WC_Order $order WooCommerce order object
-		 * @param object $source Payment source object
+		 * @param object   $source Payment source object
 		 *
 		 * @return array Payment request data array
 		 * @throws \Exception When order total is below minimum amount requirement
@@ -298,9 +294,9 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			}
 
 			$metadata = array(
-				__( 'customer_name', 'funnelkit-stripe-woo-payment-gateway' )  => sanitize_text_field( $billing_first_name ) . ' ' . sanitize_text_field( $billing_last_name ),
+				__( 'customer_name', 'funnelkit-stripe-woo-payment-gateway' ) => sanitize_text_field( $billing_first_name ) . ' ' . sanitize_text_field( $billing_last_name ),
 				__( 'customer_email', 'funnelkit-stripe-woo-payment-gateway' ) => sanitize_email( $billing_email ),
-				'order_id'                                                     => $this->get_order_number( $order ),
+				'order_id' => $this->get_order_number( $order ),
 			);
 
 			$post_data['expand[]'] = 'balance_transaction';
@@ -325,7 +321,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 		 * funnel behavior (batching vs individual orders).
 		 *
 		 * @param WC_Order $order WooCommerce order object
-		 * @param string $balance_transaction_id Stripe balance transaction ID
+		 * @param string   $balance_transaction_id Stripe balance transaction ID
 		 *
 		 * @return void
 		 * @since 1.0.0
@@ -333,7 +329,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 		public function update_stripe_fees( $order, $balance_transaction_id ) {
 			$stripe              = $this->get_wc_gateway();
 			$stripe_api          = $stripe->get_client();
-			$response            = $stripe_api->balance_transactions( 'retrieve', [ $balance_transaction_id ] );
+			$response            = $stripe_api->balance_transactions( 'retrieve', array( $balance_transaction_id ) );
 			$balance_transaction = $response['success'] ? $response['data'] : false;
 
 			if ( $balance_transaction === false ) {
@@ -347,7 +343,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 				$order_behavior = WFOCU_Core()->funnels->get_funnel_option( 'order_behavior' );
 				$is_batching_on = ( 'batching' === $order_behavior ) ? true : false;
 
-				$data = [];
+				$data = array();
 				if ( ( 'yes' === get_option( 'fkwcs_currency_fee', 'no' ) && ! empty( $balance_transaction->exchange_rate ) ) ) {
 					$data['currency'] = $order->get_currency();
 					$fee              = $fee / $balance_transaction->exchange_rate;
@@ -395,203 +391,219 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 				return;
 			}
 			?>
-            <script src="https://js.stripe.com/v3/?ver=3.0" data-cookieconsent="ignore"></script>
-            <script>
-                (function ($) {
-                    "use strict";
+			<script src="https://js.stripe.com/v3/?ver=3.0" data-cookieconsent="ignore"></script>
+			<script>
+				(function ($) {
+					"use strict";
 
-                    function initializeStripePayment() {
-                        var wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
-                        var wfocuStripeJS = {
-                            bucket: null,
-                            initCharge: function () {
-                                var getBucketData = this.bucket.getBucketSendData();
-                                var postData = $.extend(getBucketData, {
-                                    action: 'wfocu_front_handle_fkwcs_multibanco_payments'
-                                });
+					function initializeStripePayment() {
+						var wfocuStripe = Stripe('<?php echo esc_js( $this->get_wc_gateway()->get_client_key() ); ?>');
+						var wfocuStripeJS = {
+							bucket: null,
+							initCharge: function () {
+								var getBucketData = this.bucket.getBucketSendData();
+								var postData = $.extend(getBucketData, {
+									action: 'wfocu_front_handle_fkwcs_multibanco_payments'
+								});
 
-                                var action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', 'wfocu_front_handle_fkwcs_multibanco_payments'), postData);
+								var action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', 'wfocu_front_handle_fkwcs_multibanco_payments'), postData);
 
-                                action.done(function (data) {
+								action.done(function (data) {
 
-                                    if (data.result !== "success") {
-                                        wfocuStripeJS.bucket.swal.show({
-                                            'text': wfocu_vars.messages.offer_msg_pop_failure,
-                                            'type': 'warning'
-                                        });
-                                        if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
-                                            setTimeout(function () {
-                                                window.location = data.response.redirect_url;
-                                            }, 1500);
-                                        } else {
-                                            if (typeof wfocu_vars.order_received_url !== 'undefined') {
-                                                window.location = wfocu_vars.order_received_url + '&ec=multibanco_error';
-                                            }
-                                        }
-                                    } else {
-                                        // Check for Multibanco special handling flag
-                                        if (typeof data.multibanco_treat_all_as_success !== "undefined" && data.multibanco_treat_all_as_success === true) {
-                                            if (typeof data.intent_secret !== "undefined" && '' !== data.intent_secret) {
-                                                wfocuStripe.confirmMultibancoPayment(data.intent_secret)
-                                                    .then(function (response) {
-                                                        $(document).trigger('wfocuStripeOnAuthentication', [response, true]);
-                                                        return;
-                                                    })
-                                                    .catch(function (error) {
-                                                        console.log('Multibanco popup canceled/error - still treating as success:', error);
-                                                        $(document).trigger('wfocuStripeOnAuthentication', [{paymentIntent: {client_secret: data.intent_secret}}, true]);
-                                                        return;
-                                                    });
-                                                return;
-                                            }
-                                        }
+									if (data.result !== "success") {
+										wfocuStripeJS.bucket.swal.show({
+											'text': wfocu_vars.messages.offer_msg_pop_failure,
+											'type': 'warning'
+										});
+										if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
+											setTimeout(function () {
+												window.location = data.response.redirect_url;
+											}, 1500);
+										} else {
+											if (typeof wfocu_vars.order_received_url !== 'undefined') {
+												window.location = wfocu_vars.order_received_url + '&ec=multibanco_error';
+											}
+										}
+									} else {
+										// Check for Multibanco special handling flag
+										if (typeof data.multibanco_treat_all_as_success !== "undefined" && data.multibanco_treat_all_as_success === true) {
+											if (typeof data.intent_secret !== "undefined" && '' !== data.intent_secret) {
+												wfocuStripe.confirmMultibancoPayment(data.intent_secret)
+													.then(function (response) {
+														$(document).trigger('wfocuStripeOnAuthentication', [response, true]);
+														return;
+													})
+													.catch(function (error) {
+														console.log('Multibanco popup canceled/error - still treating as success:', error);
+														$(document).trigger('wfocuStripeOnAuthentication', [{paymentIntent: {client_secret: data.intent_secret}}, true]);
+														return;
+													});
+												return;
+											}
+										}
 
-                                        // Standard Multibanco flow (original logic)
-                                        if (typeof data.intent_secret !== "undefined" && '' !== data.intent_secret) {
-                                            wfocuStripe.confirmMultibancoPayment(data.intent_secret)
-                                                .then(function (response) {
-                                                    if (response.error) {
-                                                        throw response.error;
-                                                    }
-                                                    if ('requires_capture' !== response.paymentIntent.status && 'succeeded' !== response.paymentIntent.status) {
-                                                        return;
-                                                    }
-                                                    $(document).trigger('wfocuStripeOnAuthentication', [response, true]);
-                                                    return;
-                                                })
-                                                .catch(function (error) {
-                                                    $(document).trigger('wfocuStripeOnAuthentication', [false, false]);
-                                                    return;
-                                                });
-                                            return;
-                                        }
+										// Standard Multibanco flow (original logic)
+										if (typeof data.intent_secret !== "undefined" && '' !== data.intent_secret) {
+											wfocuStripe.confirmMultibancoPayment(data.intent_secret)
+												.then(function (response) {
+													if (response.error) {
+														throw response.error;
+													}
+													if ('requires_capture' !== response.paymentIntent.status && 'succeeded' !== response.paymentIntent.status) {
+														return;
+													}
+													$(document).trigger('wfocuStripeOnAuthentication', [response, true]);
+													return;
+												})
+												.catch(function (error) {
+													$(document).trigger('wfocuStripeOnAuthentication', [false, false]);
+													return;
+												});
+											return;
+										}
 
-                                        // No intent secret - immediate success
-                                        wfocuStripeJS.bucket.swal.show({
-                                            'text': wfocu_vars.messages.offer_success_message_pop,
-                                            'type': 'success'
-                                        });
-                                        if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
-                                            setTimeout(function () {
-                                                window.location = data.response.redirect_url;
-                                            }, 1500);
-                                        } else {
-                                            if (typeof wfocu_vars.order_received_url !== 'undefined') {
-                                                window.location = wfocu_vars.order_received_url;
-                                            }
-                                        }
-                                    }
-                                });
+										// No intent secret - immediate success
+										wfocuStripeJS.bucket.swal.show({
+											'text': wfocu_vars.messages.offer_success_message_pop,
+											'type': 'success'
+										});
+										if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
+											setTimeout(function () {
+												window.location = data.response.redirect_url;
+											}, 1500);
+										} else {
+											if (typeof wfocu_vars.order_received_url !== 'undefined') {
+												window.location = wfocu_vars.order_received_url;
+											}
+										}
+									}
+								});
 
-                                action.fail(function (data) {
-                                    console.error('Multibanco AJAX request failed:', data);
-                                    wfocuStripeJS.bucket.swal.show({
-                                        'text': wfocu_vars.messages.offer_msg_pop_failure,
-                                        'type': 'warning'
-                                    });
-                                    if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
-                                        setTimeout(function () {
-                                            window.location = data.response.redirect_url;
-                                        }, 1500);
-                                    } else {
-                                        if (typeof wfocu_vars.order_received_url !== 'undefined') {
-                                            window.location = wfocu_vars.order_received_url + '&ec=multibanco_error2';
-                                        }
-                                    }
-                                });
-                            }
-                        };
+								action.fail(function (data) {
+									console.error('Multibanco AJAX request failed:', data);
+									wfocuStripeJS.bucket.swal.show({
+										'text': wfocu_vars.messages.offer_msg_pop_failure,
+										'type': 'warning'
+									});
+									if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
+										setTimeout(function () {
+											window.location = data.response.redirect_url;
+										}, 1500);
+									} else {
+										if (typeof wfocu_vars.order_received_url !== 'undefined') {
+											window.location = wfocu_vars.order_received_url + '&ec=multibanco_error2';
+										}
+									}
+								});
+							}
+						};
 
-                        $(document).off('wfocuStripeOnAuthentication.multibanco');
-                        $(document).off('wfocuBucketCreated.multibanco');
-                        $(document).off('wfocu_external.multibanco');
-                        $(document).off('wfocuBucketConfirmationRendered.multibanco');
-                        $(document).off('wfocuBucketLinksConverted.multibanco');
-                        $(document).on('wfocuStripeOnAuthentication.multibanco', function (e, response, is_success) {
-                            // For Multibanco upsells, always process as success once voucher is shown
-                            var postData = $.extend(wfocuStripeJS.bucket.getBucketSendData(), {
-                                action: 'wfocu_front_handle_fkwcs_multibanco_payments',
-                                intent: 1,
-                                intent_secret: response && response.paymentIntent ? response.paymentIntent.client_secret : '',
-                                multibanco_voucher_shown: true // Flag that voucher was displayed
-                            });
+						$(document).off('wfocuStripeOnAuthentication.multibanco');
+						$(document).off('wfocuBucketCreated.multibanco');
+						$(document).off('wfocu_external.multibanco');
+						$(document).off('wfocuBucketConfirmationRendered.multibanco');
+						$(document).off('wfocuBucketLinksConverted.multibanco');
+						$(document).on('wfocuStripeOnAuthentication.multibanco', function (e, response, is_success) {
+							// For Multibanco upsells, always process as success once voucher is shown
+							var postData = $.extend(wfocuStripeJS.bucket.getBucketSendData(), {
+								action: 'wfocu_front_handle_fkwcs_multibanco_payments',
+								intent: 1,
+								intent_secret: response && response.paymentIntent ? response.paymentIntent.client_secret : '',
+								multibanco_voucher_shown: true // Flag that voucher was displayed
+							});
 
-                            var action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', 'wfocu_front_handle_fkwcs_multibanco_payments'), postData);
-                            action.done(function (data) {
-                                // Always show success message
-                                wfocuStripeJS.bucket.swal.show({
-                                    'text': wfocu_vars.messages.offer_success_message_pop,
-                                    'type': 'success'
-                                });
+							var action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', 'wfocu_front_handle_fkwcs_multibanco_payments'), postData);
+							action.done(function (data) {
+								// Always show success message
+								wfocuStripeJS.bucket.swal.show({
+									'text': wfocu_vars.messages.offer_success_message_pop,
+									'type': 'success'
+								});
 
-                                // Redirect to success page
-                                if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
-                                    setTimeout(function () {
-                                        window.location = data.response.redirect_url;
-                                    }, 1500);
-                                } else {
-                                    if (typeof wfocu_vars.order_received_url !== 'undefined') {
-                                        window.location = wfocu_vars.order_received_url;
-                                    }
-                                }
-                            }).fail(function (data) {
-                                console.log('Multibanco follow-up failed, but still treating as success');
-                                // Even if follow-up fails, treat as success since user saw voucher
-                                wfocuStripeJS.bucket.swal.show({
-                                    'text': wfocu_vars.messages.offer_success_message_pop,
-                                    'type': 'success'
-                                });
-                                setTimeout(function () {
-                                    if (typeof wfocu_vars.order_received_url !== 'undefined') {
-                                        window.location = wfocu_vars.order_received_url;
-                                    }
-                                }, 1500);
-                            });
-                        });
+								// Redirect to success page
+								if (typeof data.response !== "undefined" && typeof data.response.redirect_url !== 'undefined') {
+									setTimeout(function () {
+										window.location = data.response.redirect_url;
+									}, 1500);
+								} else {
+									if (typeof wfocu_vars.order_received_url !== 'undefined') {
+										window.location = wfocu_vars.order_received_url;
+									}
+								}
+							}).fail(function (data) {
+								console.log('Multibanco follow-up failed, but still treating as success');
+								// Even if follow-up fails, treat as success since user saw voucher
+								wfocuStripeJS.bucket.swal.show({
+									'text': wfocu_vars.messages.offer_success_message_pop,
+									'type': 'success'
+								});
+								setTimeout(function () {
+									if (typeof wfocu_vars.order_received_url !== 'undefined') {
+										window.location = wfocu_vars.order_received_url;
+									}
+								}, 1500);
+							});
+						});
 
-                        $(document).on('wfocuBucketCreated.multibanco', function (e, Bucket) {
-                            wfocuStripeJS.bucket = Bucket;
-                        });
+						$(document).on('wfocuBucketCreated.multibanco', function (e, Bucket) {
+							wfocuStripeJS.bucket = Bucket;
+						});
 
-                        $(document).on('wfocu_external.multibanco', function (e, Bucket) {
-                            if (0 !== Bucket.getTotal()) {
-                                wfocuStripeJS.bucket = Bucket;
-                                Bucket.inOfferTransaction = true;
-                                wfocuStripeJS.initCharge();
-                            }
-                        });
+						$(document).on('wfocu_external.multibanco', function (e, Bucket) {
+							if (0 !== Bucket.getTotal()) {
+								wfocuStripeJS.bucket = Bucket;
+								Bucket.inOfferTransaction = true;
+								wfocuStripeJS.initCharge();
+							}
+						});
 
-                        $(document).on('wfocuBucketConfirmationRendered.multibanco', function (e, Bucket) {
-                            wfocuStripeJS.bucket = Bucket;
-                        });
+						$(document).on('wfocuBucketConfirmationRendered.multibanco', function (e, Bucket) {
+							wfocuStripeJS.bucket = Bucket;
+						});
 
-                        $(document).on('wfocuBucketLinksConverted.multibanco', function (e, Bucket) {
-                            wfocuStripeJS.bucket = Bucket;
-                        });
-                        window.wfocuStripeJS = wfocuStripeJS;
-                    }
+						$(document).on('wfocuBucketLinksConverted.multibanco', function (e, Bucket) {
+							wfocuStripeJS.bucket = Bucket;
+						});
+						window.wfocuStripeJS = wfocuStripeJS;
+					}
 
-                    $(document).ready(function () {
-                        if (typeof Stripe !== 'undefined') {
-                            initializeStripePayment();
-                            window.fkwcsMultibancoStripeInitialized = true;
-                        } else {
-                            console.log('Stripe not ready on DOM ready, waiting for window load...');
-                        }
-                    });
+					// Prevent double initialization - check if already initialized
+					if (window.fkwcsMultibancoStripeInitialized || window.wfocuStripeJS) {
+						return;
+					}
 
-                    $(window).on('load', function () {
-                        if (!window.fkwcsMultibancoStripeInitialized) {
-                            if (typeof Stripe !== 'undefined') {
-                                initializeStripePayment();
-                                window.fkwcsMultibancoStripeInitialized = true;
-                            } else {
-                                console.error('Stripe library failed to load');
-                            }
-                        }
-                    });
-                })(jQuery);
-            </script>
+					// Initialize based on document state to ensure single execution
+					function initMultibancoStripePayment() {
+						// Double-check to prevent race conditions
+						if (window.fkwcsMultibancoStripeInitialized || window.wfocuStripeJS) {
+							return;
+						}
+						// Check if Stripe library is available
+						if (typeof Stripe === 'undefined') {
+							console.error('Stripe library failed to load');
+							return;
+						}
+						initializeStripePayment();
+						window.fkwcsMultibancoStripeInitialized = true;
+					}
+
+					// Use document.readyState to determine which event to use
+					// This ensures we only attach to one event handler
+					// 'complete' = page fully loaded (window.load already fired, ready executes immediately)
+					// 'interactive' = DOM ready (ready executes immediately)
+					// 'loading' = still loading (ready will fire when DOM is ready)
+					if (document.readyState === 'complete' || document.readyState === 'interactive' || document.readyState === 'loading') {
+						$(document).ready(function () {
+							initMultibancoStripePayment();
+						});
+					} else {
+						// Fallback: if readyState is in unexpected state, use window.load
+						$(window).on('load', function () {
+							initMultibancoStripePayment();
+						});
+					}
+				})(jQuery);
+			</script>
 			<?php
 		}
 
@@ -684,9 +696,11 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST );
 
 			if ( false === WFOCU_AJAX_Controller::validate_charge_request( $posted_data ) ) {
-				wp_send_json( array(
-					'result' => 'error',
-				) );
+				wp_send_json(
+					array(
+						'result' => 'error',
+					)
+				);
 			}
 
 			WFOCU_Core()->process_offer->execute( $get_current_offer_meta );
@@ -720,10 +734,12 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 					}
 
 					// Process upsell as successful since user has voucher details
-					wp_send_json( array(
-						'result'   => 'success',
-						'response' => WFOCU_Core()->process_offer->_handle_upsell_charge( true ),
-					) );
+					wp_send_json(
+						array(
+							'result'   => 'success',
+							'response' => WFOCU_Core()->process_offer->_handle_upsell_charge( true ),
+						)
+					);
 				}
 
 				// Fallback processing for standard intents
@@ -745,10 +761,12 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 					if ( $response ) {
 						WFOCU_Core()->data->set( '_transaction_id', $response->id );
 						$this->update_stripe_fees( $get_order, is_string( $response->balance_transaction ) ? $response->balance_transaction : $response->balance_transaction->id );
-						wp_send_json( array(
-							'result'   => 'success',
-							'response' => WFOCU_Core()->process_offer->_handle_upsell_charge( true ),
-						) );
+						wp_send_json(
+							array(
+								'result'   => 'success',
+								'response' => WFOCU_Core()->process_offer->_handle_upsell_charge( true ),
+							)
+						);
 					}
 				}
 				$this->handle_api_error( __( 'Offer payment failed. Reason: Intent was not authenticated properly.', 'funnelkit-stripe-woo-payment-gateway' ), 'Intent was not authenticated properly.', $get_order, true );
@@ -779,11 +797,13 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 						$get_order->save();
 
 						if ( ! empty( $intent->status ) && 'requires_action' === $intent->status ) {
-							wp_send_json( array(
-								'result'                          => 'success',
-								'intent_secret'                   => $intent->client_secret,
-								'multibanco_treat_all_as_success' => true
-							) );
+							wp_send_json(
+								array(
+									'result'        => 'success',
+									'intent_secret' => $intent->client_secret,
+									'multibanco_treat_all_as_success' => true,
+								)
+							);
 						}
 
 						if ( ! empty( $intent->charges ) && ! empty( $intent->charges->data ) ) {
@@ -795,16 +815,18 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 						}
 					}
 				} catch ( Exception $e ) {
-					$this->handle_api_error( __( 'Offer payment failed. Reason: ' . $e->getMessage() . '', 'funnelkit-stripe-woo-payment-gateway' ), 'Error Captured: ' . print_r( $e->getMessage() . " <-- Generated on" . $e->getFile() . ":" . $e->getLine(), true ), $get_order, true );
+					$this->handle_api_error( __( 'Offer payment failed. Reason: ' . $e->getMessage() . '', 'funnelkit-stripe-woo-payment-gateway' ), 'Error Captured: ' . print_r( $e->getMessage() . ' <-- Generated on' . $e->getFile() . ':' . $e->getLine(), true ), $get_order, true );
 				}
 			}
 
 			$data = WFOCU_Core()->process_offer->_handle_upsell_charge( true );
 
-			wp_send_json( array(
-				'result'   => 'success',
-				'response' => $data,
-			) );
+			wp_send_json(
+				array(
+					'result'   => 'success',
+					'response' => $data,
+				)
+			);
 		}
 
 		/**
@@ -830,7 +852,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 
 			$gateway  = $this->get_wc_gateway();
 			$client   = $gateway->get_client();
-			$response = $client->payment_intents( 'retrieve', [ $payment_intent ] );
+			$response = $client->payment_intents( 'retrieve', array( $payment_intent ) );
 			$intent   = $gateway->handle_client_response( $response );
 
 			if ( empty( $intent ) ) {
@@ -838,7 +860,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			}
 
 			$intent_status = isset( $intent->status ) ? $intent->status : '';
-			if ( in_array( $intent_status, [ 'succeeded', 'requires_capture', 'processing', 'requires_action' ] ) ) {
+			if ( in_array( $intent_status, array( 'succeeded', 'requires_capture', 'processing', 'requires_action' ) ) ) {
 				$this->current_intent = $intent;
 
 				return $intent;
@@ -846,21 +868,20 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 
 			return false;
 		}
-		
+
 		/**
 		 * @param $status
 		 * @param WC_Order $order
 		 */
 		public function replace_recorded_status_with_ipn_response( $status, $order ) {
-			
+
 			$get_meta = Helper::get_meta( wc_get_order( $order->get_id() ), '_wfocu_payment_complete_on_hold' );
-			if($get_meta){
+			if ( $get_meta ) {
 				return apply_filters( 'woocommerce_payment_complete_order_status', $order->needs_processing() ? 'processing' : 'completed', $order->get_id(), $order );
 			}
 			return $status;
 		}
-
 	}
 
 	WFOCU_Plugin_Integration_Fkwcs_Multibanco::get_instance();
-} 
+}

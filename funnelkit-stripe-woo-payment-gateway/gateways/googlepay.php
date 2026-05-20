@@ -335,6 +335,9 @@ class GooglePay extends CreditCard {
 
 		if ( ! empty( $wp->query_vars['order-pay'] ) ) {
 			$order = wc_get_order( absint( $wp->query_vars['order-pay'] ) );
+			if ( ! $order instanceof \WC_Order ) {
+				return $data;
+			}
 
 			$data['gpay_cart_data'] = [
 				"shipping_required"     => wc_bool_to_string( false ),

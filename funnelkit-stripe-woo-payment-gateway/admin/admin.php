@@ -1957,6 +1957,41 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 	 *
 	 * @return void
 	 */
+	/**
+	 * Validate a redirect value against an allowlist of known WP admin page filenames.
+	 * Prevents open-redirect abuse by rejecting arbitrary paths from $_REQUEST['redirect'].
+	 *
+	 * @param string|null $redirect     Raw redirect value from the request.
+	 * @param string      $default_url  Safe fallback URL returned when redirect is invalid.
+	 * @return string
+	 */
+	private function get_safe_admin_redirect_url( $redirect, $default_url ) {
+		if ( empty( $redirect ) ) {
+			return $default_url;
+		}
+
+		$allowed_admin_pages = array(
+			'admin.php',
+			'post.php',
+			'post-new.php',
+			'edit.php',
+			'upload.php',
+			'plugins.php',
+			'users.php',
+			'options-general.php',
+			'admin-post.php',
+		);
+
+		$parsed        = wp_parse_url( $redirect );
+		$redirect_base = isset( $parsed['path'] ) ? basename( $parsed['path'] ) : '';
+
+		if ( ! in_array( $redirect_base, $allowed_admin_pages, true ) ) {
+			return $default_url;
+		}
+
+		return admin_url( $redirect );
+	}
+
 	public function dismiss_notice() {
 		check_ajax_referer( 'fkwcs_admin_request', '_security' );
 		$this->check_wc_admin();
@@ -1979,11 +2014,9 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 		$result = update_user_meta( $user->ID, '_fkwcs_notices', $meta ); //phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.user_meta_update_user_meta
 
-		$redirect = isset( $_REQUEST['redirect'] ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect'] ) ) : null;
+		$redirect = isset( $_REQUEST['redirect'] ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect'] ) ) : null; //phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified above via check_ajax_referer
 		if ( ! is_null( $redirect ) ) {
-			$redirect_url = $redirect && strpos( $redirect, '.php' ) ? admin_url( $redirect ) : null;
-
-			wp_safe_redirect( $redirect_url ?? admin_url( 'admin.php?page=bwf&path=/funnels' ) );
+			wp_safe_redirect( $this->get_safe_admin_redirect_url( $redirect, admin_url( 'admin.php?page=bwf&path=/funnels' ) ) );
 			exit;
 		}
 
@@ -2569,10 +2602,9 @@ Learn more %1$1sabout the requirements%2$2s to show Apple Pay, Google Pay and Br
 
 		update_user_meta( $user->ID, '_fkwcs_notices', $meta ); //phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.user_meta_update_user_meta
 
-		$redirect     = isset( $_REQUEST['redirect'] ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect'] ) ) : null;
-		$redirect_url = $redirect && strpos( $redirect, '.php' ) ? admin_url( $redirect ) : null;
+		$redirect = isset( $_REQUEST['redirect'] ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect'] ) ) : null; //phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified above via check_ajax_referer
 
-		wp_safe_redirect( $redirect_url ?? admin_url( 'admin.php?page=wc-settings' ) );
+		wp_safe_redirect( $this->get_safe_admin_redirect_url( $redirect, admin_url( 'admin.php?page=wc-settings' ) ) );
 		exit;
 	}
 

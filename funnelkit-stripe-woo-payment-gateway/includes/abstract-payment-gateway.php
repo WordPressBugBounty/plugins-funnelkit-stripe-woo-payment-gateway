@@ -359,7 +359,10 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			return array();
 		}
 
-		$order              = wc_get_order( $order_id );
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return array();
+		}
 		$details            = array();
 		$details['name']    = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
 		$details['email']   = $order->get_billing_email();
@@ -644,11 +647,12 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			unset( $args['customer'] );
 		}
 
+		$args = apply_filters( 'fkwcs_payment_intent_data', $args, $order );
+		unset( $args['application_fee_amount'], $args['application_fee'], $args['transfer_data'], $args['on_behalf_of'] );
+
 		if ( ! empty( $retry_count ) ) {
 			$idempotency_key = $idempotency_key . '_' . $retry_count;
 		}
-
-		$args = apply_filters( 'fkwcs_payment_intent_data', $args, $order );
 
 		try {
 			if (
@@ -1530,6 +1534,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 		$request['metadata'] = $this->add_metadata( $order );
 		$request             = apply_filters( 'fkwcs_payment_intent_data', $request, $order );
+		unset( $request['application_fee_amount'], $request['application_fee'], $request['transfer_data'], $request['on_behalf_of'] );
 		try {
 			if (
 				$this->is_application_fee_supported() &&
@@ -1992,8 +1997,9 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 		if ( isset( $wp->query_vars['order-pay'] ) ) {
 			$order = wc_get_order( absint( $wp->query_vars['order-pay'] ) );
-
-			return $order->get_currency();
+			if ( $order instanceof \WC_Order ) {
+				return $order->get_currency();
+			}
 		}
 
 		return get_woocommerce_currency();
@@ -2007,10 +2013,16 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public function get_billing_country() {
 		global $wp;
 
+		$billing_country = null;
+
 		if ( isset( $wp->query_vars['order-pay'] ) ) {
-			$order           = wc_get_order( absint( $wp->query_vars['order-pay'] ) );
-			$billing_country = $order->get_billing_country();
-		} else {
+			$order = wc_get_order( absint( $wp->query_vars['order-pay'] ) );
+			if ( $order instanceof \WC_Order ) {
+				$billing_country = $order->get_billing_country();
+			}
+		}
+
+		if ( empty( $billing_country ) ) {
 			$customer        = WC()->customer;
 			$billing_country = $customer ? $customer->get_billing_country() : null;
 

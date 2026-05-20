@@ -479,6 +479,11 @@ jQuery(function ($) {
             return response.json();
         }
 
+        getOrderKeyFromUrl() {
+            let urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('key') || '';
+        }
+
         getAmountCurrency() {
             const source = this.fragments?.fkwcs_paylater_data || fkwcs_data?.fkwcs_paylater_data;
             return source ? {'amount': parseFloat(source.amount), 'currency': source.currency.toUpperCase()}

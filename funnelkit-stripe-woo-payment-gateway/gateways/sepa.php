@@ -210,7 +210,9 @@ class Sepa extends Abstract_Payment_Gateway {
 		/** If paying from order, we need to get total from order not cart */
 		if ( isset( $_GET['pay_for_order'] ) && ! empty( $_GET['key'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$order = wc_get_order( wc_clean( $wp->query_vars['order-pay'] ) );
-			$total = $order->get_total();
+			if ( $order instanceof \WC_Order ) {
+				$total = $order->get_total();
+			}
 		}
 
 		if ( is_add_payment_method_page() ) {

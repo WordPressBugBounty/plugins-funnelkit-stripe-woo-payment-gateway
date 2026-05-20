@@ -4,7 +4,7 @@ Tags: stripe, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
 Tested up to: 6.9.0
 Requires PHP: 7.0
-Stable tag: 1.14.0.4
+Stable tag: 1.14.0.5
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -259,8 +259,13 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 == Change log ==
 
+= 1.14.0.5 =
+* Fixed: Edge cases causing double upsells charges in case of javascript are deferred loaded on upsells.(#1032)
+* Fixed: PHP Error accessing order-pay pages when order ID passed is not valid. (#1169)
+* Improved: Order checks improved for order-pay requests. (#1209)
+
 = 1.14.0.4 =
-* Improved: [Important] Security improvements for the connect flow for authenticated admin sessions.(#1195)
+* Improved: [Important] Security improvements related to authenticated admin sessions. (#1195)
 
 = 1.14.0.3 =
 * Improved: Added support for third-party apps to customize the redirect URL after Stripe Connect for greater flexibility. (#6872)

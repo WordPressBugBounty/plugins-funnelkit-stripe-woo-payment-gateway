@@ -14,7 +14,9 @@ if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 // If paying from order, we need to get total from order not cart.
 if ( isset( $_GET['pay_for_order'] ) && ! empty( $_GET['key'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	$order_obj = wc_get_order( wc_clean( $wp->query_vars['order-pay'] ) );
-	$total     = $order_obj->get_total();
+	if ( $order_obj instanceof \WC_Order ) {
+		$total = $order_obj->get_total();
+	}
 }
 
 
