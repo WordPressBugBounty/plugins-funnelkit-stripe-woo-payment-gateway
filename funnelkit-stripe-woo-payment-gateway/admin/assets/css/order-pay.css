@@ -1,0 +1,66 @@
+/**
+ * "Pay for Order" admin modal styling.
+ *
+ * Ported directly from the WooCommerce Stripe (Payment Plugins) pay-for-order
+ * modal CSS, mapped onto this plugin's fkwcs-* markup. Structural modal chrome
+ * (backdrop, header, footer) comes from WooCommerce core's wc-backbone-modal
+ * styles; this file only styles the feature-specific content.
+ *
+ * Reference rules (woo-stripe-payment/assets/build/admin.css):
+ *   #wc-stripe-card-container #card-element { background:#fff;border:1px solid #e8e8e8;margin:1em 0;padding:12px 6px }
+ *   #pay-order { min-width:75px }
+ *   .modal-wide { margin-bottom:1.5em;width:100% }
+ *   .modal-wide label { font-weight:500 }
+ *   .modal-wide.option label { display:block;margin-bottom:.5em }
+ *   .token-container { margin:1em 0 }
+ *   .woocommerce-error { background:#b22222;color:#fff;margin-bottom:1em;padding:1em }
+ *
+ * Enqueued by Admin::enqueue_order_pay_assets() on the order edit screen.
+ */
+.fkwcs-admin-pay-order {
+	margin-top: 9px;
+    display: inline-block;
+}
+/* .modal-wide */
+.wc-backbone-modal .fkwcs-pay-order-section {
+	margin-bottom: 1.5em;
+	width: 100%;
+}
+
+/* .modal-wide label */
+.wc-backbone-modal .fkwcs-pay-order-label {
+	font-weight: 500;
+}
+
+/* .modal-wide.option label */
+.wc-backbone-modal .fkwcs-pay-order-option {
+	display: block;
+	margin-bottom: 0.5em;
+	font-weight: 500;
+}
+
+/* .token-container */
+.wc-backbone-modal .fkwcs-saved-cards {
+	margin: 1em 0;
+}
+
+/* #wc-stripe-card-container #card-element */
+.wc-backbone-modal #fkwcs-card-element {
+	background-color: #fff;
+	border: 1px solid #e8e8e8;
+	margin: 1em 0;
+	padding: 12px 6px;
+}
+
+/* .woocommerce-error */
+.wc-backbone-modal .fkwcs-pay-order-error {
+	background: #b22222;
+	color: #fff;
+	margin-bottom: 1em;
+	padding: 1em;
+}
+
+/* #pay-order */
+.wc-backbone-modal .fkwcs-submit-pay-order {
+	min-width: 75px;
+}

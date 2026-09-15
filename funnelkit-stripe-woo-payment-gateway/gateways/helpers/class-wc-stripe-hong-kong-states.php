@@ -1,6 +1,7 @@
 <?php
 
 namespace FKWCS\Gateway\Stripe\Helpers;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
@@ -18,8 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since 5.8.0
  */
 class WC_Stripe_Hong_Kong_States {
-	// Source: https://www.rvd.gov.hk/doc/tc/hkpr13/06.pdf
-	const STATES = [
+	const STATES = array(
 		'hong kong',
 		'港島',
 
@@ -337,7 +337,7 @@ class WC_Stripe_Hong_Kong_States {
 		'坪洲',
 		'大嶼山(包括東涌)',
 		'南丫島',
-	];
+	);
 
 	/**
 	 * Checks if the given state is a valid region (equivalent to WC state) in Hong Kong.

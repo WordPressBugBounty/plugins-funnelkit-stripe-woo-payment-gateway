@@ -2,8 +2,13 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use WC_Payment_Tokens;
 use FKWCS\Gateway\Stripe\Traits\WC_Subscriptions_Trait;
+use FKWCS\Gateway\Stripe\Traits\WC_Pre_Orders_Trait;
 use Exception;
 use WC_AJAX;
 
@@ -11,16 +16,17 @@ use WC_AJAX;
 class Sepa extends Abstract_Payment_Gateway {
 
 	use WC_Subscriptions_Trait;
+	use WC_Pre_Orders_Trait;
 
 	/**
 	 * Gateway id
 	 *
 	 * @var string
 	 */
-	public $id = 'fkwcs_stripe_sepa';
+	public $id                   = 'fkwcs_stripe_sepa';
 	public $payment_method_types = 'sepa_debit';
-	protected $payment_element = true;
-	private static $instance = null;
+	protected $payment_element   = true;
+	private static $instance     = null;
 
 	public function __construct() {
 		parent::__construct();
@@ -53,26 +59,26 @@ class Sepa extends Abstract_Payment_Gateway {
 		$this->init_form_fields();
 		$this->init_settings();
 		$this->maybe_init_subscriptions();
+		$this->maybe_init_pre_orders();
 		$this->inline_cc          = $this->get_option( 'inline_cc' );
 		$this->title              = $this->get_option( 'title' );
 		$this->description        = $this->get_option( 'description' );
 		$this->enabled            = $this->get_option( 'enabled' );
 		$this->enable_saved_cards = $this->get_option( 'enable_saved_cards' );
-		$this->allowed_cards      = empty( $this->get_option( 'allowed_cards' ) ) ? [ 'mastercard', 'visa', 'diners', 'discover', 'amex', 'jcb', 'unionpay' ] : $this->get_option( 'allowed_cards' );
+		$this->allowed_cards      = empty( $this->get_option( 'allowed_cards' ) ) ? array( 'mastercard', 'visa', 'diners', 'discover', 'amex', 'jcb', 'unionpay' ) : $this->get_option( 'allowed_cards' );
 
 		$this->payment_conform = true;
 
-		add_filter( 'woocommerce_payment_methods_list_item', [ $this, 'get_saved_payment_methods_list' ], 10, 2 );
+		add_filter( 'woocommerce_payment_methods_list_item', array( $this, 'get_saved_payment_methods_list' ), 10, 2 );
+		add_action( 'fkwcs_change_subs_payment_method_success', array( $this, 'maybe_save_token_on_change_payment_method' ), 10, 2 );
 
-		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_stripe_js' ] );
-
-
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_stripe_js' ) );
 	}
 
 	/**
 	 * Controls the output on the my account page.
 	 *
-	 * @param array $item Individual list item from woocommerce_saved_payment_methods_list.
+	 * @param array             $item Individual list item from woocommerce_saved_payment_methods_list.
 	 * @param \WC_Payment_Token $token The payment token associated with this method entry.
 	 *
 	 * @return array $item
@@ -92,12 +98,18 @@ class Sepa extends Abstract_Payment_Gateway {
 	 * @return void
 	 */
 	public function init_supports() {
-		$this->supports = apply_filters( 'fkwcs_sepa_payment_supports', array_merge( $this->supports, [
-			'products',
-			'refunds',
-			'tokenization',
-			'add_payment_method'
-		] ) );
+		$this->supports = apply_filters(
+			'fkwcs_sepa_payment_supports',
+			array_merge(
+				$this->supports,
+				array(
+					'products',
+					'refunds',
+					'tokenization',
+					'add_payment_method',
+				)
+			)
+		);
 	}
 
 	/**
@@ -106,7 +118,7 @@ class Sepa extends Abstract_Payment_Gateway {
 	 * @return void
 	 */
 	protected function filter_hooks() {
-		add_filter( 'woocommerce_payment_successful_result', [ $this, 'modify_successful_payment_result' ], 999, 2 );
+		add_filter( 'woocommerce_payment_successful_result', array( $this, 'modify_successful_payment_result' ), 999, 2 );
 	}
 
 	/**
@@ -115,48 +127,50 @@ class Sepa extends Abstract_Payment_Gateway {
 	 * @return void
 	 */
 	public function init_form_fields() {
-		$settings = apply_filters( 'fkwcs_sepa_payment_form_fields', [
+		$settings = apply_filters(
+			'fkwcs_sepa_payment_form_fields',
+			array(
 
+				'enabled'            => array(
+					'title'       => __( 'Enable/Disable', 'funnelkit-stripe-woo-payment-gateway' ),
+					'label'       => __( 'Enable Stripe SEPA Direct Debit', 'funnelkit-stripe-woo-payment-gateway' ),
+					'type'        => 'checkbox',
+					'description' => '',
+					'default'     => 'no',
+				),
+				'title'              => array(
+					'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
+					'type'        => 'text',
+					'description' => __( 'This controls the title which the user sees during checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
+					'default'     => __( 'SEPA Direct Debit', 'funnelkit-stripe-woo-payment-gateway' ),
+					'desc_tip'    => true,
+				),
+				'description'        => array(
+					'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
+					'type'        => 'text',
+					'description' => __( 'This controls the description which the user sees during checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
+					'default'     => __( 'Mandate Information', 'funnelkit-stripe-woo-payment-gateway' ),
+					'desc_tip'    => true,
+				),
+				'enable_saved_cards' => array(
+					'label'       => __( 'Enable Payment via Saved IBAN', 'funnelkit-stripe-woo-payment-gateway' ),
+					'title'       => __( 'Saved IBAN', 'funnelkit-stripe-woo-payment-gateway' ),
+					'type'        => 'checkbox',
+					'description' => __( 'Save IBAN details for future orders', 'funnelkit-stripe-woo-payment-gateway' ),
+					'default'     => 'yes',
+					'desc_tip'    => true,
+				),
+				'company_name'       => array(
+					'title'       => __( 'Company Name', 'funnelkit-stripe-woo-payment-gateway' ),
+					'type'        => 'text',
+					'default'     => get_bloginfo( 'name' ),
+					'desc_tip'    => true,
+					'description' => __( 'The name of your company that will appear in the SEPA mandate info.', 'funnelkit-stripe-woo-payment-gateway' ),
+				),
+			)
+		);
 
-			'enabled'            => [
-				'title'       => __( 'Enable/Disable', 'funnelkit-stripe-woo-payment-gateway' ),
-				'label'       => __( 'Enable Stripe SEPA Direct Debit', 'funnelkit-stripe-woo-payment-gateway' ),
-				'type'        => 'checkbox',
-				'description' => '',
-				'default'     => 'no',
-			],
-			'title'              => [
-				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
-				'type'        => 'text',
-				'description' => __( 'This controls the title which the user sees during checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => __( 'SEPA Direct Debit', 'funnelkit-stripe-woo-payment-gateway' ),
-				'desc_tip'    => true,
-			],
-			'description'        => [
-				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
-				'type'        => 'text',
-				'description' => __( 'This controls the description which the user sees during checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => __( 'Mandate Information', 'funnelkit-stripe-woo-payment-gateway' ),
-				'desc_tip'    => true,
-			],
-			'enable_saved_cards' => [
-				'label'       => __( 'Enable Payment via Saved IBAN', 'funnelkit-stripe-woo-payment-gateway' ),
-				'title'       => __( 'Saved IBAN', 'funnelkit-stripe-woo-payment-gateway' ),
-				'type'        => 'checkbox',
-				'description' => __( 'Save IBAN details for future orders', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => 'yes',
-				'desc_tip'    => true,
-			],
-			'company_name'       => [
-				'title'       => __( 'Company Name', 'funnelkit-stripe-woo-payment-gateway' ),
-				'type'        => 'text',
-				'default'     => get_bloginfo( 'name' ),
-				'desc_tip'    => true,
-				'description' => __( 'The name of your company that will appear in the SEPA mandate info.', 'funnelkit-stripe-woo-payment-gateway' ),
-			],
-		] );
-
-		$this->form_fields = apply_filters( 'fkwcs_ideal_payment_form_fields', array_merge( $settings, $this->get_countries_admin_fields( 'all', [], [] ) ) );
+		$this->form_fields = apply_filters( 'fkwcs_ideal_payment_form_fields', array_merge( $settings, $this->get_countries_admin_fields( 'all', array(), array() ) ) );
 	}
 
 	/**
@@ -165,9 +179,12 @@ class Sepa extends Abstract_Payment_Gateway {
 	 * @return array
 	 */
 	public function get_supported_currency() {
-		return apply_filters( 'fkwcs_stripe_sepa_supported_currencies', [
-			'EUR',
-		] );
+		return apply_filters(
+			'fkwcs_stripe_sepa_supported_currencies',
+			array(
+				'EUR',
+			)
+		);
 	}
 
 	/**
@@ -185,8 +202,8 @@ class Sepa extends Abstract_Payment_Gateway {
 	 * @return mixed|string|null
 	 */
 	public function get_icon() {
-		$icons     = $this->payment_icons();
-		$icons_str = '';
+		$icons      = $this->payment_icons();
+		$icons_str  = '';
 		$icons_str .= ! empty( $icons['sepa'] ) ? $icons['sepa'] : '';
 
 		return apply_filters( 'woocommerce_gateway_icon', $icons_str, $this->id );
@@ -198,31 +215,9 @@ class Sepa extends Abstract_Payment_Gateway {
 	 * @return void
 	 */
 	public function payment_fields() {
-		global $wp;
-		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
-			$total = WC()->cart->total;
-		} else {
-			$total = 0;
-		}
-
 		$display_tokenization = $this->supports( 'tokenization' ) && is_checkout() && 'yes' === $this->enable_saved_cards && is_user_logged_in();
 
-		/** If paying from order, we need to get total from order not cart */
-		if ( isset( $_GET['pay_for_order'] ) && ! empty( $_GET['key'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$order = wc_get_order( wc_clean( $wp->query_vars['order-pay'] ) );
-			if ( $order instanceof \WC_Order ) {
-				$total = $order->get_total();
-			}
-		}
-
-		if ( is_add_payment_method_page() ) {
-			$total = '';
-		}
-
-		echo '<div
-			id="fkwcs_stripe-sepa_debit-payment-data"
-			data-amount="' . esc_attr( Helper::get_stripe_amount( $total ) ) . '"
-			data-currency="' . esc_attr( strtolower( get_woocommerce_currency() ) ) . '">';
+		echo '<div id="fkwcs_stripe-sepa_debit-payment-data">';
 
 		if ( $display_tokenization ) {
 			$tokens = $this->get_tokens();
@@ -261,12 +256,17 @@ class Sepa extends Abstract_Payment_Gateway {
 	public function process_payment( $order_id, $retry = true, $force_prevent_source_creation = false, $previous_error = false, $use_order_source = false ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis
 		do_action( 'fkwcs_before_process_payment', $order_id );
 
-		$force_save_source = false;
-		$order             = wc_get_order( $order_id );
+		$save_payment_method = false;
+		$order               = wc_get_order( $order_id );
 
 		if ( $this->maybe_change_subscription_payment_method( $order_id ) ) {
 			return $this->process_change_subscription_payment_method( $order_id, true );
 		}
+
+		if ( $this->maybe_process_pre_orders( $order_id ) ) {
+			return $this->process_pre_order( $order_id );
+		}
+
 		if ( 0 >= $order->get_total() ) {
 			return $this->process_change_subscription_payment_method( $order_id );
 
@@ -278,31 +278,35 @@ class Sepa extends Abstract_Payment_Gateway {
 		try {
 			$order = wc_get_order( $order_id );
 			if ( $this->should_save_card( $order ) ) {
-				$force_save_source = true;
+				$save_payment_method = true;
 			}
 			$customer_id     = $this->get_customer_id( $order );
 			$idempotency_key = $order->get_order_key() . time();
 
-			$data = [
+			$data = array(
 				'amount'               => Helper::get_stripe_amount( $order->get_total() ),
 				'currency'             => $this->get_currency(),
 				'description'          => $this->get_order_description( $order ),
 				'metadata'             => $this->get_metadata( $order_id ),
-				'payment_method_types' => [ 'sepa_debit' ],
-				'customer'             => $customer_id
-			];
+				'payment_method_types' => array( 'sepa_debit' ),
+				'customer'             => $customer_id,
+			);
 
 			$data['metadata'] = $this->add_metadata( $order );
-			$data             = $this->set_shipping_data( $data, $order );
-			if ( $force_save_source ) {
+			$amount_data      = $this->add_amount_details( $order, $data['payment_method_types'][0] ?? 'card' );
+			if ( ! empty( $amount_data ) ) {
+				$data = array_merge( $data, $amount_data );
+			}
+			$data = $this->set_shipping_data( $data, $order );
+			if ( $save_payment_method ) {
 				$data['setup_future_usage'] = 'off_session';
 			}
+			/* translators: 1: Order ID, 2: Order total */
 			Helper::log( sprintf( __( 'Begin processing payment with SEPA for order %1$1s for the amount of %2$2s', 'funnelkit-stripe-woo-payment-gateway' ), $order_id, $order->get_total() ) );
-			$data['payment_method'] = isset( $_POST['fkwcs_source'] ) ? wc_clean( $_POST['fkwcs_source'] ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$data['payment_method'] = isset( $_POST['fkwcs_source'] ) ? wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 			$intent_data            = $this->get_payment_intent( $order, $idempotency_key, $data );
 
 			if ( $intent_data ) {
-
 
 				/**
 				 * @see modify_successful_payment_result()
@@ -310,17 +314,17 @@ class Sepa extends Abstract_Payment_Gateway {
 				 */
 				$return_url = $this->get_return_url( $order );
 
-				return [
+				return array(
 					'result'              => 'success',
 					'fkwcs_redirect'      => $return_url,
-					'save_card'           => $force_save_source,
+					'save_card'           => $save_payment_method,
 					'fkwcs_intent_secret' => $intent_data->client_secret,
-				];
+				);
 			} else {
-				return [
+				return array(
 					'result'   => 'fail',
 					'redirect' => '',
-				];
+				);
 			}
 		} catch ( Exception $e ) {
 			Helper::log( $e->getMessage(), 'warning' );
@@ -342,7 +346,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			$token = $this->find_saved_token();
 
 			$stripe_api     = $this->get_client();
-			$response       = $stripe_api->payment_methods( 'retrieve', [ $token->get_token() ] );
+			$response       = $stripe_api->payment_methods( 'retrieve', array( $token->get_token() ) );
 			$payment_method = $response['success'] ? $response['data'] : false;
 
 			$prepared_payment_method = Helper::prepare_payment_method( $payment_method, $token );
@@ -354,29 +358,35 @@ class Sepa extends Abstract_Payment_Gateway {
 			/* translators: %1$1s order id, %2$2s order total amount  */
 			Helper::log( sprintf( 'Begin processing payment with saved payment method for order %1$1s for the amount of %2$2s', $order_id, $order->get_total() ) );
 
-			$request             = [
+			$request             = array(
 				'payment_method'       => $payment_method->id,
-				'payment_method_types' => [ $this->payment_method_types ],
+				'payment_method_types' => array( $this->payment_method_types ),
 				'amount'               => Helper::get_stripe_amount( $order->get_total() ),
 				'currency'             => strtolower( $order->get_currency() ),
 				'description'          => $this->get_order_description( $order ),
 				'customer'             => $payment_method->customer,
-			];
+			);
 			$request['metadata'] = $this->add_metadata( $order );
-			$request             = $this->set_shipping_data( $request, $order );
-			$intent              = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
+			$amount_data         = $this->add_amount_details( $order, $request['payment_method_types'][0] ?? 'card' );
+			if ( ! empty( $amount_data ) ) {
+				$request = array_merge( $request, $amount_data );
+			}
+			$request = $this->set_shipping_data( $request, $order );
+			$intent  = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
 
 			$this->save_intent_to_order( $order, $intent );
 
-
 			if ( 'requires_confirmation' === $intent->status || 'requires_action' === $intent->status ) {
-				return apply_filters( 'fkwcs_card_payment_return_intent_data', [
-					'result'              => 'success',
-					'token'               => 'yes',
-					'fkwcs_redirect'      => $return_url,
-					'payment_method'      => $intent->id,
-					'fkwcs_intent_secret' => $intent->client_secret,
-				] );
+				return apply_filters(
+					'fkwcs_card_payment_return_intent_data',
+					array(
+						'result'              => 'success',
+						'token'               => 'yes',
+						'fkwcs_redirect'      => $return_url,
+						'payment_method'      => $intent->id,
+						'fkwcs_intent_secret' => $intent->client_secret,
+					)
+				);
 			}
 
 			if ( $intent->amount > 0 ) {
@@ -392,10 +402,10 @@ class Sepa extends Abstract_Payment_Gateway {
 			}
 
 			/** Return thank you page redirect URL */
-			return [
+			return array(
 				'result'   => 'success',
 				'redirect' => $return_url,
-			];
+			);
 
 		} catch ( \Exception $e ) {
 			wc_add_notice( $e->getMessage(), 'error' );
@@ -403,13 +413,12 @@ class Sepa extends Abstract_Payment_Gateway {
 			/* translators: error message */
 			$this->mark_order_failed( $order, $e->getMessage() );
 
-			return [
+			return array(
 				'result'   => 'fail',
 				'redirect' => '',
-			];
+			);
 		}
 	}
-
 
 	/**
 	 * Verify intent secret and redirect to the thankyou page
@@ -419,14 +428,13 @@ class Sepa extends Abstract_Payment_Gateway {
 	 */
 	public function verify_intent() {
 
-		$order_id = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$order_id = isset( $_GET['order'] ) ? sanitize_text_field( wp_unslash( $_GET['order'] ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$order    = wc_get_order( $order_id );
 
-		if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( $_GET['order_key'] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( wp_unslash( $_GET['order_key'] ) ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			throw new \Exception( esc_html__( 'Invalid Order Key.', 'funnelkit-stripe-woo-payment-gateway' ) );
 
 		}
-
 
 		$intent = $this->get_intent_from_order( $order );
 
@@ -439,7 +447,12 @@ class Sepa extends Abstract_Payment_Gateway {
 		}
 
 		if ( 'setup_intent' === $intent->object && 'succeeded' === $intent->status ) {
-			$order->payment_complete();
+			// Check if this is a pre-order and mark accordingly
+			if ( $this->has_pre_order( $order->get_id() ) ) {
+				$this->mark_order_as_pre_ordered( $order );
+			} else {
+				$order->payment_complete();
+			}
 			$redirect_url = $this->get_return_url( $order );
 
 			/**
@@ -456,16 +469,15 @@ class Sepa extends Abstract_Payment_Gateway {
 			wp_safe_redirect( $redirect_url );
 			exit;
 
-		} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
+		} elseif ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 			$redirect_to = $this->process_final_order( end( $intent->charges->data[0] ), $order_id );
 			wp_safe_redirect( $redirect_to );
 			exit;
-		} else if ( 'processing' === $intent->status ) {
+		} elseif ( 'processing' === $intent->status ) {
 
 			$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
 			$redirect_url = $this->get_return_url( $order );
-		} else if ( 'requires_payment_method' === $intent->status ) {
-
+		} elseif ( 'requires_payment_method' === $intent->status ) {
 
 			$redirect_url = wc_get_checkout_url();
 			wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
@@ -485,7 +497,6 @@ class Sepa extends Abstract_Payment_Gateway {
 
 		}
 
-
 		if ( 'pending' === $intent->status || 'processing' === $intent->status ) {
 			$order_stock_reduced = Helper::get_meta( $order, '_order_stock_reduced' );
 
@@ -494,15 +505,21 @@ class Sepa extends Abstract_Payment_Gateway {
 			}
 
 			$order->set_transaction_id( $intent->id );
-			$others_info = __( 'Payment will be completed once payment_intent.succeeded webhook received from Stripe.', 'funnelkit-stripe-woo-payment-gateway' );
 
-			/** translators: transaction id, other info */
-			$order->update_status( 'on-hold', sprintf( __( 'Stripe charge awaiting payment: %1$s. %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id, $others_info ) );
+			// For pre-orders, mark as pre-ordered instead of on-hold
+			if ( $this->has_pre_order( $order->get_id() ) ) {
+				$this->mark_order_as_pre_ordered( $order );
+				Helper::log( 'SEPA Gateway: Pre-order marked as pre-ordered for order ' . $order->get_id() );
+			} else {
+				$others_info = __( 'Payment will be completed once payment_intent.succeeded webhook received from Stripe.', 'funnelkit-stripe-woo-payment-gateway' );
+				/* translators: transaction id, other info */
+				$order->update_status( 'on-hold', sprintf( __( 'Stripe charge awaiting payment: %1$s. %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id, $others_info ) );
+			}
 
 			do_action( 'fkwcs_' . $this->id . '_before_redirect', $order_id );
 
 			$redirect_to = $this->get_return_url( $order );
-			Helper::log( "Redirecting to :" . $redirect_to );
+			Helper::log( 'Redirecting to :' . $redirect_to );
 
 			wp_safe_redirect( $redirect_to );
 			exit;
@@ -533,7 +550,8 @@ class Sepa extends Abstract_Payment_Gateway {
 			Helper::log( sprintf( 'Payment successful Order id - %1s', $order->get_id() ) );
 
 			$order->add_order_note( __( 'Payment Status: ', 'funnelkit-stripe-woo-payment-gateway' ) . ucfirst( $response->status ) . ', ' . __( 'Source: Payment is Completed via ', 'funnelkit-stripe-woo-payment-gateway' ) . $response->payment_method_details->card->brand );
-			$order->add_order_note( __( 'Charge ID ' . $response->id ) );
+			/* translators: %s: Charge ID */
+			$order->add_order_note( sprintf( __( 'Charge ID %s', 'funnelkit-stripe-woo-payment-gateway' ), $response->id ) );
 		} else {
 			/* translators: transaction id */
 			$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization. Attempting to refund the order in part or in full will release the authorization and cancel the payment.', 'funnelkit-stripe-woo-payment-gateway' ), $response->id ) );
@@ -556,14 +574,14 @@ class Sepa extends Abstract_Payment_Gateway {
 	 * @return \WC_Payment_Token|null
 	 */
 	public function find_saved_token() {
-		$payment_method = isset( $_POST['payment_method'] ) && ! is_null( $_POST['payment_method'] ) ? wc_clean( $_POST['payment_method'] ) : null; //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$payment_method = isset( $_POST['payment_method'] ) && ! is_null( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : null; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 		$token_request_key = 'wc-' . $payment_method . '-payment-token';
-		if ( ! isset( $_POST[ $token_request_key ] ) || 'new' === wc_clean( $_POST[ $token_request_key ] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( ! isset( $_POST[ $token_request_key ] ) || 'new' === wc_clean( wp_unslash( $_POST[ $token_request_key ] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 			return null;
 		}
 
-		$token = WC_Payment_Tokens::get( wc_clean( $_POST[ $token_request_key ] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$token = WC_Payment_Tokens::get( wc_clean( wp_unslash( $_POST[ $token_request_key ] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 		if ( ! $token || $payment_method !== $token->get_gateway_id() || $token->get_user_id() !== get_current_user_id() ) {
 			return null;
 		}
@@ -571,11 +589,10 @@ class Sepa extends Abstract_Payment_Gateway {
 		return $token;
 	}
 
-
 	public function is_using_saved_payment_method() {
-		$payment_method = isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : $this->id; //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$payment_method = isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : $this->id; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
-		return ( isset( $_POST[ 'wc-' . $payment_method . '-payment-token' ] ) && 'new' !== wc_clean( $_POST[ 'wc-' . $payment_method . '-payment-token' ] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		return ( isset( $_POST[ 'wc-' . $payment_method . '-payment-token' ] ) && 'new' !== wc_clean( wp_unslash( $_POST[ 'wc-' . $payment_method . '-payment-token' ] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 	}
 
 	/**
@@ -587,26 +604,26 @@ class Sepa extends Abstract_Payment_Gateway {
 		// translators: %s: company name.
 		$description = sprintf( __( 'By providing your IBAN and confirming this payment, you are authorizing %s and Stripe, our payment service provider, to send instructions to your bank to debit your account and your bank to debit your account in accordance with those instructions. You are entitled to a refund from your bank under the terms and conditions of your agreement with your bank. A refund must be claimed within 8 weeks starting from the date on which your account was debited.', 'funnelkit-stripe-woo-payment-gateway' ), $this->get_option( 'company_name' ) );
 		?>
-        <fieldset id="<?php echo esc_attr( $this->id ); ?>-form" class="wc-payment-form fkwcs_stripe_sepa_payment_form">
-            <div class="fkwcs-test-description">
-                <p>
+		<fieldset id="<?php echo esc_attr( $this->id ); ?>-form" class="wc-payment-form fkwcs_stripe_sepa_payment_form">
+			<div class="fkwcs-test-description">
+				<p>
 					<?php echo wpautop( wp_kses_post( $description ) ); //phpcs:ignore ?>
-                </p>
-            </div>
-            <div class="form-row form-row-wide">
-                <label for="fkwcs-sepa-stripe-iban-element">
+				</p>
+			</div>
+			<div class="form-row form-row-wide">
+				<label for="fkwcs-sepa-stripe-iban-element">
 					<?php esc_html_e( 'IBAN.', 'funnelkit-stripe-woo-payment-gateway' ); ?> <span class="required">*</span>
-                </label>
-                <div id="fkwcs_stripe_sepa_iban_element" class="fkwcs_stripe_sepa_iban_element_field">
+				</label>
+				<div id="fkwcs_stripe_sepa_iban_element" class="fkwcs_stripe_sepa_iban_element_field">
 
-                </div>
-            </div>
+				</div>
+			</div>
 
-            <!-- Used to display form errors -->
-            <div class="clear"></div>
-            <div class="fkwcs_stripe_sepa_error fkwcs-error-text" role="alert"></div>
-            <div class="clear"></div>
-        </fieldset>
+			<!-- Used to display form errors -->
+			<div class="clear"></div>
+			<div class="fkwcs_stripe_sepa_error fkwcs-error-text" role="alert"></div>
+			<div class="clear"></div>
+		</fieldset>
 		<?php
 	}
 
@@ -618,7 +635,7 @@ class Sepa extends Abstract_Payment_Gateway {
 	public function add_payment_method() {
 		$source_id = '';
 
-		if ( empty( $_POST['fkwcs_source'] ) || ! is_user_logged_in() ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( empty( $_POST['fkwcs_source'] ) || ! is_user_logged_in() ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment method addition
 			//phpcs:ignore WordPress.Security.NonceVerification.Missing
 			$error_msg = __( 'There was a problem adding the payment method.', 'funnelkit-stripe-woo-payment-gateway' );
 			/* translators: error msg */
@@ -629,10 +646,10 @@ class Sepa extends Abstract_Payment_Gateway {
 
 		$customer_id = $this->get_customer_id();
 
-		$source = wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$source = wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment method addition
 
 		$stripe_api    = $this->get_client();
-		$response      = $stripe_api->payment_methods( 'retrieve', [ $source ] );
+		$response      = $stripe_api->payment_methods( 'retrieve', array( $source ) );
 		$source_object = $response['success'] ? $response['data'] : false;
 
 		if ( isset( $source_object ) ) {
@@ -648,7 +665,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			$source_id = $source_object->id;
 		}
 
-		$response = $stripe_api->payment_methods( 'attach', [ $source_id, [ 'customer' => $customer_id ] ] );
+		$response = $stripe_api->payment_methods( 'attach', array( $source_id, array( 'customer' => $customer_id ) ) );
 		$response = $response['success'] ? $response['data'] : false;
 		$user     = wp_get_current_user();
 		$user_id  = ( $user->ID && $user->ID > 0 ) ? $user->ID : false;
@@ -664,13 +681,13 @@ class Sepa extends Abstract_Payment_Gateway {
 			return;
 		}
 
-		do_action( 'fkwcs_add_payment_method_' . ( isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : '' ) . '_success', $source_id, $source_object ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		do_action( 'fkwcs_add_payment_method_' . ( isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : '' ) . '_success', $source_id, $source_object ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment method addition
 		Helper::log( 'New payment method added successfully' );
 
-		return [
+		return array(
 			'result'   => 'success',
 			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
-		];
+		);
 	}
 
 	/**
@@ -683,9 +700,18 @@ class Sepa extends Abstract_Payment_Gateway {
 	 */
 	public function save_payment_method( $order, $intent ) {
 
+		// Persist the SEPA Direct Debit mandate id so off-session renewals reference it
+		// via maybe_add_emandate_data_to_request(). Additive and null-safe: legacy
+		// subscriptions without this key keep renewing on the saved sepa_debit PM alone.
+		$charge = $this->get_latest_charge_from_intent( $intent );
+		if ( ! empty( $charge->payment_method_details->sepa_debit->mandate ) ) {
+			$order->update_meta_data( '_stripe_mandate_id', $charge->payment_method_details->sepa_debit->mandate );
+			$order->save_meta_data();
+			Helper::log( sprintf( 'SEPA: captured mandate id for order %s.', $order->get_id() ) );
+		}
 
 		$payment_method = $intent->payment_method;
-		$response       = $this->get_client()->payment_methods( 'retrieve', [ $payment_method ] );
+		$response       = $this->get_client()->payment_methods( 'retrieve', array( $payment_method ) );
 		$payment_method = $response['success'] ? $response['data'] : false;
 
 		$token = null;
@@ -704,12 +730,50 @@ class Sepa extends Abstract_Payment_Gateway {
 	/**
 	 * Tokenize card payment
 	 *
-	 * @param int $user_id id of current user placing .
+	 * @param int    $user_id id of current user placing .
 	 * @param object $payment_method payment method object.
 	 *
 	 * @return object token object.
-	 *
 	 */
+	/**
+	 * Persist a SEPA token when the customer changes a subscription's payment method.
+	 *
+	 * The shared change-payment flow ({@see process_change_subscription_payment_method})
+	 * only stores the source on the subscription/customer; it never tokenizes. Unlike the
+	 * card gateway, SEPA has no runtime Stripe->WC token sync, so without this the new
+	 * mandate never appears under My Account -> Payment methods. We hook the change-payment
+	 * success action and create the token for `sepa_debit` payment methods only.
+	 *
+	 * @param string $source_id      Stripe payment method id (unused, kept for hook signature).
+	 * @param object $prepared_source Prepared payment method object from Helper::prepare_payment_method().
+	 *
+	 * @return void
+	 */
+	public function maybe_save_token_on_change_payment_method( $source_id = '', $prepared_source = null ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter
+		try {
+			if ( ! is_object( $prepared_source ) || empty( $prepared_source->source_object ) || ! is_object( $prepared_source->source_object ) ) {
+				return;
+			}
+
+			$payment_method = $prepared_source->source_object;
+
+			/** Only SEPA mandates - the action fires for every gateway's change-payment flow. */
+			if ( ! isset( $payment_method->type ) || 'sepa_debit' !== $payment_method->type ) {
+				return;
+			}
+
+			$user_id = get_current_user_id();
+			if ( ! $user_id ) {
+				return;
+			}
+
+			$is_live = ( 'live' === $this->test_mode );
+			$this->create_payment_token_for_user( $user_id, $payment_method, $is_live );
+		} catch ( \Throwable $e ) {
+			Helper::log( sprintf( 'SEPA change-payment tokenization failed: %s', $e->getMessage() ), 'error' );
+		}
+	}
+
 	public function create_payment_token_for_user( $user_id, $payment_method, $is_live ) {
 		global $wpdb;
 		$token_exists = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_payment_tokens where token =%s", $payment_method->id ), ARRAY_A );
@@ -744,7 +808,7 @@ class Sepa extends Abstract_Payment_Gateway {
 	}
 
 	public function get_tokens() {
-		$tokens = [];
+		$tokens = array();
 
 		if ( is_user_logged_in() && $this->supports( 'tokenization' ) ) {
 			$tokens = WC_Payment_Tokens::get_customer_tokens( get_current_user_id(), $this->id );
@@ -766,14 +830,21 @@ class Sepa extends Abstract_Payment_Gateway {
 	/**
 	 * Override to check if charge was captured before completing payment
 	 * SEPA gateway needs to verify captured status for authorization-only charges
+	 * But skip this check for subscriptions and pre-orders
 	 *
-	 * @param object $intent The payment intent object
+	 * @param object    $intent The payment intent object
 	 * @param \WC_Order $order The order object
 	 *
 	 * @return bool True if payment should be completed, false otherwise
 	 */
 	protected function should_complete_payment_on_thankyou( $intent, $order ) {
-		// For SEPA, check if the charge was actually captured
+		// Skip capture check for pre-orders
+		if ( $this->has_pre_order( $order->get_id() ) ) {
+			Helper::log( 'SEPA Gateway: Skipping capture check for pre-order ' . $order->get_id() );
+			return true;
+		}
+
+		// For regular SEPA orders, check if the charge was actually captured
 		$charge = $this->get_latest_charge_from_intent( $intent );
 
 		if ( $charge && true === $charge->captured ) {
@@ -788,6 +859,7 @@ class Sepa extends Abstract_Payment_Gateway {
 			// Set order to on-hold if not already
 			if ( ! $order->has_status( 'on-hold' ) ) {
 				$order->set_transaction_id( $intent->id );
+				/* translators: %s: Charge ID */
 				$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization. Attempting to refund the order in part or in full will release the authorization and cancel the payment.', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id ) );
 				Helper::log( 'SEPA Gateway: Order ' . $order->get_id() . ' set to on-hold for authorization-only charge' );
 			}

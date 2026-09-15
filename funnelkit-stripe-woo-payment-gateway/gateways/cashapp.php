@@ -23,9 +23,9 @@ class CashApp extends LocalGateway {
 	 *
 	 * @var string
 	 */
-	public $id = 'fkwcs_stripe_cashapp';
+	public $id                   = 'fkwcs_stripe_cashapp';
 	public $payment_method_types = 'cashapp';
-	protected $payment_element = true;
+	protected $payment_element   = true;
 
 	/**
 	 * Setup general properties and settings
@@ -44,19 +44,19 @@ class CashApp extends LocalGateway {
 		$this->description        = $this->get_option( 'description' );
 		$this->enabled            = $this->get_option( 'enabled' );
 		$this->enable_saved_cards = $this->get_option( 'enable_saved_cards' );
-		add_filter( 'woocommerce_payment_methods_list_item', [ $this, 'get_saved_payment_methods_list' ], 10, 2 );
+		add_filter( 'woocommerce_payment_methods_list_item', array( $this, 'get_saved_payment_methods_list' ), 10, 2 );
+		add_action( 'fkwcs_change_subs_payment_method_success', array( $this, 'maybe_save_token_on_change_payment_method' ), 10, 2 );
 
-		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
+		add_filter( 'fkwcs_localized_data', array( $this, 'localize_element_data_cashapp' ), 999 );
 	}
 
 	protected function override_defaults() {
-		$this->supported_currency          = [ 'USD' ];
-		$this->specific_country            = [ 'US' ];
-		$this->except_country              = [];
+		$this->supported_currency          = array( 'USD' );
+		$this->specific_country            = array( 'US' );
+		$this->except_country              = array();
 		$this->setting_enable_label        = __( 'Enable Cash app Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = __( 'Stripe Cash app Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_description_default = __( 'Pay with Cashapp', 'funnelkit-stripe-woo-payment-gateway' );
-
 	}
 
 	/**
@@ -66,40 +66,39 @@ class CashApp extends LocalGateway {
 	 */
 	public function init_form_fields() {
 
-
-		$settings = [
-			'enabled'            => [
+		$settings = array(
+			'enabled'            => array(
 				'label'   => ' ',
 				'type'    => 'checkbox',
 				'title'   => $this->setting_enable_label,
 				'default' => 'no',
-			],
-			'title'              => [
+			),
+			'title'              => array(
 				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'text',
 				'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_title_default,
 				'id'          => $this->setting_title_default,
 				'desc_tip'    => true,
-			],
-			'description'        => [
+			),
+			'description'        => array(
 				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'textarea',
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => '',
 				'desc_tip'    => true,
-			],
-			'enable_saved_cards' => [
+			),
+			'enable_saved_cards' => array(
 				'label'       => __( 'Enable Payment via Saved Cashapp', 'funnelkit-stripe-woo-payment-gateway' ),
 				'title'       => __( 'Saved Cashapp', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'checkbox',
 				'description' => __( 'Save Cashapp details for future orders', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => 'yes',
 				'desc_tip'    => true,
-			],
+			),
 
-		];
+		);
 
 		$this->form_fields = apply_filters( $this->id . '_payment_form_fields', array_merge( $settings, $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country ) ) );
 	}
@@ -110,12 +109,18 @@ class CashApp extends LocalGateway {
 	 * @return void
 	 */
 	public function init_supports() {
-		$this->supports = apply_filters( 'fkwcs_cashapp_payment_supports', array_merge( $this->supports, [
-			'products',
-			'refunds',
-			'tokenization',
-			'add_payment_method'
-		] ) );
+		$this->supports = apply_filters(
+			'fkwcs_cashapp_payment_supports',
+			array_merge(
+				$this->supports,
+				array(
+					'products',
+					'refunds',
+					'tokenization',
+					'add_payment_method',
+				)
+			)
+		);
 	}
 
 	/**
@@ -146,7 +151,7 @@ class CashApp extends LocalGateway {
 					$token = $this->find_saved_token();
 					if ( $token ) {
 						$stripe_api     = $this->get_client();
-						$response       = $stripe_api->payment_methods( 'retrieve', [ $token->get_token() ] );
+						$response       = $stripe_api->payment_methods( 'retrieve', array( $token->get_token() ) );
 						$payment_method = $response['success'] ? $response['data'] : false;
 
 						if ( $payment_method ) {
@@ -186,41 +191,46 @@ class CashApp extends LocalGateway {
 			$this->prepare_source( $order, true );
 			// No payment method, create a payment intent
 			$idempotency_key = $order->get_order_key() . time();
-			$data            = [
+			$data            = array(
 				'amount'               => Helper::get_formatted_amount( $order->get_total() ),
 				'currency'             => $this->get_currency(),
 				'description'          => $this->get_order_description( $order ),
 				'metadata'             => $this->get_metadata( $order_id ),
-				'payment_method_types' => [ $this->payment_method_types ],
+				'payment_method_types' => array( $this->payment_method_types ),
 				'customer'             => $customer_id,
 				'capture_method'       => $this->capture_method,
 				'confirmation_method'  => 'automatic',
 				'confirm'              => false,
 				'setup_future_usage'   => 'off_session',
-			];
+			);
 
 			$data['metadata'] = $this->add_metadata( $order );
-			$data             = $this->set_shipping_data( $data, $order, $this->shipping_address_required );
+			$amount_data      = $this->add_amount_details( $order, $data['payment_method_types'][0] ?? 'card' );
+			if ( ! empty( $amount_data ) ) {
+				$data = array_merge( $data, $amount_data );
+			}
+			$data = $this->set_shipping_data( $data, $order, $this->shipping_address_required );
 
 			$intent_data = $this->get_payment_intent( $order, $idempotency_key, $data );
 
+			/* translators: 1: Payment method title, 2: Order ID, 3: Order total */
 			Helper::log( sprintf( esc_html__( 'Begin processing payment with %1$1s for order %2$2s for the amount of %3$3s', 'funnelkit-stripe-woo-payment-gateway' ), $this->get_title(), $order_id, $order->get_total() ) );
 			if ( $intent_data ) {
 				/**
 				 * @see modify_successful_payment_result()
 				 * This modifies the final response return in WooCommerce process checkout request
 				 */
-				return [
+				return array(
 					'result'              => 'success',
 					'fkwcs_redirect'      => $this->get_return_url( $order ),
 					'fkwcs_intent_secret' => $intent_data->client_secret,
-				];
+				);
 			}
 
-			return [
+			return array(
 				'result'   => 'fail',
 				'redirect' => '',
-			];
+			);
 
 		} catch ( \Exception $e ) {
 			Helper::log( $e->getMessage(), 'warning' );
@@ -240,7 +250,7 @@ class CashApp extends LocalGateway {
 	 * @return array Modified data array with Cash App Pay payment element data
 	 * @since 1.0.0
 	 */
-	public function localize_element_data( $data ) {
+	public function localize_element_data_cashapp( $data ) {
 		if ( ! $this->is_available() ) {
 			return $data;
 		}
@@ -260,10 +270,10 @@ class CashApp extends LocalGateway {
 
 		$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 		try {
-			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( wp_unslash( $_GET['order'] ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$order    = wc_get_order( $order_id );
 
-			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( $_GET['order_key'] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( wp_unslash( $_GET['order_key'] ) ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				throw new \Exception( __( 'Invalid Order Key.', 'funnelkit-stripe-woo-payment-gateway' ) );
 
 			}
@@ -302,7 +312,7 @@ class CashApp extends LocalGateway {
 			} elseif ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$this->save_payment_method( $order, $intent );
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
-			} else if ( 'processing' === $intent->status ) {
+			} elseif ( 'processing' === $intent->status ) {
 				$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
 				$redirect_url = $this->get_return_url( $order );
 			} elseif ( 'requires_payment_method' === $intent->status ) {
@@ -311,7 +321,7 @@ class CashApp extends LocalGateway {
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-					$redirect_url = get_the_permalink( wc_clean( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					$redirect_url = get_the_permalink( wc_clean( wp_unslash( $_GET['wfacp_id'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				}
 
 				/**
@@ -350,20 +360,30 @@ class CashApp extends LocalGateway {
 	 */
 	public function payment_element_data() {
 		$data    = $this->get_payment_element_options();
-		$methods = [ 'cashapp' ];
+		$methods = array( 'cashapp' );
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			"theme" => "stripe"
+			'theme' => 'stripe',
 		);
-		$options                      = [
-			'fields' => [
-				'billingDetails' => 'never'
-			]
-		];
-		$options['wallets']           = [ 'applePay' => 'never', 'googlePay' => 'never' ];
+		$options                      = array(
+			'fields' => array(
+				'billingDetails' => 'never',
+			),
+		);
+		$options['wallets']           = array(
+			'applePay'  => 'never',
+			'googlePay' => 'never',
+		);
 
-		return apply_filters( 'fkwcs_stripe_payment_element_data_cashapp', [ 'element_data' => $data, 'element_options' => $options ], $this );
+		return apply_filters(
+			'fkwcs_stripe_payment_element_data_cashapp',
+			array(
+				'element_data'    => $data,
+				'element_options' => $options,
+			),
+			$this
+		);
 	}
 
 	public function process_payment_using_saved_token( $order_id ) {
@@ -372,38 +392,42 @@ class CashApp extends LocalGateway {
 		try {
 			$token          = $this->find_saved_token();
 			$stripe_api     = $this->get_client();
-			$response       = $stripe_api->payment_methods( 'retrieve', [ $token->get_token() ] );
+			$response       = $stripe_api->payment_methods( 'retrieve', array( $token->get_token() ) );
 			$payment_method = $response['success'] ? $response['data'] : false;
 
 			$prepared_payment_method = Helper::prepare_payment_method( $payment_method, $token );
 			$this->save_payment_method_to_order( $order, $prepared_payment_method );
 
-			$request = [
+			$request = array(
 				'payment_method'       => $payment_method->id,
-				'payment_method_types' => [ $this->payment_method_types ],
+				'payment_method_types' => array( $this->payment_method_types ),
 				'amount'               => Helper::get_formatted_amount( $order->get_total() ),
 				'currency'             => strtolower( $order->get_currency() ),
 				'description'          => $this->get_order_description( $order ),
 				'customer'             => $payment_method->customer,
 				'confirmation_method'  => 'automatic',
 				'confirm'              => true,
-			];
+			);
 
 			$request['metadata'] = $this->add_metadata( $order );
-			$request             = $this->set_shipping_data( $request, $order, $this->shipping_address_required );
+			$amount_data         = $this->add_amount_details( $order, $request['payment_method_types'][0] ?? 'card' );
+			if ( ! empty( $amount_data ) ) {
+				$request = array_merge( $request, $amount_data );
+			}
+			$request = $this->set_shipping_data( $request, $order, $this->shipping_address_required );
 
 			$intent = $this->make_payment_by_source( $order, $prepared_payment_method, $request );
 			$this->save_intent_to_order( $order, $intent );
 
 			// Handle intent status similar to SEPA gateway
 			if ( 'requires_confirmation' === $intent->status || 'requires_action' === $intent->status ) {
-				return [
+				return array(
 					'result'              => 'success',
 					'token'               => 'yes',
 					'fkwcs_redirect'      => $this->get_return_url( $order ),
 					'payment_method'      => $intent->id,
 					'fkwcs_intent_secret' => $intent->client_secret,
-				];
+				);
 			}
 
 			if ( $intent->amount > 0 ) {
@@ -416,31 +440,31 @@ class CashApp extends LocalGateway {
 				WC()->cart->empty_cart();
 			}
 
-			return [
+			return array(
 				'result'   => 'success',
 				'redirect' => $this->get_return_url( $order ),
-			];
+			);
 
 		} catch ( \Exception $e ) {
 			wc_add_notice( $e->getMessage(), 'error' );
 			$this->mark_order_failed( $order, $e->getMessage() );
 
-			return [
+			return array(
 				'result'   => 'fail',
 				'redirect' => '',
-			];
+			);
 		}
 	}
 
 	public function find_saved_token() {
-		$payment_method    = isset( $_POST['payment_method'] ) ? wc_clean( $_POST['payment_method'] ) : null;
+		$payment_method    = isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : null; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 		$token_request_key = 'wc-' . $payment_method . '-payment-token';
 
-		if ( ! isset( $_POST[ $token_request_key ] ) || 'new' === wc_clean( $_POST[ $token_request_key ] ) ) {
+		if ( ! isset( $_POST[ $token_request_key ] ) || 'new' === wc_clean( wp_unslash( $_POST[ $token_request_key ] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 			return null;
 		}
 
-		$token = WC_Payment_Tokens::get( wc_clean( $_POST[ $token_request_key ] ) );
+		$token = WC_Payment_Tokens::get( wc_clean( wp_unslash( $_POST[ $token_request_key ] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 		if ( ! $token || $payment_method !== $token->get_gateway_id() || $token->get_user_id() !== get_current_user_id() ) {
 			return null;
 		}
@@ -449,9 +473,9 @@ class CashApp extends LocalGateway {
 	}
 
 	public function is_using_saved_payment_method() {
-		$payment_method = isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : $this->id;
+		$payment_method = isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : $this->id; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
-		return ( isset( $_POST[ 'wc-' . $payment_method . '-payment-token' ] ) && 'new' !== wc_clean( $_POST[ 'wc-' . $payment_method . '-payment-token' ] ) );
+		return ( isset( $_POST[ 'wc-' . $payment_method . '-payment-token' ] ) && 'new' !== wc_clean( wp_unslash( $_POST[ 'wc-' . $payment_method . '-payment-token' ] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 	}
 
 	/**
@@ -464,9 +488,8 @@ class CashApp extends LocalGateway {
 	 */
 	public function save_payment_method( $order, $intent ) {
 
-
 		$payment_method = $intent->payment_method;
-		$response       = $this->get_client()->payment_methods( 'retrieve', [ $payment_method ] );
+		$response       = $this->get_client()->payment_methods( 'retrieve', array( $payment_method ) );
 		$payment_method = $response['success'] ? $response['data'] : false;
 
 		$token = null;
@@ -481,6 +504,45 @@ class CashApp extends LocalGateway {
 
 		$prepared_payment_method = Helper::prepare_payment_method( $payment_method, $token );
 		$this->save_payment_method_to_order( $order, $prepared_payment_method );
+	}
+
+	/**
+	 * Persist a CashApp token when the customer changes a subscription's payment method.
+	 *
+	 * The shared change-payment flow ({@see process_change_subscription_payment_method})
+	 * only stores the source on the subscription/customer; it never tokenizes. Unlike the
+	 * card gateway, CashApp has no runtime Stripe->WC token sync, so without this the wallet
+	 * never appears under My Account -> Payment methods. We hook the change-payment success
+	 * action and create the token for `cashapp` payment methods only.
+	 *
+	 * @param string $source_id      Stripe payment method id (unused, kept for hook signature).
+	 * @param object $prepared_source Prepared payment method object from Helper::prepare_payment_method().
+	 *
+	 * @return void
+	 */
+	public function maybe_save_token_on_change_payment_method( $source_id = '', $prepared_source = null ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter
+		try {
+			if ( ! is_object( $prepared_source ) || empty( $prepared_source->source_object ) || ! is_object( $prepared_source->source_object ) ) {
+				return;
+			}
+
+			$payment_method = $prepared_source->source_object;
+
+			/** Only CashApp wallets - the action fires for every gateway's change-payment flow. */
+			if ( ! isset( $payment_method->type ) || 'cashapp' !== $payment_method->type ) {
+				return;
+			}
+
+			$user_id = get_current_user_id();
+			if ( ! $user_id ) {
+				return;
+			}
+
+			$is_live = ( 'live' === $this->test_mode );
+			$this->create_payment_token_for_user( $user_id, $payment_method, $is_live );
+		} catch ( \Throwable $e ) {
+			Helper::log( sprintf( 'CashApp change-payment tokenization failed: %s', $e->getMessage() ), 'error' );
+		}
 	}
 
 	public function create_payment_token_for_user( $user_id, $payment_method, $is_live ) {
@@ -525,27 +587,9 @@ class CashApp extends LocalGateway {
 	 * @return void
 	 */
 	public function payment_fields() {
-		global $wp;
-		$total = WC()->cart->total;
-
 		$display_tokenization = $this->supports( 'tokenization' ) && is_checkout() && 'yes' === $this->enable_saved_cards && is_user_logged_in();
 
-		/** If paying from order, we need to get total from order not cart */
-		if ( isset( $_GET['pay_for_order'] ) && ! empty( $_GET['key'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$order = wc_get_order( wc_clean( $wp->query_vars['order-pay'] ) );
-			if ( $order instanceof \WC_Order ) {
-				$total = $order->get_total();
-			}
-		}
-
-		if ( is_add_payment_method_page() ) {
-			$total = '';
-		}
-
-		echo '<div
-        id="fkwcs_stripe-cashapp-payment-data"
-        data-amount="' . esc_attr( Helper::get_formatted_amount( $total ) ) . '"
-        data-currency="' . esc_attr( strtolower( get_woocommerce_currency() ) ) . '">';
+		echo '<div id="fkwcs_stripe-cashapp-payment-data">';
 
 		// Display description if set
 		$description = $this->get_description();
@@ -594,18 +638,18 @@ class CashApp extends LocalGateway {
 	 */
 	public function payment_form() {
 		?>
-        <fieldset id="<?php echo esc_attr( $this->id ); ?>-form" class="wc-payment-form <?php echo esc_attr( $this->id ); ?>_form fkwcs_stripe_cashapp_payment_form">
-            <div class="form-row form-row-wide">
-                <div id="fkwcs_stripe_cashapp_element" class="<?php echo esc_attr( $this->id ); ?>_select fkwcs_stripe_cashapp_select">
-                    <!-- Cash App Pay element will be mounted here -->
-                </div>
-            </div>
+		<fieldset id="<?php echo esc_attr( $this->id ); ?>-form" class="wc-payment-form <?php echo esc_attr( $this->id ); ?>_form fkwcs_stripe_cashapp_payment_form">
+			<div class="form-row form-row-wide">
+				<div id="fkwcs_stripe_cashapp_element" class="<?php echo esc_attr( $this->id ); ?>_select fkwcs_stripe_cashapp_select">
+					<!-- Cash App Pay element will be mounted here -->
+				</div>
+			</div>
 
-            <!-- Used to display form errors -->
-            <div class="clear"></div>
-            <div class="fkwcs_stripe_cashapp_error fkwcs-error-text" role="alert"></div>
-            <div class="clear"></div>
-        </fieldset>
+			<!-- Used to display form errors -->
+			<div class="clear"></div>
+			<div class="fkwcs_stripe_cashapp_error fkwcs-error-text" role="alert"></div>
+			<div class="clear"></div>
+		</fieldset>
 		<?php
 	}
 
@@ -615,7 +659,7 @@ class CashApp extends LocalGateway {
 	 * @return array
 	 */
 	public function get_tokens() {
-		$tokens = [];
+		$tokens = array();
 
 		if ( is_user_logged_in() && $this->supports( 'tokenization' ) ) {
 			$tokens = WC_Payment_Tokens::get_customer_tokens( get_current_user_id(), $this->id );
@@ -628,10 +672,14 @@ class CashApp extends LocalGateway {
 	 * Change save payment method text for Cash App Pay
 	 */
 	public function save_payment_method_checkbox() {
-		$html = sprintf( '<p class="form-row woocommerce-SavedPaymentMethods-saveNew">
+		$html = sprintf(
+			'<p class="form-row woocommerce-SavedPaymentMethods-saveNew">
 				<input id="wc-%1$s-new-payment-method" name="wc-%1$s-new-payment-method" type="checkbox" value="true" style="width:auto;" />
 				<label for="wc-%1$s-new-payment-method" style="display:inline;">%2$s</label>
-			</p>', esc_attr( $this->id ), esc_html__( 'Save payment information to my account for future purchases.', 'funnelkit-stripe-woo-payment-gateway' ) );
+			</p>',
+			esc_attr( $this->id ),
+			esc_html__( 'Save payment information to my account for future purchases.', 'funnelkit-stripe-woo-payment-gateway' )
+		);
 		/**
 		 * Filter the saved payment method checkbox HTML
 		 *
@@ -652,7 +700,7 @@ class CashApp extends LocalGateway {
 	public function add_payment_method() {
 		$source_id = '';
 
-		if ( empty( $_POST['fkwcs_source'] ) || ! is_user_logged_in() ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( empty( $_POST['fkwcs_source'] ) || ! is_user_logged_in() ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment method addition
 			$error_msg = __( 'There was a problem adding the payment method.', 'funnelkit-stripe-woo-payment-gateway' );
 			wc_add_notice( $error_msg, 'error' );
 			Helper::log( sprintf( 'Add payment method Error: %1$1s', $error_msg ) );
@@ -661,10 +709,10 @@ class CashApp extends LocalGateway {
 		}
 
 		$customer_id = $this->get_customer_id();
-		$source      = wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$source      = wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment method addition
 
 		$stripe_api    = $this->get_client();
-		$response      = $stripe_api->payment_methods( 'retrieve', [ $source ] );
+		$response      = $stripe_api->payment_methods( 'retrieve', array( $source ) );
 		$source_object = $response['success'] ? $response['data'] : false;
 
 		if ( isset( $source_object ) ) {
@@ -679,7 +727,7 @@ class CashApp extends LocalGateway {
 		}
 
 		// Attach payment method to customer
-		$response = $stripe_api->payment_methods( 'attach', [ $source_id, [ 'customer' => $customer_id ] ] );
+		$response = $stripe_api->payment_methods( 'attach', array( $source_id, array( 'customer' => $customer_id ) ) );
 		$response = $response['success'] ? $response['data'] : false;
 
 		$user    = wp_get_current_user();
@@ -697,12 +745,12 @@ class CashApp extends LocalGateway {
 			return;
 		}
 
-		do_action( 'fkwcs_add_payment_method_' . ( isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : '' ) . '_success', $source_id, $source_object ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		do_action( 'fkwcs_add_payment_method_' . ( isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : '' ) . '_success', $source_id, $source_object ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment method addition
 		Helper::log( 'New Cash App Pay payment method added successfully' );
 
-		return [
+		return array(
 			'result'   => 'success',
 			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
-		];
+		);
 	}
 }

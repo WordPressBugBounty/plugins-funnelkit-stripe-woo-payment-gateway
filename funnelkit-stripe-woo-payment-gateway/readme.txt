@@ -2,9 +2,9 @@
 Contributors: amans2k, xlplugins, teamwoofunnels
 Tags: stripe, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
-Tested up to: 6.9.0
+Tested up to: 7.1
 Requires PHP: 7.0
-Stable tag: 1.14.0.5
+Stable tag: 1.15.0
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -199,15 +199,15 @@ Stripe Payment Gateway for WooCommerce is part of FunnelKit's ever-growing plugi
 
 === Here are some of our plugins:
 
-**[FunnelKit's Funnel Builder](https://wordpress.org/plugins/funnel-builder/)** - The most flexible funnel builder for WordPress. Build profitable funnels using conversion-friendly templates, analyze performance and improve with built-in A/B testing.
+**[FunnelKit's Funnel Builder](https://wordpress.org/plugins/funnel-builder/)** * The most flexible funnel builder for WordPress. Build profitable funnels using conversion-friendly templates, analyze performance and improve with built-in A/B testing.
 
-**[FunnelKit Checkout](https://funnelkit.com/woocommerce-checkout-pages-aero/)** - Increase your conversions with FunnelKit’s optimized WooCommerce checkout pages. Choose from ready-to-use checkout page templates, embed forms, create one-page checkouts, and more. Offer order bumps to boost your business revenue.
+**[FunnelKit Checkout](https://funnelkit.com/woocommerce-checkout-pages-aero/)** * Increase your conversions with FunnelKit’s optimized WooCommerce checkout pages. Choose from ready-to-use checkout page templates, embed forms, create one-page checkouts, and more. Offer order bumps to boost your business revenue.
 
-**[FunnelKit One-Click Upsells](https://funnelkit.com/woocommerce-one-click-upsells-upstroke/)** - Boost your average order value (AOV) by pitching hyper-relevant post-purchase upsell offers after the checkout.
+**[FunnelKit One-Click Upsells](https://funnelkit.com/woocommerce-one-click-upsells-upstroke/)** * Boost your average order value (AOV) by pitching hyper-relevant post-purchase upsell offers after the checkout.
 
-**[FunnelKit Automations](https://wordpress.org/plugins/wp-marketing-automations/)** - Engage with your customers with automated WooCommerce email marketing and SMS campaigns. Automate your abandoned cart recovery sequence, post-purchase follow-up emails, winback campaigns, and more.
+**[FunnelKit Automations](https://wordpress.org/plugins/wp-marketing-automations/)** * Engage with your customers with automated WooCommerce email marketing and SMS campaigns. Automate your abandoned cart recovery sequence, post-purchase follow-up emails, winback campaigns, and more.
 
-**[FunnelKit Cart](https://wordpress.org/plugins/cart-for-woocommerce/)** - Adds a beautiful sliding cart to your WooCommerce store. Let the buyers add items, edit quantity and add upsells (Pro) on the side cart. Skip traditional cart page and reach checkout faster.
+**[FunnelKit Cart](https://wordpress.org/plugins/cart-for-woocommerce/)** * Adds a beautiful sliding cart to your WooCommerce store. Let the buyers add items, edit quantity and add upsells (Pro) on the side cart. Skip traditional cart page and reach checkout faster.
 
 == Frequently Asked Questions ==
 
@@ -258,6 +258,64 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+= 1.15.0 =
+* Added: Express Checkout: Apple Pay, Google Pay and Stripe Link now render through Stripe's modern Express Checkout Element — each wallet appears as soon as it is ready and is shown only where it is genuinely available to the shopper. (#780)
+* Added: Express Checkout: Wallet Gateways settings are reformed for better visibility and granular controls. (#1036)
+* Added: Payment Methods: Amazon Pay is now available, both as an express checkout button and as a regular payment method. (#1216)
+* Added: Payment Methods: MB Way is now available for the Portuguese market. (#1009)
+* Added: Payment Methods: TWINT is now available for the Swiss market, using CHF with mobile app or QR code confirmation. (#1128)
+* Added: Payment Methods: EPS and BLIK are now available. (#1014)
+* Added: Subscriptions: Bancontact and iDEAL now support WooCommerce Subscriptions. (#1226, #1285)
+* Added: Checkout: New setting to  include line-item detail in payment requests, improving reconciliation and acceptance rates for Klarna and other methods. (#1113)
+* Added: Admin: Pay for Order button for unpaid orders for the single order admin UI. (#1300)
+* Added: Upsells: Upsell Refunds support added SEPA. (#1407)
+* Added: Upsells: iDEAL is now supported for one-click upsells. (#1422)
+* Improved: Checkout: Failed payments and renewals now record the specific Stripe decline code and its reason in the order note, so the cause is clear without opening the Stripe Dashboard. (#1363)
+* Improved: Checkout: Clearer handling when a Stripe customer cannot be created — the order note explains the underlying connectivity cause while the shopper sees a simple retry message. (#1374)
+* Improved: Checkout: More resilient recovery when Stripe.js fails to load, with added diagnostics and complete checkout data included in the payment request. (#1058)
+* Improved: Subscriptions: Improved subscription renewals process to attempt payment on dynamic payment methods from stripe. (#1073)
+* Improved: Checkout: Payment confirmation is now protected against duplicate intents when a JavaScript error interrupts the flow. (#1077)
+* Improved: Checkout: Faster checkout on stores running subscriptions, through optimized queries. (#1230)
+* Improved: Payment Methods: Alipay configuration and payment flow updated. (#1126)
+* Improved: Checkout: Improved compatibility with Autoship Cloud. (#1203)
+* Improved: Checkout: Authorize mode can now capture automatically when the order status changes. (#1187)
+* Improved: Express Checkout: Each wallet in the FunnelKit slide cart and on product pages now appears as soon as it is ready, instead of waiting on the slowest wallet probe. (#1387)
+* Improved: Checkout: Card and wallet elements now stay mounted when the order review refreshes, so they are no longer rebuilt on every address or shipping change. (#1403)
+* Improved: Admin: The block cart and checkout incompatibility notice is now suppressed when another plugin renders in place of the block checkout, starting with CheckoutWC. (#1411)
+* Improved: Checkout: All FunnelKit scripts now share a single Stripe instance per page, and element amounts are sent in the correct currency units. (#1419)
+* Improved: Admin: New notice warns when payments are completing but Stripe webhooks have stopped arriving. (#1425, #1449)
+* Fixed: Checkout: SCA-regulated cards in the EU and UK now complete save-card, pre-order and one-click upsell payments reliably. (#1252, #1391)
+* Fixed: Checkout: Card payments returning a `processing` status now complete correctly. (#1094)
+* Fixed: Payment methods: BNPL gateways messaging element showing in FK-cart for all gateways. (#1441)
+* Fixed: Checkout: Orders awaiting 3D Secure now complete even when the browser redirect does not return. (#1218)
+* Fixed: Checkout: Payment method validation against an existing intent now prevents mismatches. (#1115)
+* Fixed: Checkout: Improved stability across PHP 8, invalid order-pay requests and unconfigured gateways. (#1099, #1124, #1169, #1237, #1245)
+* Fixed: Checkout: Card last four digits now keep their leading zeros in order notes. (#1256)
+* Fixed: Checkout: Financial confirmation messaging now reflects the real order amount. (#1224)
+* Fixed: Checkout: Billing state codes for New Zealand are now normalized for Stripe. (#1098)
+* Fixed: Payment Methods: iDEAL payments now confirm reliably and show the merchant-configured description. (#1103, #1290)
+* Fixed: Payment Methods: Multibanco and EPS now display their subtitles. (#1062)
+* Fixed: Payment Methods: ACH saved payment methods now work when the customer ID is missing. (#1184)
+* Fixed: Payment Methods: Pay Later messaging now loads on pages where the cart icon is hidden but the cart menu is shown. (#1119)
+* Fixed: Subscriptions: Apple Pay and Google Pay no longer charge twice on an early renewal. (#1268)
+* Fixed: Subscriptions: Renewals now handle a missing order gracefully. (#1082)
+* Fixed: Upsells: One-click upsells now work with Stripe Link and across all supported currencies. (#1193, #1260)
+* Fixed: Upsells: Clearer message when the payment intent secret is unavailable after a failed 3D Secure attempt. (#1056)
+* Fixed: My Account: Legacy Stripe customer IDs from migrated plugins are now resolved. (#1287)
+* Fixed: Admin: Capture button now works regardless of the configured payment mode. (#1090)
+* Fixed: Admin: Refund handling no longer overrides orders paid through another gateway. (#1092)
+* Fixed: Webhooks: More reliable webhook processing, including HPOS refund orders, Stripe API timeouts and order metadata saves. (#1117, #1189, #1199)
+* Fixed: Express Checkout: The Apple Pay row no longer disappears and reappears each time the checkout order review refreshes. (#1371)
+* Fixed: Express Checkout: An unavailable Apple Pay no longer hides the Google Pay button, which could leave the checkout with no place order control. (#1393)
+* Fixed: Express Checkout: Express checkout buttons now render even when the Credit Card gateway is disabled. (#1378)
+* Fixed: Upsells: Corrected the upsell charge action so one-click upsells trigger the right payment handler. (#1413)
+* Fixed: Checkout: The allowed card brands setting is now enforced when the payment is processed, instead of only client side checks. (#1417)
+* Fixed: Subscriptions: Resolved a mandate mismatch that could cause India subscription renewals to fail after the customer changed their payment method. (#1406)
+* Fixed: Express Checkout: The wallet payment sheet no longer hangs when a shipping-address or shipping-option update returns an unexpected or failed response. (#1436)
+* Fixed: Express Checkout: The Express Checkout wrapper no longer renders more than once per page, which could show duplicate empty checkout boxes. (#1438)
+* Fixed: Express Checkout: Improved reliability for Amazon Pay and FunnelKit Cart express payments by correctly propagating button context and refreshing the checkout nonce from cart fragments. (#1447)
+* Fixed: Checkout: Smart-button line item generation no longer fails when a cart item is missing subtotal or product data. (#1447)
+* Fixed: Checkout: Re-paying a still-pending order through a saved payment method no longer creates a duplicate Stripe charge when the original payment had already succeeded. (#1432)
 
 = 1.14.0.5 =
 * Fixed: Edge cases causing double upsells charges in case of javascript are deferred loaded on upsells.(#1032)

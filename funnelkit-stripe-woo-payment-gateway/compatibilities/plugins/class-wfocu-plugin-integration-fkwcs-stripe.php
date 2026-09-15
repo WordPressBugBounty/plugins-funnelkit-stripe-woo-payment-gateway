@@ -134,7 +134,8 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 				/* translators: 1) dollar amount */
 				throw new \Exception( sprintf( __( 'Sorry, the minimum allowed order total is %1$s to use this payment method.', 'funnelkit-stripe-woo-payment-gateway' ), wc_price( Helper::get_minimum_amount() / 100 ) ), 101 ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
 			}
-			$post_data['amount']      = $total;
+			$post_data['amount'] = $total;
+			/* translators: 1: Site name, 2: Order number, 3: Current offer name */
 			$post_data['description'] = sprintf( __( '%1$s - Order %2$s - 1 click upsell: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), $order->get_order_number(), WFOCU_Core()->data->get( 'current_offer' ) );
 			$post_data['capture']     = $gateway->capture_method ? 'true' : 'false';
 
@@ -161,10 +162,27 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			return apply_filters( 'fkwcs_upsell_stripe_generate_payment_request', $post_data, $get_package, $order, $source );
 		}
 
+		/**
+		 * Filter the upsell PaymentIntent create request before it is sent to Stripe.
+		 *
+		 * Default returns it unchanged (card/Apple Pay/Google Pay charge fine with confirm + saved
+		 * method). Subclasses override this to adjust gateway-specific flags — e.g. Amazon Pay
+		 * charges off_session against the saved mandate and must drop setup_future_usage (the two
+		 * are mutually exclusive on a PaymentIntent).
+		 *
+		 * @param array $request The PaymentIntent create request.
+		 *
+		 * @return array
+		 */
+		protected function prepare_intent_request( $request ) {
+			return $request;
+		}
+
 		protected function create_intent( $order, $prepared_source ) {
 			// The request for a charge contains metadata for the intent.
 			$full_request = $this->generate_payment_request( $order, $prepared_source );
 			$gateway      = $this->get_wc_gateway();
+			$get_package  = WFOCU_Core()->data->get( '_upsell_package' );
 
 			$request = array(
 				'payment_method'       => $prepared_source->source,
@@ -175,7 +193,10 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 				'capture_method'       => ( 'true' === $full_request['capture'] ) ? 'automatic' : 'manual',
 				'payment_method_types' => $gateway->get_payment_method_types(),
 				'setup_future_usage'   => 'off_session',
+				'confirm'              => true,
 			);
+
+			$request = $this->prepare_intent_request( $request );
 			if ( isset( $full_request['statement_descriptor_suffix'] ) ) {
 				$request['statement_descriptor_suffix'] = $full_request['statement_descriptor_suffix'];
 			}
@@ -183,11 +204,17 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 				$request['customer'] = $prepared_source->customer;
 			}
 
+			// Amount details for upsell must be built from the upsell package only; original order items are not used.
+			$amount_data = $gateway->add_amount_details( $order, $gateway->get_payment_method_types(), $this->get_offer_items_data( $get_package ), true );
+			if ( ! empty( $amount_data ) ) {
+				$request = array_merge( $request, $amount_data );
+			}
+
 			try {
 				if (
-				$gateway->is_application_fee_supported() &&
-				class_exists( '\Sublium_WCS\Includes\Helpers\AccessPermission' ) &&
-				\Sublium_WCS\Includes\Helpers\AccessPermission::is_application_fee_applicable()
+					$gateway->is_application_fee_supported() &&
+					class_exists( '\Sublium_WCS\Includes\Helpers\AccessPermission' ) &&
+					\Sublium_WCS\Includes\Helpers\AccessPermission::is_application_fee_applicable()
 				) {
 					$get_package = WFOCU_Core()->data->get( '_upsell_package' );
 
@@ -226,7 +253,8 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 
 		protected function confirm_intent( $intent, $order ) {
 			if ( 'requires_confirmation' !== $intent->data->status ) {
-				return $intent;
+				$this->current_intent = $intent->data;
+				return $intent->data;
 			}
 
 			$gateway    = $this->get_wc_gateway();
@@ -329,15 +357,14 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 				'locale'                => $stripe->convert_wc_locale_to_stripe_locale( get_locale() ),
 				'mode'                  => 'payment',
 				'paymentMethodCreation' => 'manual',
-				'currency'              => strtolower( $order->get_currency() ),
-				'amount'                => Helper::get_formatted_amount( 1 ), // keeping it as sample
+				'currency'              => 'usd', // this is only to allow opening of the payment element
+				'amount'                => Helper::get_formatted_amount( 1, 'usd' ), // keeping it as sample
 			);
-			$methods = array( 'card' );
+			$methods = array( 'card', 'link' );
 
 			$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 			$data['appearance']           = array(
 				'theme' => 'stripe',
-				'rules' => apply_filters( 'fkwcs_stripe_payment_element_rules', (object) array(), $this ),
 			);
 			$options                      = array(
 				'fields' => array(
@@ -372,8 +399,19 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		}
 
 
+		/**
+		 * WC-AJAX endpoint used by the in-offer upsell charge. Subclasses (e.g. Amazon Pay) override
+		 * this so each gateway charges through its own action, matching the per-gateway pattern in
+		 * includes/ajax.php.
+		 *
+		 * @return string
+		 */
+		public function get_upsell_charge_action() {
+			return 'wfocu_front_handle_fkwcs_stripe_payments';
+		}
+
 		public function allow_check_action( $actions ) {
-			array_push( $actions, 'wfocu_front_handle_fkwcs_stripe_payments' );
+			array_push( $actions, $this->get_upsell_charge_action() );
 			array_push( $actions, 'wfocu_front_handle_fkwcs_stripe_create_payments' );
 
 			return $actions;
@@ -426,7 +464,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			 * This case tells we attempted payment through token and failed
 			 */
 			if ( 3 === $create_failed_order_or_stripe_error ) {
-				$order_note .= __( '</br> </br> Upsell recovery triggered - Showing Credit Card Form.', 'woofunnels-upstroke-one-click-upsell' );
+				$order_note .= __( '</br> </br> Upsell recovery triggered - Showing Credit Card Form.', 'funnelkit-stripe-woo-payment-gateway' );
 
 				if ( method_exists( $this, 'format_failed_note' ) ) {
 					$order_note = $this->format_failed_note( $order_note );
@@ -465,6 +503,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		}
 
 		public function process_client_payment() {
+			check_ajax_referer( 'wfocu_front_charge', 'nonce' );
 
 			/**
 			 * Prepare and populate client collected data to process further.
@@ -472,7 +511,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			$get_current_offer      = WFOCU_Core()->data->get( 'current_offer' );
 			$get_current_offer_meta = WFOCU_Core()->offers->get_offer_meta( $get_current_offer );
 			WFOCU_Core()->data->set( '_offer_result', true );
-			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 			/**
 			 * return if found error in the charge request
@@ -511,7 +550,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 				 * If not found the intent secret with the flag then fail, there could be few security issues
 				 */
 				if ( empty( $intent_secret_from_posted ) ) {
-					$this->handle_api_error( esc_attr__( 'Offer payment failed. Reason: Intent secret missing from auth', 'funnelkit-stripe-woo-payment-gateway' ), 'Intent secret missing from auth', $get_order, true );
+					$this->handle_api_error( esc_attr__( 'The customer failed 3D Secure authentication', 'funnelkit-stripe-woo-payment-gateway' ), 'The customer failed 3D Secure authentication', $get_order, true );
 				}
 
 				/**
@@ -635,7 +674,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			$get_current_offer      = WFOCU_Core()->data->get( 'current_offer' );
 			$get_current_offer_meta = WFOCU_Core()->offers->get_offer_meta( $get_current_offer );
 			WFOCU_Core()->data->set( '_offer_result', true );
-			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 			$get_order = WFOCU_Core()->data->get_parent_order();
 			WFOCU_Core()->log->log( 'Order #' . $get_order->get_id() . ' - Start Processing Upsell Payment Using credit card fields' ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
@@ -659,7 +698,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			$stripe = $this->get_wc_gateway();
 
 			try {
-				$prepared_source = $stripe->prepare_source( $get_order, true );
+				$prepared_source = $stripe->prepare_source( $get_order, false );
 				$intent          = $this->create_intent( $get_order, $prepared_source );
 
 			} catch ( Exception $e ) {
@@ -857,7 +896,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		 * @throws WC_Stripe_Exception
 		 */
 		public function process_refund_offer( $order ) {
-			$refund_data = wc_clean( $_POST );  // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$refund_data = wc_clean( wp_unslash( $_POST ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing refund form data during payment processing
 
 			$txn_id        = isset( $refund_data['txn_id'] ) ? $refund_data['txn_id'] : '';
 			$amnt          = isset( $refund_data['amt'] ) ? $refund_data['amt'] : '';
@@ -922,6 +961,17 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 			}
 
 			return $items;
+		}
+
+		public function get_offer_items_data( $package ) {
+			if ( empty( $package ) || empty( $package['products'] ) || ! is_array( $package['products'] ) ) {
+				return array();
+			}
+
+			return array(
+				'products' => $package['products'],
+				'total'    => isset( $package['total'] ) ? $package['total'] : null,
+			);
 		}
 
 
@@ -1363,8 +1413,8 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 							}
 
 
-							let postData = $.extend(getBucketData, {action: 'wfocu_front_handle_fkwcs_stripe_payments'});
-							let action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', 'wfocu_front_handle_fkwcs_stripe_payments'), postData);
+							let postData = $.extend(getBucketData, {action: '<?php echo esc_js( $this->get_upsell_charge_action() ); ?>'});
+							let action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', '<?php echo esc_js( $this->get_upsell_charge_action() ); ?>'), postData);
 							action.done((data) => {
 
 								/**
@@ -1424,15 +1474,15 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 							let postData = {};
 							if (is_success) {
 								postData = $.extend(this.bucket.getBucketSendData(), {
-									action: 'wfocu_front_handle_fkwcs_stripe_payments',
+									action: '<?php echo esc_js( $this->get_upsell_charge_action() ); ?>',
 									intent: 1,
 									intent_secret: response.paymentIntent.client_secret
 								});
 
 							} else {
-								postData = $.extend(this.bucket.getBucketSendData(), {action: 'wfocu_front_handle_fkwcs_stripe_payments', intent: 1, intent_secret: ''});
+								postData = $.extend(this.bucket.getBucketSendData(), {action: '<?php echo esc_js( $this->get_upsell_charge_action() ); ?>', intent: 1, intent_secret: ''});
 							}
-							let action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', 'wfocu_front_handle_fkwcs_stripe_payments'), postData);
+							let action = $.post(wfocu_vars.wc_ajax_url.toString().replace('%%endpoint%%', '<?php echo esc_js( $this->get_upsell_charge_action() ); ?>'), postData);
 							action.done((data) => {
 								if (data.result !== "success") {
 									this.bucket.swal.show({'html': this.bucket.warningMessage});

@@ -31,9 +31,9 @@ abstract class Helper {
 	 */
 	private static $gateway_defaults = array(
 		'woocommerce_fkwcs_stripe_settings' => array(
-			'enabled'                                 => 'no',
-			'inline_cc'                               => 'yes',
-			'allowed_cards'                           => array(
+			'enabled'                                => 'no',
+			'inline_cc'                              => 'yes',
+			'allowed_cards'                          => array(
 				'mastercard',
 				'visa',
 				'diners',
@@ -42,24 +42,23 @@ abstract class Helper {
 				'jcb',
 				'unionpay',
 			),
-			'express_checkout_location'               => array(
+			'express_checkout_location'              => array(
 				'product',
 				'cart',
 				'checkout',
 			),
-			'express_checkout_enabled'                => 'no',
-			'express_checkout_button_text'            => 'Pay with',
-			'express_checkout_button_theme'           => 'dark',
-			'express_checkout_button_height'          => '40',
-			'express_checkout_title'                  => 'Express Checkout',
-			'express_checkout_product_page_position'  => 'above',
-			'express_checkout_separator_product'      => 'OR',
-			'express_checkout_button_width'           => '',
-			'express_checkout_button_alignment'       => 'left',
-			'express_checkout_separator_cart'         => 'OR',
-			'express_checkout_separator_checkout'     => 'OR',
-			'express_checkout_checkout_page_position' => 'above-checkout',
-			'express_checkout_link_button_enabled'    => 'no',
+			'express_checkout_enabled'               => 'no',
+			'express_checkout_button_text'           => 'Pay with',
+			'express_checkout_button_theme'          => 'dark',
+			'express_checkout_button_height'         => '40',
+			'express_checkout_title'                 => 'Express Checkout',
+			'express_checkout_product_page_position' => 'below',
+			'express_checkout_separator_product'     => 'OR',
+			'express_checkout_button_width'          => '',
+			'express_checkout_button_alignment'      => 'left',
+			'express_checkout_separator_cart'        => 'OR',
+			'express_checkout_separator_checkout'    => 'OR',
+			'express_checkout_link_button_enabled'   => 'no',
 		),
 	);
 
@@ -99,7 +98,7 @@ abstract class Helper {
 
 		$settings = array_merge( $default_settings, $saved_settings );
 
-		return apply_filters( 'fkwcs_gateway_settings', $settings );
+		return apply_filters( 'fkwcs_gateway_settings', $settings, $gateway );
 	}
 
 
@@ -128,6 +127,23 @@ abstract class Helper {
 			'xof', // West African Cfa Franc
 			'xpf', // Cfp Franc
 		);
+	}
+
+	/**
+	 * Check if Stripe line items are enabled for payment method.
+	 *
+	 * @param string|array $payment_method_type Payment method type(s).
+	 *
+	 * @return bool
+	 */
+	public static function line_items_enabled() {
+		$enabled = get_option( 'fkwcs_line_items_enabled', 'no' );
+
+		if ( is_bool( $enabled ) ) {
+			return $enabled;
+		}
+
+		return in_array( $enabled, array( 'yes', '1', 1, 'true', true ), true );
 	}
 
 
@@ -181,10 +197,10 @@ abstract class Helper {
 			'fkwcs_prepare_payment_method_args',
 			array(
 				'token_id'       => $token instanceof \WC_Payment_Token_CC ? $token->get_id() : '',
-				'customer'       => ( false !== $payment_method ) ? $payment_method->customer : '',
-				'source'         => ( false !== $payment_method ) ? $payment_method->id : '',
-				'source_object'  => $payment_method,
-				'payment_method' => ( false !== $payment_method ) ? $payment_method->id : '',
+				'customer'       => is_object( $payment_method ) ? $payment_method->customer : '',
+				'source'         => is_object( $payment_method ) ? $payment_method->id : '',
+				'source_object'  => is_object( $payment_method ) ? $payment_method : false,
+				'payment_method' => is_object( $payment_method ) ? $payment_method->id : '',
 			)
 		);
 	}
@@ -284,65 +300,101 @@ abstract class Helper {
 		return apply_filters(
 			'fkwcs_stripe_localized_messages',
 			array(
-				'stripe_cc_generic'                => __( 'There was an error processing your credit card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incomplete_number'                => __( 'Your card number is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incomplete_expiry'                => __( 'Your card\'s expiration date is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incomplete_cvc'                   => __( 'Your card\'s security code is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incomplete_zip'                   => __( 'Your card\'s zip code is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incorrect_number'                 => __( 'The card number is incorrect. Check the card\'s number or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incorrect_cvc'                    => __( 'The card\'s security code is incorrect. Check the card\'s security code or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incorrect_zip'                    => __( 'The card\'s ZIP code is incorrect. Check the card\'s ZIP code or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'invalid_number'                   => __( 'The card number is invalid. Check the card details or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'invalid_characters'               => __( 'This value provided to the field contains characters that are unsupported by the field.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'invalid_cvc'                      => __( 'The card\'s security code is invalid. Check the card\'s security code or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'invalid_expiry_month'             => __( 'The card\'s expiration month is incorrect. Check the expiration date or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'invalid_expiry_year'              => __( 'The card\'s expiration year is incorrect. Check the expiration date or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incorrect_address'                => __( 'The card\'s address is incorrect. Check the card\'s address or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'expired_card'                     => __( 'The card has expired. Check the expiration date or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'card_declined'                    => __( 'The card has been declined.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'invalid_expiry_year_past'         => __( 'Your card\'s expiration year is in the past.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'account_number_invalid'           => __( 'The bank account number provided is invalid (e.g., missing digits). Bank account information varies from country to country. We recommend creating validations in your entry forms based on the bank account formats we provide.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'amount_too_large'                 => __( 'The specified amount is greater than the maximum amount allowed. Use a lower amount and try again.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'amount_too_small'                 => __( 'The specified amount is less than the minimum amount allowed. Use a higher amount and try again.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'authentication_required'          => __( 'The payment requires authentication to proceed. If your customer is off session, notify your customer to return to your application and complete the payment. If you provided the error_on_requires_action parameter, then your customer should try another card that does not require authentication.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'balance_insufficient'             => __( 'The transfer or payout could not be completed because the associated account does not have a sufficient balance available. Create a new transfer or payout using an amount less than or equal to the account\'s available balance.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'bank_account_declined'            => __( 'The bank account provided can not be used to charge, either because it is not verified yet or it is not supported.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'bank_account_exists'              => __( 'The bank account provided already exists on the specified Customer object. If the bank account should also be attached to a different customer, include the correct customer ID when making the request again.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'bank_account_unusable'            => __( 'The bank account provided cannot be used for payouts. A different bank account must be used.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'bank_account_unverified'          => __( 'Your Connect platform is attempting to share an unverified bank account with a connected account.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'bank_account_verification_failed' => __( 'The bank account cannot be verified, either because the microdeposit amounts provided do not match the actual amounts, or because verification has failed too many times.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'card_decline_rate_limit_exceeded' => __( 'This card has been declined too many times. You can try to charge this card again after 24 hours. We suggest reaching out to your customer to make sure they have entered all of their information correctly and that there are no issues with their card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'charge_already_captured'          => __( 'The charge you\'re attempting to capture has already been captured. Update the request with an uncaptured charge ID.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'charge_already_refunded'          => __( 'The charge you\'re attempting to refund has already been refunded. Update the request to use the ID of a charge that has not been refunded.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'charge_disputed'                  => __( 'The charge you\'re attempting to refund has been charged back. Check the disputes documentation to learn how to respond to the dispute.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'charge_exceeds_source_limit'      => __( 'This charge would cause you to exceed your rolling-window processing limit for this source type. Please retry the charge later, or contact us to request a higher processing limit.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'charge_expired_for_capture'       => __( 'The charge cannot be captured as the authorization has expired. Auth and capture charges must be captured within seven days.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'charge_invalid_parameter'         => __( 'One or more provided parameters was not allowed for the given operation on the Charge. Check our API reference or the returned error message to see which values were not correct for that Charge.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'email_invalid'                    => __( 'The email address is invalid (e.g., not properly formatted). Check that the email address is properly formatted and only includes allowed characters.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'idempotency_key_in_use'           => __( 'The idempotency key provided is currently being used in another request. This occurs if your integration is making duplicate requests simultaneously.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'invalid_charge_amount'            => __( 'The specified amount is invalid. The charge amount must be a positive integer in the smallest currency unit, and not exceed the minimum or maximum amount.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'invalid_source_usage'             => __( 'The source cannot be used because it is not in the correct state (e.g., a charge request is trying to use a source with a pending, failed, or consumed source). Check the status of the source you are attempting to use.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'missing'                          => __( 'Both a customer and source ID have been provided, but the source has not been saved to the customer. To create a charge for a customer with a specified source, you must first save the card details.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'postal_code_invalid'              => __( 'The ZIP code provided was incorrect.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'processing_error'                 => __( 'An error occurred while processing the card. Try again later or with a different payment method.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'card_not_supported'               => __( 'The card does not support this type of purchase.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'call_issuer'                      => __( 'The card has been declined for an unknown reason.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'card_velocity_exceeded'           => __( 'The customer has exceeded the balance or credit limit available on their card.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'currency_not_supported'           => __( 'The card does not support the specified currency.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'do_not_honor'                     => __( 'The bank returned the decline code do_not_honor, and did not provide any other information. We recommend that your customer contact their card issuer for more information. <a href="https://docs.stripe.com/declines">Learn more about declines</a> ', 'funnelkit-stripe-woo-payment-gateway' ),
-				'fraudulent'                       => __( 'The payment has been declined as Stripe suspects it is fraudulent.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'generic_decline'                  => __( 'The bank returned the decline code generic_decline, and did not provide any other information. We recommend that your customer contact their card issuer for more information. <a href="https://docs.stripe.com/declines">Learn more about declines</a> ', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incorrect_pin'                    => __( 'The PIN entered is incorrect. ', 'funnelkit-stripe-woo-payment-gateway' ),
-				'insufficient_funds'               => __( 'The card has insufficient funds to complete the purchase.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'empty_element'                    => __( 'Please select a payment method before proceeding.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'empty_element_sepa_debit'         => __( 'Please enter your IBAN before proceeding.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'empty_element_ideal'              => __( 'Please select a bank before proceeding', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incomplete_iban'                  => __( 'The IBAN you entered is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'incomplete_boleto_tax_id'         => __( 'Please enter a valid CPF / CNPJ', 'funnelkit-stripe-woo-payment-gateway' ),
-				'test_mode_live_card'              => __( 'Your card was declined. Your request was in test mode, but you used a real credit card. Only test cards can be used in test mode.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'server_side_confirmation_beta'    => __( 'You do not have permission to use the PaymentElement card form. Please send a request to https://support.stripe.com/ and ask for the "server_side_confirmation_beta" to be added to your account.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'phone_required'                   => __( 'Please provide a billing phone number.', 'funnelkit-stripe-woo-payment-gateway' ),
-				'ach_instant_only'                 => __( 'Your payment could not be processed at this time because your bank account does not support instant verification.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stripe_cc_generic'                 => __( 'There was an error processing your credit card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incomplete_number'                 => __( 'Your card number is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incomplete_expiry'                 => __( 'Your card\'s expiration date is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incomplete_cvc'                    => __( 'Your card\'s security code is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incomplete_zip'                    => __( 'Your card\'s zip code is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incorrect_number'                  => __( 'The card number is incorrect. Check the card\'s number or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incorrect_cvc'                     => __( 'The card\'s security code is incorrect. Check the card\'s security code or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incorrect_zip'                     => __( 'The card\'s ZIP code is incorrect. Check the card\'s ZIP code or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_number'                    => __( 'The card number is invalid. Check the card details or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_characters'                => __( 'This value provided to the field contains characters that are unsupported by the field.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_cvc'                       => __( 'The card\'s security code is invalid. Check the card\'s security code or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_expiry_month'              => __( 'The card\'s expiration month is incorrect. Check the expiration date or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_expiry_year'               => __( 'The card\'s expiration year is incorrect. Check the expiration date or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incorrect_address'                 => __( 'The card\'s address is incorrect. Check the card\'s address or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'expired_card'                      => __( 'The card has expired. Check the expiration date or use a different card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'card_declined'                     => __( 'The card has been declined.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_expiry_year_past'          => __( 'Your card\'s expiration year is in the past.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'account_number_invalid'            => __( 'The bank account number provided is invalid (e.g., missing digits). Bank account information varies from country to country. We recommend creating validations in your entry forms based on the bank account formats we provide.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'amount_too_large'                  => __( 'The specified amount is greater than the maximum amount allowed. Use a lower amount and try again.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'amount_too_small'                  => __( 'The specified amount is less than the minimum amount allowed. Use a higher amount and try again.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'authentication_required'           => __( 'The payment requires authentication to proceed. If your customer is off session, notify your customer to return to your application and complete the payment. If you provided the error_on_requires_action parameter, then your customer should try another card that does not require authentication.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'balance_insufficient'              => __( 'The transfer or payout could not be completed because the associated account does not have a sufficient balance available. Create a new transfer or payout using an amount less than or equal to the account\'s available balance.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'bank_account_declined'             => __( 'The bank account provided can not be used to charge, either because it is not verified yet or it is not supported.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'bank_account_exists'               => __( 'The bank account provided already exists on the specified Customer object. If the bank account should also be attached to a different customer, include the correct customer ID when making the request again.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'bank_account_unusable'             => __( 'The bank account provided cannot be used for payouts. A different bank account must be used.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'bank_account_unverified'           => __( 'Your Connect platform is attempting to share an unverified bank account with a connected account.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'bank_account_verification_failed'  => __( 'The bank account cannot be verified, either because the microdeposit amounts provided do not match the actual amounts, or because verification has failed too many times.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'card_decline_rate_limit_exceeded'  => __( 'This card has been declined too many times. You can try to charge this card again after 24 hours. We suggest reaching out to your customer to make sure they have entered all of their information correctly and that there are no issues with their card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'charge_already_captured'           => __( 'The charge you\'re attempting to capture has already been captured. Update the request with an uncaptured charge ID.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'charge_already_refunded'           => __( 'The charge you\'re attempting to refund has already been refunded. Update the request to use the ID of a charge that has not been refunded.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'charge_disputed'                   => __( 'The charge you\'re attempting to refund has been charged back. Check the disputes documentation to learn how to respond to the dispute.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'charge_exceeds_source_limit'       => __( 'This charge would cause you to exceed your rolling-window processing limit for this source type. Please retry the charge later, or contact us to request a higher processing limit.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'charge_expired_for_capture'        => __( 'The charge cannot be captured as the authorization has expired. Auth and capture charges must be captured within seven days.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'charge_invalid_parameter'          => __( 'One or more provided parameters was not allowed for the given operation on the Charge. Check our API reference or the returned error message to see which values were not correct for that Charge.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'email_invalid'                     => __( 'The email address is invalid (e.g., not properly formatted). Check that the email address is properly formatted and only includes allowed characters.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'idempotency_key_in_use'            => __( 'The idempotency key provided is currently being used in another request. This occurs if your integration is making duplicate requests simultaneously.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_charge_amount'             => __( 'The specified amount is invalid. The charge amount must be a positive integer in the smallest currency unit, and not exceed the minimum or maximum amount.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_source_usage'              => __( 'The source cannot be used because it is not in the correct state (e.g., a charge request is trying to use a source with a pending, failed, or consumed source). Check the status of the source you are attempting to use.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'missing'                           => __( 'Both a customer and source ID have been provided, but the source has not been saved to the customer. To create a charge for a customer with a specified source, you must first save the card details.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'postal_code_invalid'               => __( 'The ZIP code provided was incorrect.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'processing_error'                  => __( 'An error occurred while processing the card. Try again later or with a different payment method.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'card_not_supported'                => __( 'The card does not support this type of purchase.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'call_issuer'                       => __( 'The card has been declined for an unknown reason.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'card_velocity_exceeded'            => __( 'The customer has exceeded the balance or credit limit available on their card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'currency_not_supported'            => __( 'The card does not support the specified currency.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'do_not_honor'                      => __( 'The bank returned the decline code do_not_honor, and did not provide any other information. We recommend that your customer contact their card issuer for more information. <a href="https://docs.stripe.com/declines">Learn more about declines</a> ', 'funnelkit-stripe-woo-payment-gateway' ),
+				'fraudulent'                        => __( 'The payment has been declined as Stripe suspects it is fraudulent.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'generic_decline'                   => __( 'The bank returned the decline code generic_decline, and did not provide any other information. We recommend that your customer contact their card issuer for more information. <a href="https://docs.stripe.com/declines">Learn more about declines</a> ', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incorrect_pin'                     => __( 'The PIN entered is incorrect. ', 'funnelkit-stripe-woo-payment-gateway' ),
+				'insufficient_funds'                => __( 'The card has insufficient funds to complete the purchase.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'empty_element'                     => __( 'Please select a payment method before proceeding.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'empty_element_sepa_debit'          => __( 'Please enter your IBAN before proceeding.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'empty_element_ideal'               => __( 'Please select a bank before proceeding', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incomplete_iban'                   => __( 'The IBAN you entered is incomplete.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'incomplete_boleto_tax_id'          => __( 'Please enter a valid CPF / CNPJ', 'funnelkit-stripe-woo-payment-gateway' ),
+				'test_mode_live_card'               => __( 'Your card was declined. Your request was in test mode, but you used a real credit card. Only test cards can be used in test mode.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'server_side_confirmation_beta'     => __( 'You do not have permission to use the PaymentElement card form. Please send a request to https://support.stripe.com/ and ask for the "server_side_confirmation_beta" to be added to your account.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'phone_required'                    => __( 'Please provide a billing phone number.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'ach_instant_only'                  => __( 'Your payment could not be processed at this time because your bank account does not support instant verification.', 'funnelkit-stripe-woo-payment-gateway' ),
+				/**
+				 * Issuer `decline_code` values. These are resolved for merchant-facing order notes only.
+				 *
+				 * They are never surfaced to the shopper: the checkout notice is resolved from Stripe's own
+				 * `error.message`, and the JS resolver in stripe-elements.js keys on `error.code` (always
+				 * `card_declined` for an issuer decline), never on `error.decline_code`.
+				 */
+				'approve_with_id'                   => __( 'The payment can\'t be authorized. Attempt the payment again. If you still can\'t process it, the customer should contact their card issuer.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'do_not_try_again'                  => __( 'The card has been declined for an unknown reason. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'duplicate_transaction'             => __( 'A transaction with identical amount and credit card information was submitted very recently. Check to see if a recent payment already exists.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'expired_card_decline'              => __( 'The card has expired. The customer should use another card.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_account'                   => __( 'The card, or account the card is connected to, is invalid. The customer should contact their card issuer to check that the card is working correctly.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_amount'                    => __( 'The payment amount is invalid, or exceeds the amount that\'s allowed. If the amount appears correct, the customer should contact their card issuer.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'invalid_pin'                       => __( 'The PIN entered is incorrect. This only applies to payments made with a card reader.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'issuer_not_available'              => __( 'The card issuer couldn\'t be reached, so the payment couldn\'t be authorized. Attempt the payment again. If you still can\'t process it, the customer should contact their card issuer.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'lost_card'                         => __( 'The payment has been declined because the card is reported lost.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'merchant_blacklist'                => __( 'The payment has been declined because it matches a value on the Stripe user\'s block list.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'new_account_information_available' => __( 'The card, or account the card is connected to, is invalid. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'no_action_taken'                   => __( 'The card has been declined for an unknown reason. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'not_permitted'                     => __( 'The payment isn\'t permitted. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'offline_pin_required'              => __( 'The card has been declined as it requires a PIN. This only applies to payments made with a card reader.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'online_or_offline_pin_required'    => __( 'The card has been declined as it requires a PIN. This only applies to payments made with a card reader.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'pickup_card'                       => __( 'The card cannot be used to make this payment (it is possibly reported lost or stolen). The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'pin_try_exceeded'                  => __( 'The allowable number of PIN tries has been exceeded. The customer should use another card or method of payment.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'reenter_transaction'               => __( 'The payment couldn\'t be processed by the issuer for an unknown reason. Attempt the payment again. If you still can\'t process it, the customer should contact their card issuer.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'restricted_card'                   => __( 'The card cannot be used to make this payment (it is possibly reported lost or stolen). The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'revocation_of_all_authorizations'  => __( 'The card has been declined for an unknown reason. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'revocation_of_authorization'       => __( 'The card has been declined for an unknown reason. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'security_violation'                => __( 'The payment has been declined for security reasons. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'service_not_allowed'               => __( 'The card has been declined for an unknown reason. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stolen_card'                       => __( 'The payment has been declined because the card is reported stolen.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'stop_payment_order'                => __( 'The card has been declined for an unknown reason. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'testmode_decline'                  => __( 'A Stripe test card number was used. A genuine card must be used to make a payment.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'transaction_not_allowed'           => __( 'The card has been declined for an unknown reason. The customer should contact their card issuer for more information.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'try_again_later'                   => __( 'The card has been declined for an unknown reason. Ask the customer to attempt the payment again. If you still can\'t process it, the customer should contact their card issuer.', 'funnelkit-stripe-woo-payment-gateway' ),
+				'withdrawal_count_limit_exceeded'   => __( 'The customer has exceeded the balance or credit limit available on their card. The customer should use an alternative payment method.', 'funnelkit-stripe-woo-payment-gateway' ),
 			)
 		);
 	}
@@ -372,6 +424,67 @@ abstract class Helper {
 			}
 			wc_get_logger()->log( $level, \WC_Geolocation::get_ip_address() . '::' . $message . "\n", array( 'source' => $source ) );
 		}
+	}
+
+	/**
+	 * Recursively mask credentials and PII before a value is written to the debug log.
+	 *
+	 * Stripe request/response objects and webhook events carry secrets (PaymentIntent
+	 * `client_secret`) and personal data (card last4, billing name/email/phone/address).
+	 * Those must never land in the log file even when debug logging is enabled.
+	 *
+	 * @param mixed $data Array, Stripe object, or scalar to sanitize for logging.
+	 *
+	 * @return mixed Redacted copy safe to encode and log.
+	 */
+	public static function redact_for_log( $data ) {
+		$sensitive_keys = array(
+			'client_secret',
+			'secret_key',
+			'api_key',
+			'live_secret_key',
+			'test_secret_key',
+			'webhook_secret',
+			'number',
+			'cvc',
+			'cvv',
+			'last4',
+			'exp_month',
+			'exp_year',
+			'fingerprint',
+			'iin',
+			'dynamic_last4',
+			'email',
+			'phone',
+			'name',
+			'address',
+			'line1',
+			'line2',
+			'postal_code',
+			'tax_id',
+		);
+
+		if ( is_object( $data ) && method_exists( $data, 'toArray' ) ) {
+			$data = $data->toArray();
+		} elseif ( is_object( $data ) ) {
+			$data = (array) $data;
+		}
+
+		if ( ! is_array( $data ) ) {
+			return $data;
+		}
+
+		$redacted = array();
+		foreach ( $data as $key => $value ) {
+			if ( in_array( $key, $sensitive_keys, true ) ) {
+				$redacted[ $key ] = '[redacted]';
+				continue;
+			}
+
+			$redacted[ $key ] = ( is_array( $value ) || is_object( $value ) ) ? self::redact_for_log( $value ) : $value;
+		}
+
+		return $redacted;
 	}
 
 
@@ -524,7 +637,13 @@ abstract class Helper {
 
 
 	/**
-	 * List all possible compatible  kes
+	 * List all possible compatible keys for a given FunnelKit meta key.
+	 *
+	 * Some third-party plugins (e.g. the official WooCommerce Stripe plugin) store the
+	 * customer ID mode-suffixed in user meta (`_wc_stripe_customer_live` /
+	 * `_wc_stripe_customer_test`) while keeping the plain key in order/subscription meta.
+	 * Keys containing the `{mode}` placeholder are resolved to the current Stripe mode,
+	 * taken from the main gateway (fkwcs_stripe) so it is reliable outside the webhook flow.
 	 *
 	 * @param $meta_key
 	 *
@@ -532,13 +651,25 @@ abstract class Helper {
 	 */
 	public static function get_compatibility_keys( $meta_key ) {
 
+		// Resolve the mode from the main gateway (fkwcs_stripe) so it is reliable
+		// outside the webhook flow; fall back to the runtime mode if unavailable.
+		$mode     = self::get_mode();
+		$gateways = function_exists( 'WC' ) && WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : array();
+		if ( isset( $gateways['fkwcs_stripe'] ) && method_exists( $gateways['fkwcs_stripe'], 'get_gateway_mode' ) ) {
+			$mode = $gateways['fkwcs_stripe']->get_gateway_mode();
+		}
+
 		$config = array(
 			'_fkwcs_source_id'   => array( '_stripe_source_id', '_payment_method_token' ),
-			'_fkwcs_customer_id' => array( '_stripe_customer_id', '_wc_stripe_customer' ),
+			'_fkwcs_customer_id' => array( '_stripe_customer_id', '_wc_stripe_customer', 'wc_stripe_customer_{mode}' ),
 			'_fkwcs_intent_id'   => array( '_stripe_intent_id', '_payment_intent_id' ),
 		);
 
-		return $config[ $meta_key ];
+		if ( ! isset( $config[ $meta_key ] ) ) {
+			return array();
+		}
+
+		return str_replace( '{mode}', $mode, $config[ $meta_key ] );
 	}
 
 
@@ -651,6 +782,44 @@ abstract class Helper {
 		return self::$client;
 	}
 
+	/**
+	 * Stripe.js silent init recovery for stripe-elements.js (`fkwcs_data.stripe_sdk_init_recovery`).
+	 *
+	 * Enabled by default. Use the filter `fkwcs_stripe_sdk_init_recovery` to override:
+	 * - `max_attempts` 1–20 (default 4)
+	 * - Delays: attempt 1 uses `initial_delay_ms`; attempt n≥2 uses `min( max_delay_ms, backoff_step_ms * n )`.
+	 *
+	 * @return array {
+	 *     @type int $max_attempts      ≥1 enables recovery.
+	 *     @type int $initial_delay_ms
+	 *     @type int $backoff_step_ms
+	 *     @type int $max_delay_ms
+	 * }
+	 */
+	public static function get_stripe_sdk_init_recovery_localized() {
+		$defaults = array(
+			'max_attempts'     => 4,
+			'initial_delay_ms' => 30,
+			'backoff_step_ms'  => 350,
+			'max_delay_ms'     => 2500,
+		);
+
+		$recovery = apply_filters( 'fkwcs_stripe_sdk_init_recovery', $defaults );
+
+		if ( ! is_array( $recovery ) ) {
+			$recovery = $defaults;
+		}
+
+		$recovery = wp_parse_args( $recovery, $defaults );
+
+		$recovery['max_attempts']     = max( 1, min( 20, absint( $recovery['max_attempts'] ) ) );
+		$recovery['initial_delay_ms'] = max( 0, min( 60000, absint( $recovery['initial_delay_ms'] ) ) );
+		$recovery['backoff_step_ms']  = max( 0, min( 60000, absint( $recovery['backoff_step_ms'] ) ) );
+		$recovery['max_delay_ms']     = max( 0, min( 60000, absint( $recovery['max_delay_ms'] ) ) );
+
+		return $recovery;
+	}
+
 	public static function stripe_localize_data() {
 		global $wp;
 
@@ -662,11 +831,22 @@ abstract class Helper {
 		$data = array_merge(
 			self::localize_global_data(),
 			array(
+
 				'is_product_page'         => is_product() || wc_post_content_has_shortcode( 'product_page' ),
 				'is_cart'                 => is_cart(),
 				'admin_ajax'              => admin_url( 'admin-ajax.php' ),
 				'fkwcs_nonce'             => wp_create_nonce( 'fkwcs_nonce' ),
 				'shipping_required'       => ! empty( $wp->query_vars['order-pay'] ) ? 'no' : wc_bool_to_string( $need_shipping ),
+				/**
+				 * When the wallet does NOT collect the shipping address ("Disable Shipping Info in
+				 * Payment Wallet"), the customer fills the shipping section on the checkout form, so
+				 * the wallet's billing details are NOT copied into the shipping fields by default —
+				 * required-but-empty shipping fields should surface validation errors instead of
+				 * silently receiving billing data. Merchants can opt in to copying the wallet's
+				 * billing details (name, address, phone) into empty shipping fields by returning
+				 * true to this filter.
+				 */
+				'express_copy_billing_to_shipping' => wc_bool_to_string( apply_filters( 'fkwcs_express_copy_billing_to_shipping', false ) ),
 				'is_ssl'                  => is_ssl(),
 				'mode'                    => get_option( 'fkwcs_mode', 'test' ),
 				'js_nonce'                => wp_create_nonce( 'fkwcs_js_nonce' ),
@@ -735,6 +915,8 @@ abstract class Helper {
 				),
 			),
 			'shipping_error'              => __( 'Shipping address is invalid or no shipping methods are available. Please update your address.', 'funnelkit-stripe-woo-payment-gateway' ),
+			'stripe_js_url'               => apply_filters( 'fkwcs_stripe_js_url', 'https://js.stripe.com/v3/' ),
+			'stripe_sdk_init_recovery'    => self::get_stripe_sdk_init_recovery_localized(),
 			)
 		);
 		return $data;
@@ -805,24 +987,54 @@ abstract class Helper {
 	 *
 	 * @param int    $user_id id of current user placing.
 	 * @param object $payment_method payment method object.
+	 * @param string $gateway_id gateway id to assign the token to.
+	 * @param bool   $is_live whether the payment method was created in live mode.
 	 *
 	 * @return object token object.
 	 */
 	public static function create_payment_token_for_user( $user_id, $payment_method, $gateway_id, $is_live ) {
 		global $wpdb;
-		$token_exists = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_payment_tokens where token =%s", $payment_method->id ), ARRAY_A );
+
+		// Scope the lookup to the current user: a token for the same Stripe payment method
+		// id owned by another user (or a guest row) must not be re-keyed to this user/gateway.
+		// Same-user tokens left by other gateways (e.g. migrated from another Stripe plugin)
+		// are still matched here and adopted.
+		$token_exists = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_payment_tokens WHERE token = %s AND user_id = %d", $payment_method->id, $user_id ), ARRAY_A ); //phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		if ( ! empty( $token_exists ) ) {
 
-			$token = \WC_Payment_Tokens::get( $token_exists[0]['token_id'] );
-			if ( ! is_null( $token ) ) {
-				self::$token_cache[ $token->get_id() ] = $token;
+			$adopted = null;
+			foreach ( $token_exists as $row ) {
+				$existing = \WC_Payment_Tokens::get( $row['token_id'] );
 
-				$token->set_gateway_id( $gateway_id );
-				$token->update_meta_data( 'mode', ( $is_live ) ? 'live' : 'test' );
-				$token->save_meta_data();
-				$token->save();
+				// Skip orphaned/unloadable rows so a corrupt first row does not force a duplicate to be created.
+				if ( is_null( $existing ) ) {
+					continue;
+				}
 
-				return $token;
+				if ( is_null( $adopted ) ) {
+					// Adopt the first valid token and mark it as ours.
+					$adopted = $existing;
+					$adopted->set_gateway_id( $gateway_id );
+					$adopted->set_user_id( $user_id );
+					$adopted->update_meta_data( 'mode', ( $is_live ) ? 'live' : 'test' );
+					$adopted->save_meta_data();
+					$adopted->save();
+					self::$token_cache[ $adopted->get_id() ] = $adopted;
+				} else {
+					// Remove stale duplicate rows for the same user + token. Delete directly
+					// via $wpdb instead of WC_Payment_Tokens::delete() so the
+					// woocommerce_payment_token_deleted hook (detach_customer_token) does not
+					// fire - it would detach the shared Stripe payment method that the adopted
+					// token still points to, since duplicates share the same token id.
+					$duplicate_id = $existing->get_id();
+					unset( self::$token_cache[ $duplicate_id ] );
+					$wpdb->delete( "{$wpdb->prefix}woocommerce_payment_tokenmeta", array( 'payment_token_id' => $duplicate_id ), array( '%d' ) ); //phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+					$wpdb->delete( "{$wpdb->prefix}woocommerce_payment_tokens", array( 'token_id' => $duplicate_id ), array( '%d' ) ); //phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				}
+			}
+
+			if ( ! is_null( $adopted ) ) {
+				return $adopted;
 			}
 		}
 
@@ -949,8 +1161,9 @@ abstract class Helper {
 
 	public static function localize_global_data() {
 		$data = array();
+
 		if ( is_wc_endpoint_url( 'order-pay' ) ) {
-			$order_id = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( wp_unslash( $_GET['key'] ) ) ) : 0; // @codingStandardsIgnoreLine
+			$order_id = isset( $_GET['key'] ) ? wc_get_order_id_by_order_key( sanitize_text_field( $_GET['key'] ) ) : 0; // @codingStandardsIgnoreLine
 			$order    = wc_get_order( $order_id );
 
 			// Return early if order is not valid
@@ -963,8 +1176,6 @@ abstract class Helper {
 				'currency' => strtolower( get_woocommerce_currency() ),
 				'amount'   => self::get_formatted_amount( $fkwcs_order_total ),
 			);
-			$data['order_key']           = $order->get_order_key();
-			$data['order_id']            = $order->get_id();
 
 			return $data;
 		}

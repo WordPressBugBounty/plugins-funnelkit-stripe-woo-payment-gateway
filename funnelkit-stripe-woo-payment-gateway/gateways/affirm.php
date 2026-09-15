@@ -1,6 +1,11 @@
 <?php
 
 namespace FKWCS\Gateway\Stripe;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 #[\AllowDynamicProperties]
 class Affirm extends LocalGateway {
 	/**
@@ -8,13 +13,13 @@ class Affirm extends LocalGateway {
 	 *
 	 * @var string
 	 */
-	public $id = 'fkwcs_stripe_affirm';
-	public $payment_method_types = 'affirm';
-	protected $payment_element = true;
+	public $id                          = 'fkwcs_stripe_affirm';
+	public $payment_method_types        = 'affirm';
+	protected $payment_element          = true;
 	protected $paylater_message_service = true;
 
-	protected $min_amount = 5000;
-	public $max_amount = 300000;
+	protected $min_amount    = 5000;
+	public $max_amount       = 300000;
 	private static $instance = null;
 
 	/**
@@ -27,7 +32,6 @@ class Affirm extends LocalGateway {
 		}
 
 		return self::$instance;
-
 	}
 
 	/**
@@ -45,58 +49,56 @@ class Affirm extends LocalGateway {
 		$this->description    = $this->get_option( 'description' );
 		$this->enabled        = $this->get_option( 'enabled' );
 		$this->capture_method = $this->get_option( 'charge_type' );
-
 	}
 
 	protected function override_defaults() {
-		$this->supported_currency          = [ 'USD', 'CAD' ];
-		$this->specific_country            = [ 'US', 'CA' ];
+		$this->supported_currency          = array( 'USD', 'CAD' );
+		$this->specific_country            = array( 'US', 'CA' );
 		$this->country_type                = 'specific';
-		$this->except_country              = [];
+		$this->except_country              = array();
 		$this->setting_enable_label        = __( 'Enable Affirm Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = __( 'Affirm - Pay Over Time', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_description_default = __( 'After clicking "Complete order", you will be redirected to Affirm <br> - Pay Over Time to complete your purchase securely', 'funnelkit-stripe-woo-payment-gateway' );
 	}
 
-
 	public function init_form_fields() {
 
-		$settings                = [
-			'enabled'          => [
+		$settings = array(
+			'enabled'          => array(
 				'label'   => ' ',
 				'type'    => 'checkbox',
 				'title'   => $this->setting_enable_label,
 				'default' => 'no',
-			],
-			'title'            => [
+			),
+			'title'            => array(
 				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'text',
 				'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_title_default,
 				'desc_tip'    => true,
-			],
-			'description'      => [
+			),
+			'description'      => array(
 				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'textarea',
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_description_default,
 				'desc_tip'    => true,
-			],
-			'charge_type'      => [
+			),
+			'charge_type'      => array(
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
-				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),
+				'description' => $this->get_charge_type_recommendation_text(),
 				'default'     => 'automatic',
-				'options'     => [
+				'options'     => array(
 					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
 					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
-				],
+				),
 				'desc_tip'    => false,
-			],
-			'paylater_section' => [
+			),
+			'paylater_section' => array(
 				'title'       => __( 'Affirm Message Location', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => [ 'cart' ],
+				'default'     => array( 'cart' ),
 				'type'        => 'multiselect',
 				'class'       => 'wc-enhanced-select',
 				'css'         => 'min-width: 350px;',
@@ -108,16 +110,16 @@ class Affirm extends LocalGateway {
 					'cart'    => __( 'Cart Page', 'funnelkit-stripe-woo-payment-gateway' ),
 					'shop'    => __( 'Shop/Categories Page', 'funnelkit-stripe-woo-payment-gateway' ),
 				),
-			],
-		];
-		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', [] );
+			),
+		);
+		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', array() );
 
 		$admin_country = ! empty( $stripe_account_settings ) ? strtoupper( $stripe_account_settings['country'] ) : wc_format_country_state_string( get_option( 'woocommerce_default_country', '' ) )['country'];
 
 		if ( in_array( $admin_country, $this->specific_country, true ) ) {
-			$this->specific_country = [ $admin_country ];
+			$this->specific_country = array( $admin_country );
 		} else {
-			$this->specific_country = [];
+			$this->specific_country = array();
 		}
 
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );

@@ -2,6 +2,10 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use WC_Payment_Token;
 #[\AllowDynamicProperties]
 /**
@@ -10,7 +14,6 @@ use WC_Payment_Token;
  * Representation of a payment token for SEPA.
  *
  * @class Token
- *
  */
 class Token extends WC_Payment_Token {
 
@@ -26,15 +29,13 @@ class Token extends WC_Payment_Token {
 	 *
 	 * @var array
 	 */
-	protected $extra_data = [
+	protected $extra_data = array(
 		'last4'               => '',
 		'payment_method_type' => 'sepa_debit',
-	];
-
+	);
 
 	/**
 	 * Hook prefix
-	 *
 	 *
 	 * @return string
 	 */
@@ -42,10 +43,8 @@ class Token extends WC_Payment_Token {
 		return 'fkwcs_payment_token_sepa_get_';
 	}
 
-
 	/**
 	 * Get type to display to user.
-	 *
 	 *
 	 * @param string $deprecated Deprecated.
 	 *
@@ -62,7 +61,6 @@ class Token extends WC_Payment_Token {
 	 *
 	 * These fields are required by all SEPA payment tokens:
 	 * last4  - string Last 4 digits of the iBAN.
-	 *
 	 *
 	 * @return boolean True if the passed data is valid
 	 */
@@ -81,7 +79,6 @@ class Token extends WC_Payment_Token {
 	/**
 	 * Returns the last four digits.
 	 *
-	 *
 	 * @param string $context What the value is for. Valid values are view and edit.
 	 *
 	 * @return string Last 4 digits
@@ -92,7 +89,6 @@ class Token extends WC_Payment_Token {
 
 	/**
 	 * Set the last four digits.
-	 *
 	 *
 	 * @param string $last4 Last 4 digits card number.
 	 *
@@ -105,7 +101,6 @@ class Token extends WC_Payment_Token {
 	/**
 	 * Set Stripe payment method type.
 	 *
-	 *
 	 * @param string $type Payment method type.
 	 *
 	 * @return void
@@ -116,7 +111,6 @@ class Token extends WC_Payment_Token {
 
 	/**
 	 * Returns Stripe payment method type.
-	 *
 	 *
 	 * @param string $context What the value is for. Valid values are view and edit.
 	 *

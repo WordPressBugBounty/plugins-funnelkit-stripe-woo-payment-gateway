@@ -1,6 +1,11 @@
 <?php
 
 namespace FKWCS\Gateway\Stripe;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 #[\AllowDynamicProperties]
 class P24 extends LocalGateway {
 
@@ -9,9 +14,9 @@ class P24 extends LocalGateway {
 	 *
 	 * @var string
 	 */
-	public $id = 'fkwcs_stripe_p24';
+	public $id                   = 'fkwcs_stripe_p24';
 	public $payment_method_types = 'p24';
-	protected $payment_element = true;
+	protected $payment_element   = true;
 
 	public $supports_success_webhook = true;
 
@@ -28,17 +33,15 @@ class P24 extends LocalGateway {
 		$this->title                       = $this->get_option( 'title' );
 		$this->description                 = $this->get_option( 'description' );
 		$this->enabled                     = $this->get_option( 'enabled' );
-		$this->supported_currency          = [ 'EUR', 'PLN' ];
-		$this->specific_country            = [ 'PL' ];
+		$this->supported_currency          = array( 'EUR', 'PLN' );
+		$this->specific_country            = array( 'PL' );
 		$this->setting_enable_label        = __( 'Enable Stripe Przelewy 24 (P24) Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = __( 'Stripe Przelewy 24 (P24)', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_description_default = __( 'Pay with Przelewy 24 (P24)', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->init_form_fields();
 		$this->init_settings();
-		add_action( 'fkwcs_webhook_event_intent_succeeded', [ $this, 'handle_webhook_intent_succeeded' ], 10, 2 );
+		add_action( 'fkwcs_webhook_event_intent_succeeded', array( $this, 'handle_webhook_intent_succeeded' ), 10, 2 );
 		add_action( 'fk_fb_every_4_minute', array( $this, 'delay_process_intent_success' ), 20 );
-
-
 	}
 
 	/**
@@ -46,7 +49,7 @@ class P24 extends LocalGateway {
 	 * Fires action hook and redirects to return URL without marking order as succeeded
 	 *
 	 * @param object $intent The payment intent object
-	 * @param int $order_id The order ID
+	 * @param int    $order_id The order ID
 	 *
 	 * @return string The redirect URL
 	 */
@@ -71,13 +74,12 @@ class P24 extends LocalGateway {
 
 		$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 		try {
-			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( wp_unslash( $_GET['order'] ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$order    = wc_get_order( $order_id );
 
-			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( $_GET['order_key'] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( wp_unslash( $_GET['order_key'] ) ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				throw new \Exception( __( 'Invalid Order Key.', 'funnelkit-stripe-woo-payment-gateway' ) );
 			}
-
 		} catch ( \Exception $e ) {
 			/* translators: Error message text */
 			$message = sprintf( __( 'Payment verification error: %s', 'funnelkit-stripe-woo-payment-gateway' ), $e->getMessage() );
@@ -92,12 +94,12 @@ class P24 extends LocalGateway {
 				throw new \Exception( __( 'Payment intent not found.', 'funnelkit-stripe-woo-payment-gateway' ) );
 			}
 
-			if ( ! $order->has_status( apply_filters( 'fkwcs_stripe_allowed_payment_processing_statuses', [ 'pending', 'failed' ], $order ) ) ) {
+			if ( ! $order->has_status( apply_filters( 'fkwcs_stripe_allowed_payment_processing_statuses', array( 'pending', 'failed' ), $order ) ) ) {
 				$get_current_offer = WFOCU_Core()->data->get_current_offer();
 
 				if ( ! empty( $get_current_offer ) && 0 === did_action( 'wfocu_front_init_funnel_hooks' ) ) {
 					$get_upsell_url = WFOCU_Core()->public->get_the_upsell_url( $get_current_offer );
-					wp_redirect( $get_upsell_url );
+					wp_safe_redirect( $get_upsell_url );
 					exit();
 				}
 
@@ -112,7 +114,7 @@ class P24 extends LocalGateway {
 			// Handle requires_action status specifically for P24
 			if ( 'requires_action' === $intent->status ) {
 				$redirect_url = $this->handle_requires_action_status( $intent, $order_id );
-				Helper::log( "P24 requires_action - Redirecting to: " . $redirect_url );
+				Helper::log( 'P24 requires_action - Redirecting to: ' . $redirect_url );
 				remove_all_actions( 'wp_redirect' );
 				wp_safe_redirect( $redirect_url );
 				exit;
@@ -128,10 +130,9 @@ class P24 extends LocalGateway {
 				if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 					WC()->cart->empty_cart();
 				}
-
-			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
+			} elseif ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
-			} else if ( 'processing' === $intent->status ) {
+			} elseif ( 'processing' === $intent->status ) {
 
 				$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
 				$redirect_url = $this->get_return_url( $order );
@@ -139,7 +140,7 @@ class P24 extends LocalGateway {
 				$redirect_url = wc_get_checkout_url();
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-					$redirect_url = get_the_permalink( wc_clean( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					$redirect_url = get_the_permalink( wc_clean( wp_unslash( $_GET['wfacp_id'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				}
 
 				/**
@@ -154,7 +155,7 @@ class P24 extends LocalGateway {
 				$status_message = isset( $intent->last_payment_error ) /* translators: 1) The error message that was received from Stripe. */ ? sprintf( __( 'Stripe SCA authentication failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->last_payment_error->message ) : __( 'Stripe SCA authentication failed.', 'funnelkit-stripe-woo-payment-gateway' );
 				$this->mark_order_failed( $order, $status_message );
 			}
-			Helper::log( "Redirecting to :" . $redirect_url );
+			Helper::log( 'Redirecting to :' . $redirect_url );
 		} catch ( \Exception $e ) {
 			$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 			wc_add_notice( esc_html( $e->getMessage() ), 'error' );
@@ -205,8 +206,6 @@ class P24 extends LocalGateway {
 
 			}
 		}
-
-
 	}
 
 	public function delay_process_intent_success() {
@@ -238,9 +237,12 @@ class P24 extends LocalGateway {
 		// @codingStandardsIgnoreEnd
 		if ( ! empty( $query_results ) && is_array( $query_results ) ) {
 
-			$get_orders = array_map( function ( $query_instance ) {
-				return wc_get_order( $query_instance->ID );
-			}, $query_results );
+			$get_orders = array_map(
+				function ( $query_instance ) {
+					return wc_get_order( $query_instance->ID );
+				},
+				$query_results
+			);
 
 			$i = 0;
 			if ( ! empty( $get_orders ) ) {
@@ -254,13 +256,11 @@ class P24 extends LocalGateway {
 
 					try {
 
-
 						/**
 						 * Delete the metadata straight way to avoid any scenario of processing the order more than once
 						 */
 						$order->delete_meta_data( '_fkwcs_webhook_paid' );
 						$order->save_meta_data();
-
 
 						if ( $order->get_payment_method() !== $this->id ) {
 							return;
@@ -282,28 +282,27 @@ class P24 extends LocalGateway {
 						}
 						$intent = $gateway->get_intent_from_order( $order );
 						if ( false === $intent ) {
-							Helper::log( " Intent Not Found  - " . $order->get_id() );
+							Helper::log( ' Intent Not Found  - ' . $order->get_id() );
 
 							continue;
 						}
 						if ( method_exists( $gateway, 'handle_intent_success' ) ) {
-							Helper::log( " Upsell schedule Processing order  - " . $order->get_id() );
+							Helper::log( ' Upsell schedule Processing order  - ' . $order->get_id() );
 
 							$gateway->handle_intent_success( $intent, $order );
 						}
-					} catch ( \Error|\Exception $e ) {
+					} catch ( \Error | \Exception $e ) {
 						if ( isset( $order ) && $order instanceof \WC_Order ) {
 							$order->delete_meta_data( '_fkwcs_webhook_paid' );
 							$order->save_meta_data();
 						}
-						Helper::log( " Upsell schedule Error occurred - " . $e->getMessage() );
+						Helper::log( ' Upsell schedule Error occurred - ' . $e->getMessage() );
 					}
 
 					unset( $get_orders[ $i ] );
-					$i ++;
+					++$i;
 				} while ( ! ( \WFOCU_Common::time_exceeded() || \WFOCU_Common::memory_exceeded() ) && ! empty( $get_orders ) );
 			}
 		}
 	}
-
 }

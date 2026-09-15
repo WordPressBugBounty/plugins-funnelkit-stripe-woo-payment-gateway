@@ -2,10 +2,26 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 class Multibanco extends LocalGateway {
-	public $id = 'fkwcs_stripe_multibanco';
+	public $id                   = 'fkwcs_stripe_multibanco';
 	public $payment_method_types = 'multibanco';
-	protected $payment_element = true;
+	protected $payment_element   = true;
+
+	protected function init() {
+		$this->method_title       = __( 'Stripe Multibanco Gateway', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->method_description = __( 'Accepts payments via Multibanco. The gateway should be enabled in your Stripe Account. Log into your Stripe account to review the <a href="https://dashboard.stripe.com/account/payments/settings" target="_blank">available gateways</a> <br/>Supported Currency: <strong>EUR</strong>', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->subtitle           = __( 'Multibanco is a Portuguese online banking payment method that enables your customers to make secure online payments through their bank.', 'funnelkit-stripe-woo-payment-gateway' );
+		$this->title              = $this->get_option( 'title' );
+		$this->description        = $this->get_option( 'description' );
+		$this->enabled            = $this->get_option( 'enabled' );
+		$this->init_form_fields();
+		$this->init_settings();
+		add_filter( 'fkwcs_localized_data', array( $this, 'localize_element_data_multibanco' ), 999 );
+	}
 
 	/**
 	 * Initialize the Multibanco gateway settings and configuration.
@@ -16,12 +32,9 @@ class Multibanco extends LocalGateway {
 	 * @return void
 	 * @since 1.0.0
 	 */
-	protected function init() {
-		$this->method_title       = __( 'Stripe Multibanco Gateway', 'funnelkit-stripe-woo-payment-gateway' );
-		$this->method_description = __( 'Accepts payments via Multibanco. The gateway should be enabled in your Stripe Account. Log into your Stripe account to review the <a href="https://dashboard.stripe.com/account/payments/settings" target="_blank">available gateways</a> <br/>Supported Currency: <strong>EUR</strong>', 'funnelkit-stripe-woo-payment-gateway' );
-
-		$this->supported_currency          = [ 'EUR' ];
-		$this->specific_country            = [
+	protected function override_defaults() {
+		$this->supported_currency          = array( 'EUR' );
+		$this->specific_country            = array(
 			'AT', // Austria
 			'BE', // Belgium
 			'BG', // Bulgaria
@@ -55,17 +68,10 @@ class Multibanco extends LocalGateway {
 			'CH', // Switzerland
 			'GB', // United Kingdom
 			'US', // United States
-		];
+		);
 		$this->setting_enable_label        = __( 'Enable Stripe Multibanco Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = __( 'Stripe Multibanco', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_description_default = __( 'Pay with Multibanco', 'funnelkit-stripe-woo-payment-gateway' );
-		$this->title                       = $this->get_option( 'title' );
-		$this->description                 = $this->get_option( 'description' );
-		$this->enabled                     = $this->get_option( 'enabled' );
-		$this->init_form_fields();
-		$this->init_settings();
-		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
-
 	}
 
 	/**
@@ -80,29 +86,29 @@ class Multibanco extends LocalGateway {
 	 */
 	public function init_form_fields() {
 
-		$settings = [
-			'enabled'     => [
+		$settings = array(
+			'enabled'     => array(
 				'label'   => ' ',
 				'type'    => 'checkbox',
 				'title'   => $this->setting_enable_label,
 				'default' => 'no',
-			],
-			'title'       => [
+			),
+			'title'       => array(
 				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'text',
 				'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_title_default,
 				'desc_tip'    => true,
-			],
-			'description' => [
+			),
+			'description' => array(
 				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'textarea',
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_description_default,
 				'desc_tip'    => true,
-			]
-		];
+			),
+		);
 
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
 
@@ -135,7 +141,7 @@ class Multibanco extends LocalGateway {
 			return false;
 		}
 
-		if ( ! in_array( get_woocommerce_currency(), $this->supported_currency ) ) {
+		if ( ! in_array( get_woocommerce_currency(), $this->supported_currency, true ) ) {
 			return false;
 		}
 
@@ -153,12 +159,11 @@ class Multibanco extends LocalGateway {
 	 * @return array Modified data array with Multibanco payment element data
 	 * @since 1.0.0
 	 */
-	public function localize_element_data( $data ) {
+	public function localize_element_data_multibanco( $data ) {
 		if ( ! $this->is_available() ) {
 			return $data;
 		}
 		$data['fkwcs_payment_data_multibanco'] = $this->payment_element_data();
-
 
 		return $data;
 	}
@@ -176,25 +181,32 @@ class Multibanco extends LocalGateway {
 	public function payment_element_data() {
 
 		$data    = $this->get_payment_element_options();
-		$methods = [ 'multibanco' ];
-
+		$methods = array( 'multibanco' );
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			'theme' => 'stripe'
+			'theme' => 'stripe',
 		);
 
-		$options            = [
-			'fields' => [
-				'billingDetails' => 'never'
-			]
-		];
-		$options['wallets'] = [ 'applePay' => 'never', 'googlePay' => 'never' ];
+		$options            = array(
+			'fields' => array(
+				'billingDetails' => 'never',
+			),
+		);
+		$options['wallets'] = array(
+			'applePay'  => 'never',
+			'googlePay' => 'never',
+		);
 
-		return apply_filters( 'fkwcs_stripe_payment_element_data_multibanco', [ 'element_data' => $data, 'element_options' => $options ], $this );
-
+		return apply_filters(
+			'fkwcs_stripe_payment_element_data_multibanco',
+			array(
+				'element_data'    => $data,
+				'element_options' => $options,
+			),
+			$this
+		);
 	}
-
 
 	/**
 	 * Verify payment intent and redirect to appropriate page based on intent status.
@@ -213,14 +225,13 @@ class Multibanco extends LocalGateway {
 
 		$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 		try {
-			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( wp_unslash( $_GET['order'] ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$order    = wc_get_order( $order_id );
 
-			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( $_GET['order_key'] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( wp_unslash( $_GET['order_key'] ) ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				throw new \Exception( __( 'Invalid Order Key.', 'funnelkit-stripe-woo-payment-gateway' ) );
 
 			}
-
 		} catch ( \Exception $e ) {
 			/* translators: Error message text */
 			$message = sprintf( __( 'Payment verification error: %s', 'funnelkit-stripe-woo-payment-gateway' ), $e->getMessage() );
@@ -235,7 +246,7 @@ class Multibanco extends LocalGateway {
 				throw new \Exception( 'Intent Not Found' );
 			}
 
-			if ( ! $order->has_status( apply_filters( 'fkwcs_stripe_allowed_payment_processing_statuses', [ 'pending', 'failed' ], $order ) ) ) {
+			if ( ! $order->has_status( apply_filters( 'fkwcs_stripe_allowed_payment_processing_statuses', array( 'pending', 'failed' ), $order ) ) ) {
 				/**
 				 * bail out if the status is not pending or failed
 				 */
@@ -244,32 +255,28 @@ class Multibanco extends LocalGateway {
 				exit;
 			}
 
-
 			if ( 'setup_intent' === $intent->object && 'succeeded' === $intent->status ) {
 				$order->payment_complete();
 				do_action( 'fkwcs_' . $this->id . '_before_redirect', $order_id );
 				$redirect_url = $this->get_return_url( $order );
 
-
 				// Remove cart.
 				if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 					WC()->cart->empty_cart();
 				}
-
-			} else if ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
+			} elseif ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
-			} else if ( 'processing' === $intent->status ) {
+			} elseif ( 'processing' === $intent->status ) {
 
 				$order->update_status( apply_filters( 'fkwcs_stripe_intent_processing_order_status', 'on-hold', $intent, $order, $this ) );
 				$redirect_url = $this->get_return_url( $order );
-			} else if ( 'requires_payment_method' === $intent->status ) {
-
+			} elseif ( 'requires_payment_method' === $intent->status ) {
 
 				$redirect_url = wc_get_checkout_url();
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 
 				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-					$redirect_url = get_the_permalink( wc_clean( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					$redirect_url = get_the_permalink( wc_clean( wp_unslash( $_GET['wfacp_id'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				}
 				/**
 				 * Handle intent with no payment method here, we mark the order as failed and show users a notice
@@ -284,7 +291,7 @@ class Multibanco extends LocalGateway {
 				$status_message = isset( $intent->last_payment_error ) /* translators: 1) The error message that was received from Stripe. */ ? sprintf( __( 'Stripe SCA authentication failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->last_payment_error->message ) : __( 'Stripe SCA authentication failed.', 'funnelkit-stripe-woo-payment-gateway' );
 				$this->mark_order_failed( $order, $status_message );
 
-			} else if ( 'requires_action' === $intent->status ) {
+			} elseif ( 'requires_action' === $intent->status ) {
 
 				$order_stock_reduced = Helper::get_meta( $order, '_order_stock_reduced' );
 
@@ -295,7 +302,7 @@ class Multibanco extends LocalGateway {
 				$order->set_transaction_id( $intent->id );
 				$others_info = __( 'Payment will be completed once payment_intent.succeeded webhook received from Stripe.', 'funnelkit-stripe-woo-payment-gateway' );
 
-				/** translators: transaction id, other info */
+				/* translators: transaction id, other info */
 				$order->update_status( 'on-hold', sprintf( __( 'Stripe charge awaiting payment: %1$s. %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id, $others_info ) );
 				$is_order_pay = $order->get_meta( '_is_order_pay_request' ) === 'yes';
 
@@ -303,13 +310,13 @@ class Multibanco extends LocalGateway {
 					do_action( 'fkwcs_' . $this->id . '_before_redirect', $order_id );
 				}
 				$redirect_to = $this->get_return_url( $order );
-				Helper::log( "Redirecting to :" . $redirect_to );
+				Helper::log( 'Redirecting to :' . $redirect_to );
 
 				wp_safe_redirect( $redirect_to );
 				exit;
 
 			}
-			Helper::log( "Redirecting to :" . $redirect_url );
+			Helper::log( 'Redirecting to :' . $redirect_url );
 		} catch ( \Exception $e ) {
 			$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
 			wc_add_notice( esc_html( $e->getMessage() ), 'error' );

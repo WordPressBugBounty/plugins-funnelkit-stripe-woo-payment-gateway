@@ -2,6 +2,10 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use Stripe\Exception\ApiErrorException;
 use WP_REST_Server;
 use WP_REST_Request;
@@ -9,7 +13,7 @@ use WP_REST_Request;
 class Onboard {
 	private static $instance = null;
 	public $woocommerce_slug = 'woocommerce/woocommerce.php';
-	protected $namespace = 'fkwcs-onboard';
+	protected $namespace     = 'fkwcs-onboard';
 	public $admin_controller;
 
 	public static function get_instance() {
@@ -27,15 +31,15 @@ class Onboard {
 		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		add_action( 'admin_menu', [ $this, 'admin_menus' ] );
-		add_action( 'admin_init', [ $this, 'setup_wizard' ] );
-		add_action( 'admin_notices', [ $this, 'show_onboarding_notice' ] );
+		add_action( 'admin_menu', array( $this, 'admin_menus' ) );
+		add_action( 'admin_init', array( $this, 'setup_wizard' ) );
+		add_action( 'admin_notices', array( $this, 'show_onboarding_notice' ) );
 
-		add_filter( 'fkwcs_stripe_connect_redirect_url', [ $this, 'redirect_to_onboarding' ], 5 );
-		add_action( 'fkwcs_after_connect_with_stripe', [ $this, 'update_connect_with_stripe_status' ] );
+		add_filter( 'fkwcs_stripe_connect_redirect_url', array( $this, 'redirect_to_onboarding' ), 5 );
+		add_action( 'fkwcs_after_connect_with_stripe', array( $this, 'update_connect_with_stripe_status' ) );
 
 		add_action( 'admin_print_styles', array( $this, 'load_react_app' ) );
-		add_action( 'admin_init', [ $this, 'hide_notices' ] );
+		add_action( 'admin_init', array( $this, 'hide_notices' ) );
 	}
 
 	public function admin_menus() {
@@ -61,40 +65,45 @@ class Onboard {
 	public function setup_wizard_html() {
 		set_current_screen();
 		?>
-        <html <?php language_attributes(); ?>>
-        <head>
-            <meta name="viewport" content="width=device-width"/>
-            <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-            <title><?php esc_html_e( 'Stripe Payment Gateway for WooCommerce - Onboarding', 'funnelkit-stripe-woo-payment-gateway' ); ?></title>
+		<html <?php language_attributes(); ?>>
+		<head>
+			<meta name="viewport" content="width=device-width"/>
+			<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+			<title><?php esc_html_e( 'Stripe Payment Gateway for WooCommerce - Onboarding', 'funnelkit-stripe-woo-payment-gateway' ); ?></title>
 			<?php
-			wp_enqueue_emoji_styles();
-			wp_enqueue_admin_bar_header_styles();
+			if ( function_exists( 'wp_enqueue_emoji_styles' ) ) {
+				wp_enqueue_emoji_styles();
+			}
+			if ( function_exists( 'wp_enqueue_admin_bar_header_styles' ) ) {
+				wp_enqueue_admin_bar_header_styles();
+			}
 			// Print admin scripts
 			do_action( 'admin_print_styles' );
 			?>
-			<?php // Print Admin Head
+			<?php
+			// Print Admin Head
 			do_action( 'admin_head' );
 			?>
-        </head>
-        <body class="fkwcs-setup wp-core-ui">
-        <div id="bwfsg-page" class="bwfsg-page"></div>
-        </body>
+		</head>
+		<body class="fkwcs-setup wp-core-ui">
+		<div id="bwfsg-page" class="bwfsg-page"></div>
+		</body>
 		<?php
 		// Print JS Scripts in enqueue styles
-		wp_print_scripts( [ 'bwfsg-app' ] );
+		wp_print_scripts( array( 'bwfsg-app' ) );
 		?>
-        </html>
+		</html>
 		<?php
 	}
 
 	public function show_onboarding_notice() {
 		$screen          = get_current_screen();
 		$screen_id       = $screen ? $screen->id : '';
-		$allowed_screens = [
+		$allowed_screens = array(
 			'woocommerce_page_wc-settings',
 			'dashboard',
 			'plugins',
-		];
+		);
 
 		if ( ! in_array( $screen_id, $allowed_screens, true ) || $this->admin_controller->is_stripe_connected() ) {
 			return;
@@ -104,14 +113,14 @@ class Onboard {
 		if ( empty( $status ) ) {
 			$onboarding_url = admin_url( 'index.php?page=fkwcs-onboarding' );
 			?>
-            <div class="notice notice-info wcf-notice">
-                <p><b><?php esc_html_e( 'Thanks for installing Stripe Payment Gateway for WooCommerce!', 'funnelkit-stripe-woo-payment-gateway' ); ?></b></p>
-                <p><?php esc_html_e( 'Go through a quick set up to configure Stripe', 'funnelkit-stripe-woo-payment-gateway' ); ?></p>
-                <p>
-                    <a href="<?php echo esc_url( $onboarding_url ); ?>" class="button button-primary"> <?php esc_html_e( 'Start Onboarding Wizard', 'funnelkit-stripe-woo-payment-gateway' ); ?></a>
-                    <a class="button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'fkwcs-hide-notice', 'install' ), 'fkwcs_hide_notices_nonce', '_fkwcs_notice_nonce' ) ); ?>"><?php esc_html_e( 'Skip Setup', 'funnelkit-stripe-woo-payment-gateway' ); ?></a>
-                </p>
-            </div>
+			<div class="notice notice-info wcf-notice">
+				<p><b><?php esc_html_e( 'Thanks for installing Stripe Payment Gateway for WooCommerce!', 'funnelkit-stripe-woo-payment-gateway' ); ?></b></p>
+				<p><?php esc_html_e( 'Go through a quick set up to configure Stripe', 'funnelkit-stripe-woo-payment-gateway' ); ?></p>
+				<p>
+					<a href="<?php echo esc_url( $onboarding_url ); ?>" class="button button-primary"> <?php esc_html_e( 'Start Onboarding Wizard', 'funnelkit-stripe-woo-payment-gateway' ); ?></a>
+					<a class="button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'fkwcs-hide-notice', 'install' ), 'fkwcs_hide_notices_nonce', '_fkwcs_notice_nonce' ) ); ?>"><?php esc_html_e( 'Skip Setup', 'funnelkit-stripe-woo-payment-gateway' ); ?></a>
+				</p>
+			</div>
 			<?php
 		}
 	}
@@ -136,7 +145,7 @@ class Onboard {
 	public function localize_vars() {
 		$redirect_url = admin_url( 'index.php?page=fkwcs-onboarding' );
 
-		return [
+		return array(
 			'ajax_url'              => admin_url( 'admin-ajax.php' ),
 			'base_url'              => $redirect_url,
 			'assets_url'            => FKWCS_URL . 'wizard/',
@@ -152,8 +161,7 @@ class Onboard {
 			'get_payment_mode'      => $this->get_payment_mode(),
 			'get_webhook_secret'    => $this->get_webhook_secret(),
 			'webhook_url'           => Helper::get_webhook_url(),
-		];
-
+		);
 	}
 
 	public function redirect_to_onboarding() {
@@ -186,85 +194,97 @@ class Onboard {
 		} else {
 			return apply_filters( 'fkwcs_webhook_secret', get_option( 'fkwcs_test_webhook_secret' ) );
 		}
-
 	}
 
 	public function register_routes() {
 
 		// REST Route to list Payment gateways.
-		register_rest_route( $this->namespace, '/list-gateways', array(
+		register_rest_route(
+			$this->namespace,
+			'/list-gateways',
 			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_payment_gateways' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
-			),
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'save_enabled_gateways' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_payment_gateways' ),
+					'permission_callback' => array( $this, 'get_api_permission_check' ),
+				),
+				array(
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'save_enabled_gateways' ),
+					'permission_callback' => array( $this, 'get_api_permission_check' ),
+				),
 			)
-		) );
+		);
 
 		// REST Route for Webhook modal.
-		register_rest_route( $this->namespace, '/webhook-modal', array(
+		register_rest_route(
+			$this->namespace,
+			'/webhook-modal',
 			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_webhook_page' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
-			),
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'save_webhook_page' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_webhook_page' ),
+					'permission_callback' => array( $this, 'get_api_permission_check' ),
+				),
+				array(
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'save_webhook_page' ),
+					'permission_callback' => array( $this, 'get_api_permission_check' ),
+				),
 			)
-		) );
+		);
 
 		// REST Route for Enable Webhook Auto Connect.
-		register_rest_route( $this->namespace, '/enable-webhook', array(
+		register_rest_route(
+			$this->namespace,
+			'/enable-webhook',
 			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'enable_webhook' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
+				array(
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'enable_webhook' ),
+					'permission_callback' => array( $this, 'get_api_permission_check' ),
+				),
 			)
-		) );
-
-		// REST Route for Enable Express Checkout Auto Connect.
-		register_rest_route( $this->namespace, '/enable-checkout', array(
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'save_enable_checkout' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
-			)
-		) );
+		);
 
 		// REST Route for Stripe Failure Page.
-		register_rest_route( $this->namespace, '/error-stripe', array(
+		register_rest_route(
+			$this->namespace,
+			'/error-stripe',
 			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'stripe_failure' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'stripe_failure' ),
+					'permission_callback' => array( $this, 'get_api_permission_check' ),
+				),
 			)
-		) );
-
+		);
 
 		// REST Route to save manual connect.
-		register_rest_route( $this->namespace, '/connect-manual', array(
+		register_rest_route(
+			$this->namespace,
+			'/connect-manual',
 			array(
-				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => array( $this, 'save_connect_manual' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'save_connect_manual' ),
+					'permission_callback' => array( $this, 'get_api_permission_check' ),
+				),
 			)
-		) );
+		);
 
 		// REST Route save API mode.
-		register_rest_route( $this->namespace, '/save-mode', array(
+		register_rest_route(
+			$this->namespace,
+			'/save-mode',
 			array(
-				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => array( $this, 'save_pay_mode' ),
-				'permission_callback' => array( $this, 'get_api_permission_check' ),
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'save_pay_mode' ),
+					'permission_callback' => array( $this, 'get_api_permission_check' ),
+				),
 			)
-		) );
-
+		);
 	}
 
 	// API Callback permission check
@@ -274,7 +294,7 @@ class Onboard {
 
 	// Get List of fkwcs Gateways.
 	public function get_payment_gateways() {
-		$resp                     = [];
+		$resp                     = array();
 		$resp['status']           = false;
 		$resp['msg']              = __( 'Error fetching gateways', 'funnelkit-stripe-woo-payment-gateway' );
 		$resp['data']['gateways'] = new \stdClass();
@@ -290,17 +310,19 @@ class Onboard {
 			$gateway_id = $method->id;
 			if ( 0 === strpos( $gateway_id, 'fkwcs_' ) && ( 'fkwcs_stripe' === $gateway_id || ( method_exists( $method, 'get_supported_currency' ) && ( $method->get_supported_currency() === true || in_array( $currency, $method->get_supported_currency(), true ) ) ) ) ) {
 				$icon                      = str_replace( 'fkwcs_stripe_', '', $gateway_id );
-				$gateway                   = [];
+				$gateway                   = array();
 				$gateway['id']             = $gateway_id;
 				$gateway['enabled']        = wc_string_to_bool( $method->enabled );
 				$gateway['title']          = $method->title;
-				$gateway['description']    = ! empty( $method->subtitle ) ? $method->subtitle : $method->description;
+				$gateway['description']    = $this->trim_gateway_description( ! empty( $method->subtitle ) ? $method->subtitle : $method->description );
 				$gateway['is_recommended'] = in_array( $gateway_id, $recommended_gateways, true ) ? true : false;
 				$gateway['icon']           = FKWCS_URL . "assets/icons/$icon.svg";
 
-				$fkwcs_gateways[] = $gateway;
+				$fkwcs_gateways[ $gateway_id ] = $gateway;
 			}
 		}
+
+		$fkwcs_gateways = $this->sort_gateways_by_navigation( $fkwcs_gateways );
 
 		if ( count( $fkwcs_gateways ) ) {
 			$resp['status']           = true;
@@ -311,9 +333,73 @@ class Onboard {
 		return rest_ensure_response( $resp );
 	}
 
+	/**
+	 * Shortens a gateway description for the onboarding listing.
+	 *
+	 * Strips markup and caps the text at 15 words, further trimming to roughly
+	 * 100 characters on a word boundary when the words are long.
+	 *
+	 * @param string $description raw gateway description or subtitle.
+	 *
+	 * @return string shortened description.
+	 */
+	public function trim_gateway_description( $description ) {
+		$description = trim( wp_strip_all_tags( (string) $description ) );
+
+		if ( '' === $description ) {
+			return '';
+		}
+
+		$max_words = apply_filters( 'fkwcs_onboarding_gateway_description_words', 15 );
+		$max_chars = apply_filters( 'fkwcs_onboarding_gateway_description_chars', 100 );
+
+		$description = wp_trim_words( $description, $max_words, '' );
+
+		if ( mb_strlen( $description ) > $max_chars ) {
+			$description = mb_substr( $description, 0, $max_chars );
+			$last_space  = mb_strrpos( $description, ' ' );
+
+			if ( false !== $last_space ) {
+				$description = mb_substr( $description, 0, $last_space );
+			}
+		}
+
+		return rtrim( $description, " \t\n\r\0\x0B.,;:-" );
+	}
+
+	/**
+	 * Sorts gateways as per the settings navigation order.
+	 *
+	 * Gateways that are not present in the navigation are appended at the end,
+	 * keeping their original order.
+	 *
+	 * @param array $gateways gateway data keyed by gateway id.
+	 *
+	 * @return array re-indexed and ordered gateway data.
+	 */
+	public function sort_gateways_by_navigation( $gateways ) {
+		if ( empty( $gateways ) || ! $this->admin_controller instanceof Admin ) {
+			return array_values( $gateways );
+		}
+
+		if ( empty( $this->admin_controller->navigation ) ) {
+			$this->admin_controller->define_navigation();
+		}
+
+		$sorted = array();
+		foreach ( array_keys( $this->admin_controller->navigation ) as $nav_key ) {
+			if ( isset( $gateways[ $nav_key ] ) ) {
+				$sorted[] = $gateways[ $nav_key ];
+				unset( $gateways[ $nav_key ] );
+			}
+		}
+
+		return array_merge( $sorted, array_values( $gateways ) );
+	}
+
 	// Function to Save Payment Gateways
 	public function save_enabled_gateways( WP_REST_Request $request ) {
-		$resp                     = [];
+		$resp                     = array();
 		$resp['status']           = false;
 		$resp['msg']              = __( 'Error enabling gateways', 'funnelkit-stripe-woo-payment-gateway' );
 		$resp['data']['gateways'] = new \stdClass();
@@ -339,14 +425,11 @@ class Onboard {
 							} else {
 								$response[ $id ] = false;
 							}
-
-
 						}
 					}
 				}
 			}
 		}
-
 
 		if ( count( $response ) ) {
 			$resp['status']           = true;
@@ -360,7 +443,7 @@ class Onboard {
 
 	// Function to Get Webhook Page.
 	public function get_webhook_page() {
-		$resp           = [];
+		$resp           = array();
 		$resp['status'] = true;
 		$resp['msg']    = __( 'Webhook URL rendered', 'funnelkit-stripe-woo-payment-gateway' );
 
@@ -372,10 +455,10 @@ class Onboard {
 
 	// Function to Save Create Webhook Dynamically.
 	public function enable_webhook( WP_REST_Request $request ) {
-		$resp           = [];
+		$resp           = array();
 		$resp['status'] = false;
 		$resp['msg']    = __( 'Error saving', 'funnelkit-stripe-woo-payment-gateway' );
-		$response       = [];
+		$response       = array();
 		$options        = $request->get_body();
 
 		if ( ! empty( $options ) ) {
@@ -389,7 +472,7 @@ class Onboard {
 						$secret_key = get_option( 'fkwcs_secret_key' ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 					}
 
-					$params = [ 'secret_key' => $secret_key ];
+					$params = array( 'secret_key' => $secret_key );
 					try {
 						$response[ $k ] = $this->admin_controller->create_webhook( $params );
 					} catch ( ApiErrorException $e ) {
@@ -405,13 +488,18 @@ class Onboard {
 						return rest_ensure_response( $resp );
 					} else {
 						update_option( 'fkwcs_' . $k . '_webhook_secret', $response[ $k ]['secret'] );
-						update_option( 'fkwcs_' . $k . '_created_webhook', array( 'secret' => $response[ $k ]['secret'], 'id' => $response[ $k ]['id'] ) );
-						update_option('fkwcs_live_webhook_url',Helper::get_webhook_url() );
+						update_option(
+							'fkwcs_' . $k . '_created_webhook',
+							array(
+								'secret' => $response[ $k ]['secret'],
+								'id'     => $response[ $k ]['id'],
+							)
+						);
+						update_option( 'fkwcs_live_webhook_url', Helper::get_webhook_url() );
 
 						$resp['status'] = true;
 						$resp['msg']    = __( 'Webhook Created Successfully', 'funnelkit-stripe-woo-payment-gateway' );
 					}
-
 				}
 			}
 		}
@@ -421,7 +509,7 @@ class Onboard {
 
 	// Function to Save Webhook details manually.
 	public function save_webhook_page( WP_REST_Request $request ) {
-		$resp           = [];
+		$resp           = array();
 		$resp['status'] = false;
 		$resp['msg']    = __( 'Error saving', 'funnelkit-stripe-woo-payment-gateway' );
 
@@ -434,7 +522,7 @@ class Onboard {
 				$fkwcs_mode = $posted_data['webhook']['mode'];
 				$secret     = $posted_data['webhook']['secret'];
 
-				if ( ! empty( $fkwcs_mode ) && in_array( $fkwcs_mode, [ 'test', 'live' ], true ) ) {
+				if ( ! empty( $fkwcs_mode ) && in_array( $fkwcs_mode, array( 'test', 'live' ), true ) ) {
 
 					if ( 'live' === $fkwcs_mode ) {
 						update_option( 'fkwcs_live_webhook_secret', $secret );
@@ -452,34 +540,9 @@ class Onboard {
 		return rest_ensure_response( $resp );
 	}
 
-	// Function to Save Express Checkout Settings.
-	public function save_enable_checkout( WP_REST_Request $request ) {
-		$resp           = [];
-		$resp['status'] = false;
-		$resp['msg']    = __( 'Error saving', 'funnelkit-stripe-woo-payment-gateway' );
-
-		$options = $request->get_body();
-		if ( ! empty( $options ) ) {
-			$posted_data = $this->sanitize_custom( $options );
-
-			if ( is_array( $posted_data ) && ! empty( $posted_data['webhook'] ) ) {
-				$settings_data                                           = get_option( 'woocommerce_fkwcs_stripe_settings' );
-				$settings_data['express_checkout_enabled']               = 'yes';
-				$settings_data['express_checkout_product_page_position'] = 'below';
-
-				update_option( 'woocommerce_fkwcs_stripe_settings', $settings_data );
-				$this->admin_controller->maybe_verify_domain();
-				$resp['status'] = true;
-				$resp['msg']    = __( 'Checkout settings saved', 'funnelkit-stripe-woo-payment-gateway' );
-			}
-		}
-
-		return rest_ensure_response( $resp );
-	}
-
 	// Function to return Stripe Connect URL
 	public function stripe_failure() {
-		$resp                            = [];
+		$resp                            = array();
 		$resp['status']                  = true;
 		$resp['msg']                     = __( 'Stripe Connect URL', 'funnelkit-stripe-woo-payment-gateway' );
 		$resp['data']['connect_url']     = Admin::get_instance()->get_connect_url();
@@ -488,10 +551,9 @@ class Onboard {
 		return rest_ensure_response( $resp );
 	}
 
-
 	// Function to Save Payment Gateways.
 	public function save_connect_manual( WP_REST_Request $request ) {
-		$resp           = [];
+		$resp           = array();
 		$resp['status'] = false;
 		$resp['msg']    = __( 'Error saving', 'funnelkit-stripe-woo-payment-gateway' );
 
@@ -523,7 +585,7 @@ class Onboard {
 
 	// Function to Save Payment Gateways.
 	public function save_pay_mode( WP_REST_Request $request ) {
-		$resp           = [];
+		$resp           = array();
 		$resp['status'] = false;
 		$resp['msg']    = __( 'Error saving', 'funnelkit-stripe-woo-payment-gateway' );
 
@@ -566,7 +628,7 @@ class Onboard {
 					'wp-components',
 					'wp-blocks',
 					'wp-editor',
-					'wp-compose'
+					'wp-compose',
 				),
 				'version'      => FKWCS_VERSION,
 			); //phpcs:ignore
@@ -576,22 +638,25 @@ class Onboard {
 			$deps       = ( isset( $assets['dependencies'] ) ? array_merge( $assets['dependencies'], array( 'jquery' ) ) : array( 'jquery' ) );
 			$version    = $assets['version'];
 
-			$script_deps = array_filter( $deps, function ( $dep ) {
-				return false === strpos( $dep, 'css' );
-			} );
+			$script_deps = array_filter(
+				$deps,
+				function ( $dep ) {
+					return false === strpos( $dep, 'css' );
+				}
+			);
 
 			wp_enqueue_script( $app_name, $assets_dir . $js_path, $script_deps, $version, true );
 
-			$localized_data = [
+			$localized_data = array(
 				'app_data'      => plugin_dir_url( __FILE__ ) . 'app/dist/',
 				'images_dir'    => plugin_dir_url( __FILE__ ) . 'assets/images/',
 				'settings_link' => admin_url( 'admin.php?page=wc-settings&tab=fkwcs_api_settings' ),
-                'fb_url' => class_exists( 'WFFN_Core' ) ? admin_url( 'admin.php?page=bwf' ) : '',
+				'fb_url'        => class_exists( 'WFFN_Core' ) ? admin_url( 'admin.php?page=bwf' ) : '',
 				'connect_link'  => $this->admin_controller->get_connect_url(),
 				'webhook_url'   => Helper::get_webhook_url(),
-			];
+			);
 
-			wp_localize_script( $app_name, 'bwfsg', apply_filters( 'fkwcs_app_localize_vars', $localized_data) );
+			wp_localize_script( $app_name, 'bwfsg', apply_filters( 'fkwcs_app_localize_vars', $localized_data ) );
 
 			wp_enqueue_style( $app_name, $assets_dir . $style_path, array( 'wp-components' ), $version );
 

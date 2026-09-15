@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use FKWCS\Gateway\Stripe\Helper;
 
 if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Pix' ) && class_exists( 'WFOCU_Gateway' ) ) {
@@ -23,10 +27,11 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Pix' ) && class_exists( 'WF
 		}
 
 		public function process_client_payment() {
+			check_ajax_referer( 'wfocu_front_charge', 'nonce' );
 			$get_current_offer      = WFOCU_Core()->data->get( 'current_offer' );
 			$get_current_offer_meta = WFOCU_Core()->offers->get_offer_meta( $get_current_offer );
 			WFOCU_Core()->data->set( '_offer_result', true );
-			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 			/**
 			 * return if found error in the charge request
@@ -60,11 +65,26 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Pix' ) && class_exists( 'WF
 			$data = array(
 				'amount'               => Helper::get_formatted_amount( $offer_package['total'] ),
 				'currency'             => $gateway->get_currency(),
+				/* translators: 1: Site name, 2: Order number, 3: Current offer name */
 				'description'          => sprintf( __( '%1$s - Order %2$s - 1 click upsell: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), $order->get_order_number(), WFOCU_Core()->data->get( 'current_offer' ) ),
 				'payment_method_types' => array( $this->payment_method_type ),
 				'customer'             => $customer_id,
 				'capture_method'       => $gateway->capture_method,
 			);
+
+			// Amount details for upsell must be built from the upsell package only; original order items are not used.
+			$amount_data = $gateway->add_amount_details(
+				$order,
+				$this->payment_method_type,
+				array(
+					'products' => isset( $offer_package['products'] ) ? $offer_package['products'] : array(),
+					'total'    => isset( $offer_package['total'] ) ? $offer_package['total'] : null,
+				),
+				true
+			);
+			if ( ! empty( $amount_data ) ) {
+				$data = array_merge( $data, $amount_data );
+			}
 
 			if ( $order->has_shipping_address() ) {
 				$data['shipping'] = array(
@@ -89,6 +109,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Pix' ) && class_exists( 'WF
 			$response    = $stripe_api->payment_intents( 'create', $args );
 			$intent_data = $gateway->handle_client_response( $response );
 
+			/* translators: 1: Payment method title, 2: Order ID, 3: Order total */
 			Helper::log( sprintf( __( 'Begin processing payment with %1$s for order %2$s for the amount of %3$s', 'funnelkit-stripe-woo-payment-gateway' ), $order->get_payment_method_title(), $order->get_id(), $order->get_total() ) );
 
 			if ( $intent_data ) {
@@ -179,7 +200,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Pix' ) && class_exists( 'WF
 				return;
 			}
 			?>
-			<script src="https://js.stripe.com/v3/?ver=3.0" data-cookieconsent="ignore"></script>
+			<script src="https://js.stripe.com/v3/?ver=3.0" data-cookieconsent="ignore"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- External Stripe script loaded directly //phpcbf:ignore ?>
 
 			<script>
 				(function ($) {

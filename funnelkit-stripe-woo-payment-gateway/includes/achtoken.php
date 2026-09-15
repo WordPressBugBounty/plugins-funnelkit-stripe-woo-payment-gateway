@@ -2,6 +2,10 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use WC_Payment_Token;
 #[\AllowDynamicProperties]
 /**
@@ -10,7 +14,6 @@ use WC_Payment_Token;
  * Representation of a payment token for SEPA.
  *
  * @class Token
- *
  */
 class ACHToken extends WC_Payment_Token {
 
@@ -26,16 +29,14 @@ class ACHToken extends WC_Payment_Token {
 	 *
 	 * @var array
 	 */
-	protected $extra_data = [
+	protected $extra_data = array(
 		'last4'               => '',
-		'bank_name'               => '',
+		'bank_name'           => '',
 		'payment_method_type' => 'us_bank_account',
-	];
-
+	);
 
 	/**
 	 * Hook prefix
-	 *
 	 *
 	 * @return string
 	 */
@@ -43,17 +44,15 @@ class ACHToken extends WC_Payment_Token {
 		return 'fkwcs_payment_token_ach_get_';
 	}
 
-
 	/**
 	 * Get type to display to user.
-	 *
 	 *
 	 * @param string $deprecated Deprecated.
 	 *
 	 * @return string
 	 */
 	public function get_display_name( $deprecated = '' ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
-		$display = sprintf( /* translators: last 4 digits of IBAN account */ __( '%s ending in %s', 'funnelkit-stripe-woo-payment-gateway' ), $this->get_bank_name(), $this->get_last4() );
+		$display = sprintf( /* translators: last 4 digits of IBAN account */ __( '%1$s ending in %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $this->get_bank_name(), $this->get_last4() );
 
 		return $display;
 	}
@@ -63,7 +62,6 @@ class ACHToken extends WC_Payment_Token {
 	 *
 	 * These fields are required by all SEPA payment tokens:
 	 * last4  - string Last 4 digits of the iBAN.
-	 *
 	 *
 	 * @return boolean True if the passed data is valid
 	 */
@@ -82,7 +80,6 @@ class ACHToken extends WC_Payment_Token {
 	/**
 	 * Returns the last four digits.
 	 *
-	 *
 	 * @param string $context What the value is for. Valid values are view and edit.
 	 *
 	 * @return string Last 4 digits
@@ -92,7 +89,6 @@ class ACHToken extends WC_Payment_Token {
 	}
 	/**
 	 * Returns the Bank Name.
-	 *
 	 *
 	 * @param string $context What the value is for. Valid values are view and edit.
 	 *
@@ -105,7 +101,6 @@ class ACHToken extends WC_Payment_Token {
 	/**
 	 * Set the last four digits.
 	 *
-	 *
 	 * @param string $last4 Last 4 digits card number.
 	 *
 	 * @return void
@@ -115,7 +110,6 @@ class ACHToken extends WC_Payment_Token {
 	}
 	/**
 	 * Set the Bank Name.
-	 *
 	 *
 	 * @param string $bank_name Select Bank Name.
 	 *
@@ -128,7 +122,6 @@ class ACHToken extends WC_Payment_Token {
 	/**
 	 * Set Stripe payment method type.
 	 *
-	 *
 	 * @param string $type Payment method type.
 	 *
 	 * @return void
@@ -139,7 +132,6 @@ class ACHToken extends WC_Payment_Token {
 
 	/**
 	 * Returns Stripe payment method type.
-	 *
 	 *
 	 * @param string $context What the value is for. Valid values are view and edit.
 	 *

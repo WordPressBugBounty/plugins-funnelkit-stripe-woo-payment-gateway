@@ -1,11 +1,11 @@
 <?php
 
 namespace FKWCS\Gateway\Stripe\Helpers;
+
 /**
  * Class WC_Stripe_Payment_Request_Button_States
  *
  * Provides a map between WC states and Payment Request API states.
- * The list is based on libaddressinput: https://github.com/google/libaddressinput,
  * which is used by Chromium based browsers in the native Payment Request address dialog.
  *
  * @since 5.1.0
@@ -398,7 +398,6 @@ class WC_Stripe_Payment_Request_Button_States {
 			'JH' => [ 'Jharkhand', 'Jharkhand', NULL ],
 			'KA' => [ 'Karnataka', 'Karnataka', NULL ],
 			'KL' => [ 'Kerala', 'Kerala', NULL ],
-			// 'LA' => __( 'Ladakh', 'woocommerce' ),
 			'MP' => [ 'Madhya Pradesh', 'Madhya Pradesh', NULL ],
 			'MH' => [ 'Maharashtra', 'Maharashtra', NULL ],
 			'MN' => [ 'Manipur', 'Manipur', NULL ],
@@ -775,7 +774,24 @@ class WC_Stripe_Payment_Request_Button_States {
 		// Nepal.
 		'NP' => [],
 		// New Zealand.
-		'NZ' => [],
+		'NZ' => [
+			'NTL' => [ 'NTL', 'Northland', 'Northland' ],
+			'AUK' => [ 'AUK', 'Auckland', 'Auckland' ],
+			'WKO' => [ 'WKO', 'Waikato', 'Waikato' ],
+			'BOP' => [ 'BOP', 'Bay of Plenty', 'Bay of Plenty' ],
+			'TKI' => [ 'TKI', 'Taranaki', 'Taranaki' ],
+			'GIS' => [ 'GIS', 'Gisborne', 'Gisborne' ],
+			'HKB' => [ 'HKB', "Hawke's Bay", "Hawke's Bay" ],
+			'MWT' => [ 'MWT', 'Manawatu-Whanganui', 'Manawatu-Whanganui' ],
+			'WGN' => [ 'WGN', 'Wellington', 'Wellington' ],
+			'NSN' => [ 'NSN', 'Nelson', 'Nelson' ],
+			'MBH' => [ 'MBH', 'Marlborough', 'Marlborough' ],
+			'TAS' => [ 'TAS', 'Tasman', 'Tasman' ],
+			'WTC' => [ 'WTC', 'West Coast', 'West Coast' ],
+			'CAN' => [ 'CAN', 'Canterbury', 'Canterbury' ],
+			'OTA' => [ 'OTA', 'Otago', 'Otago' ],
+			'STL' => [ 'STL', 'Southland', 'Southland' ],
+		],
 		// Peru.
 		'PE' => [
 			'CAL' => [ 'Callao', 'Callao', NULL ],
@@ -1158,5 +1174,152 @@ class WC_Stripe_Payment_Request_Button_States {
 		// Zambia.
 		'ZM' => [],
 	];
+
+	/**
+	 * City/town to region mapping for countries where Apple Pay sends city names instead of region codes.
+	 * Key is lowercase city name, value is WC region code.
+	 */
+	const CITY_TO_REGION = [
+		// New Zealand
+		'NZ' => [
+			// Northland (NTL)
+			'whangarei' => 'NTL', 'kerikeri' => 'NTL', 'kaitaia' => 'NTL', 'dargaville' => 'NTL',
+			'paihia' => 'NTL', 'mangawhai' => 'NTL', 'kawakawa' => 'NTL', 'kaikohe' => 'NTL',
+			'moerewa' => 'NTL', 'hikurangi' => 'NTL', 'ruakaka' => 'NTL', 'russell' => 'NTL',
+			'rawene' => 'NTL', 'maungaturoto' => 'NTL', 'kaiwaka' => 'NTL', 'waipu' => 'NTL',
+
+			// Auckland (AUK)
+			'auckland' => 'AUK', 'manukau' => 'AUK', 'north shore' => 'AUK', 'waitakere' => 'AUK',
+			'papakura' => 'AUK', 'pukekohe' => 'AUK', 'orewa' => 'AUK', 'albany' => 'AUK',
+			'takapuna' => 'AUK', 'henderson' => 'AUK', 'botany downs' => 'AUK', 'howick' => 'AUK',
+			'manurewa' => 'AUK', 'papatoetoe' => 'AUK', 'otahuhu' => 'AUK', 'onehunga' => 'AUK',
+			'ellerslie' => 'AUK', 'remuera' => 'AUK', 'epsom' => 'AUK', 'ponsonby' => 'AUK',
+			'grey lynn' => 'AUK', 'devonport' => 'AUK', 'birkenhead' => 'AUK', 'glenfield' => 'AUK',
+			'browns bay' => 'AUK', 'milford' => 'AUK', 'new lynn' => 'AUK', 'avondale' => 'AUK',
+			'titirangi' => 'AUK', 'glen eden' => 'AUK', 'te atatu' => 'AUK', 'massey' => 'AUK',
+			'kumeu' => 'AUK', 'helensville' => 'AUK', 'warkworth' => 'AUK', 'wellsford' => 'AUK',
+			'pakuranga' => 'AUK', 'flat bush' => 'AUK', 'botany' => 'AUK', 'highland park' => 'AUK',
+			'beachlands' => 'AUK', 'clevedon' => 'AUK', 'drury' => 'AUK', 'takanini' => 'AUK',
+			'karaka' => 'AUK', 'waiuku' => 'AUK', 'mt eden' => 'AUK', 'mount eden' => 'AUK',
+			'mt albert' => 'AUK', 'mount albert' => 'AUK', 'mt roskill' => 'AUK', 'mount roskill' => 'AUK',
+
+			// Waikato (WKO)
+			'hamilton' => 'WKO', 'cambridge' => 'WKO', 'te awamutu' => 'WKO', 'tokoroa' => 'WKO',
+			'matamata' => 'WKO', 'morrinsville' => 'WKO', 'huntly' => 'WKO', 'ngaruawahia' => 'WKO',
+			'thames' => 'WKO', 'paeroa' => 'WKO', 'taupo' => 'WKO', 'te kuiti' => 'WKO',
+			'otorohanga' => 'WKO', 'putaruru' => 'WKO', 'tirau' => 'WKO', 'raglan' => 'WKO',
+			'whangamata' => 'WKO', 'whitianga' => 'WKO', 'coromandel' => 'WKO', 'waihi' => 'WKO',
+			'turangi' => 'WKO', 'te aroha' => 'WKO', 'frankton' => 'WKO', 'tairua' => 'WKO',
+			'pauanui' => 'WKO', 'hahei' => 'WKO', 'hot water beach' => 'WKO',
+
+			// Bay of Plenty (BOP)
+			'tauranga' => 'BOP', 'rotorua' => 'BOP', 'whakatane' => 'BOP', 'mount maunganui' => 'BOP',
+			'mt maunganui' => 'BOP', 'papamoa' => 'BOP', 'te puke' => 'BOP', 'kawerau' => 'BOP',
+			'opotiki' => 'BOP', 'katikati' => 'BOP', 'murupara' => 'BOP', 'edgecumbe' => 'BOP',
+			'maketu' => 'BOP', 'matata' => 'BOP', 'taneatua' => 'BOP', 'ohope' => 'BOP',
+			'bethlehem' => 'BOP', 'greerton' => 'BOP', 'omokoroa' => 'BOP', 'te puna' => 'BOP',
+			'welcome bay' => 'BOP', 'ngongotaha' => 'BOP', 'mourea' => 'BOP', 'thornton' => 'BOP',
+
+			// Gisborne (GIS)
+			'gisborne' => 'GIS', 'te karaka' => 'GIS', 'ruatoria' => 'GIS', 'tolaga bay' => 'GIS',
+			'tokomaru bay' => 'GIS', 'matawai' => 'GIS',
+
+			// Hawke's Bay (HKB)
+			'napier' => 'HKB', 'hastings' => 'HKB', 'havelock north' => 'HKB', 'waipukurau' => 'HKB',
+			'wairoa' => 'HKB', 'taradale' => 'HKB', 'clive' => 'HKB', 'waipawa' => 'HKB',
+			'flaxmere' => 'HKB', 'greenmeadows' => 'HKB',
+
+			// Taranaki (TKI)
+			'new plymouth' => 'TKI', 'stratford' => 'TKI', 'hawera' => 'TKI', 'inglewood' => 'TKI',
+			'waitara' => 'TKI', 'opunake' => 'TKI', 'eltham' => 'TKI', 'patea' => 'TKI',
+			'oakura' => 'TKI', 'bell block' => 'TKI',
+
+			// Manawatu-Whanganui (MWT)
+			'palmerston north' => 'MWT', 'whanganui' => 'MWT', 'wanganui' => 'MWT', 'levin' => 'MWT',
+			'feilding' => 'MWT', 'marton' => 'MWT', 'dannevirke' => 'MWT', 'taumarunui' => 'MWT',
+			'bulls' => 'MWT', 'ohakune' => 'MWT', 'foxton' => 'MWT', 'woodville' => 'MWT',
+			'pahiatua' => 'MWT', 'shannon' => 'MWT', 'ashhurst' => 'MWT', 'waiouru' => 'MWT',
+			'raetihi' => 'MWT', 'taihape' => 'MWT', 'sanson' => 'MWT',
+
+			// Wellington (WGN)
+			'wellington' => 'WGN', 'lower hutt' => 'WGN', 'upper hutt' => 'WGN', 'porirua' => 'WGN',
+			'petone' => 'WGN', 'kapiti' => 'WGN', 'paraparaumu' => 'WGN', 'masterton' => 'WGN',
+			'carterton' => 'WGN', 'greytown' => 'WGN', 'featherston' => 'WGN', 'martinborough' => 'WGN',
+			'waikanae' => 'WGN', 'otaki' => 'WGN', 'paekakariki' => 'WGN', 'raumati' => 'WGN',
+			'eastbourne' => 'WGN', 'wainuiomata' => 'WGN', 'stokes valley' => 'WGN', 'naenae' => 'WGN',
+			'silverstream' => 'WGN', 'trentham' => 'WGN', 'whitby' => 'WGN', 'plimmerton' => 'WGN',
+			'titahi bay' => 'WGN', 'mana' => 'WGN', 'johnsonville' => 'WGN', 'newlands' => 'WGN',
+			'tawa' => 'WGN', 'ngaio' => 'WGN', 'khandallah' => 'WGN', 'karori' => 'WGN',
+			'kelburn' => 'WGN', 'thorndon' => 'WGN', 'te aro' => 'WGN', 'mt victoria' => 'WGN',
+			'mount victoria' => 'WGN', 'kilbirnie' => 'WGN', 'lyall bay' => 'WGN', 'miramar' => 'WGN',
+			'island bay' => 'WGN', 'newtown' => 'WGN', 'brooklyn' => 'WGN',
+
+			// Nelson (NSN)
+			'nelson' => 'NSN', 'richmond' => 'NSN', 'stoke' => 'NSN', 'tahunanui' => 'NSN',
+			'atawhai' => 'NSN', 'hope' => 'NSN', 'brightwater' => 'NSN', 'wakefield' => 'NSN',
+
+			// Tasman (TAS)
+			'motueka' => 'TAS', 'takaka' => 'TAS', 'murchison' => 'TAS', 'kaiteriteri' => 'TAS',
+			'marahau' => 'TAS', 'riwaka' => 'TAS', 'mapua' => 'TAS', 'collingwood' => 'TAS',
+			'golden bay' => 'TAS', 'st arnaud' => 'TAS',
+
+			// Marlborough (MBH)
+			'blenheim' => 'MBH', 'picton' => 'MBH', 'renwick' => 'MBH', 'seddon' => 'MBH',
+			'havelock' => 'MBH', 'spring creek' => 'MBH',
+
+			// West Coast (WTC)
+			'greymouth' => 'WTC', 'hokitika' => 'WTC', 'westport' => 'WTC', 'reefton' => 'WTC',
+			'runanga' => 'WTC', 'cobden' => 'WTC', 'ross' => 'WTC', 'kumara' => 'WTC',
+			'punakaiki' => 'WTC', 'karamea' => 'WTC', 'franz josef' => 'WTC', 'fox glacier' => 'WTC',
+
+			// Canterbury (CAN)
+			'christchurch' => 'CAN', 'timaru' => 'CAN', 'ashburton' => 'CAN', 'rangiora' => 'CAN',
+			'kaiapoi' => 'CAN', 'rolleston' => 'CAN', 'lincoln' => 'CAN', 'lyttelton' => 'CAN',
+			'akaroa' => 'CAN', 'hanmer springs' => 'CAN', 'kaikoura' => 'CAN', 'geraldine' => 'CAN',
+			'temuka' => 'CAN', 'fairlie' => 'CAN', 'twizel' => 'CAN', 'lake tekapo' => 'CAN',
+			'tekapo' => 'CAN', 'waimate' => 'CAN', 'methven' => 'CAN', 'darfield' => 'CAN',
+			'oxford' => 'CAN', 'amberley' => 'CAN', 'leeston' => 'CAN', 'woodend' => 'CAN',
+			'pegasus' => 'CAN', 'prebbleton' => 'CAN', 'sumner' => 'CAN', 'new brighton' => 'CAN',
+			'papanui' => 'CAN', 'merivale' => 'CAN', 'fendalton' => 'CAN', 'ilam' => 'CAN',
+			'riccarton' => 'CAN', 'halswell' => 'CAN', 'hornby' => 'CAN', 'addington' => 'CAN',
+			'sydenham' => 'CAN', 'cashmere' => 'CAN', 'linwood' => 'CAN', 'woolston' => 'CAN',
+			'ferrymead' => 'CAN', 'redcliffs' => 'CAN', 'mt pleasant' => 'CAN', 'mount pleasant' => 'CAN',
+
+			// Otago (OTA)
+			'dunedin' => 'OTA', 'queenstown' => 'OTA', 'oamaru' => 'OTA', 'alexandra' => 'OTA',
+			'wanaka' => 'OTA', 'cromwell' => 'OTA', 'balclutha' => 'OTA', 'arrowtown' => 'OTA',
+			'mosgiel' => 'OTA', 'milton' => 'OTA', 'palmerston' => 'OTA', 'clyde' => 'OTA',
+			'roxburgh' => 'OTA', 'ranfurly' => 'OTA', 'naseby' => 'OTA', 'lawrence' => 'OTA',
+			'port chalmers' => 'OTA', 'south dunedin' => 'OTA', 'st kilda' => 'OTA', 'st clair' => 'OTA',
+			'frankton' => 'OTA', 'kelvin heights' => 'OTA', 'lake hayes' => 'OTA', 'albert town' => 'OTA',
+			'luggate' => 'OTA', 'hawea' => 'OTA', 'lake hawea' => 'OTA', 'cardrona' => 'OTA',
+			'glenorchy' => 'OTA', 'kingston' => 'OTA',
+
+			// Southland (STL)
+			'invercargill' => 'STL', 'gore' => 'STL', 'te anau' => 'STL', 'winton' => 'STL',
+			'riverton' => 'STL', 'bluff' => 'STL', 'lumsden' => 'STL', 'mataura' => 'STL',
+			'edendale' => 'STL', 'wyndham' => 'STL', 'otautau' => 'STL', 'tuatapere' => 'STL',
+			'oban' => 'STL', 'stewart island' => 'STL', 'manapouri' => 'STL', 'milford sound' => 'STL',
+			'dipton' => 'STL', 'nightcaps' => 'STL',
+		],
+	];
+
+	/**
+	 * Get region code for a city.
+	 *
+	 * @param string $city City name.
+	 * @param string $country Two-letter country code.
+	 *
+	 * @return string|null Region code or null if not found.
+	 */
+	public static function get_region_for_city( $city, $country ) {
+		$city = strtolower( trim( $city ) );
+
+		if ( ! isset( self::CITY_TO_REGION[ $country ] ) ) {
+			return null;
+		}
+
+		return self::CITY_TO_REGION[ $country ][ $city ] ?? null;
+	}
 	// phpcs:enable
 }

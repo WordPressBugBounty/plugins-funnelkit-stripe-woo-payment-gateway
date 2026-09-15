@@ -10,6 +10,21 @@
             <key name="express_checkout_separator_cart"/>
             <key name="express_checkout_separator_checkout"/>
         </key>
+        <key name="woocommerce_fkwcs_stripe_apple_pay_settings">
+            <key name="title"/>
+            <key name="description"/>
+            <key name="separator_text"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_google_pay_settings">
+            <key name="title"/>
+            <key name="description"/>
+            <key name="separator_text"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_link_settings">
+            <key name="title"/>
+            <key name="description"/>
+            <key name="separator_text"/>
+        </key>
         <key name="woocommerce_fkwcs_stripe_affirm_settings">
             <key name="title"/>
             <key name="description"/>
@@ -18,7 +33,7 @@
             <key name="title"/>
             <key name="description"/>
         </key>
-        <key name="woocommerce_fkwcs_stripe_mobilepay_settings">
+        <key name="woocommerce_fkwcs_stripe_alipay_settings">
             <key name="title"/>
             <key name="description"/>
         </key>
@@ -26,31 +41,57 @@
             <key name="title"/>
             <key name="description"/>
         </key>
-
+        <key name="woocommerce_fkwcs_stripe_blik_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_cashapp_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_eps_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
         <key name="woocommerce_fkwcs_stripe_ideal_settings">
             <key name="title"/>
             <key name="description"/>
         </key>
-
         <key name="woocommerce_fkwcs_stripe_klarna_settings">
             <key name="title"/>
             <key name="description"/>
         </key>
-
+        <key name="woocommerce_fkwcs_stripe_mbway_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_mobilepay_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
+        <key name="woocommerce_fkwcs_stripe_multibanco_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
         <key name="woocommerce_fkwcs_stripe_p24_settings">
             <key name="title"/>
             <key name="description"/>
         </key>
-
+        <key name="woocommerce_fkwcs_stripe_pix_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
         <key name="woocommerce_fkwcs_stripe_ach_settings">
             <key name="title"/>
             <key name="description"/>
         </key>
-
         <key name="woocommerce_fkwcs_stripe_sepa_settings">
             <key name="title"/>
             <key name="description"/>
         </key>
-
+        <key name="woocommerce_fkwcs_stripe_twint_settings">
+            <key name="title"/>
+            <key name="description"/>
+        </key>
     </admin-texts>
 </wpml-config>

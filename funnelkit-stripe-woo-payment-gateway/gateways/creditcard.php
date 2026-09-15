@@ -2,14 +2,20 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use WC_Payment_Tokens;
 use FKWCS\Gateway\Stripe\Traits\WC_Subscriptions_Trait;
+use FKWCS\Gateway\Stripe\Traits\WC_Pre_Orders_Trait;
 use WC_HTTPS;
 
 #[\AllowDynamicProperties]
 class CreditCard extends Abstract_Payment_Gateway {
 
 	use WC_Subscriptions_Trait;
+	use WC_Pre_Orders_Trait;
 	use Funnelkit_Stripe_Smart_Buttons;
 
 	/**
@@ -56,13 +62,14 @@ class CreditCard extends Abstract_Payment_Gateway {
 		$this->init_form_fields();
 		$this->init_settings();
 		$this->maybe_init_subscriptions();
+		$this->maybe_init_pre_orders();
 		$this->title                 = $this->get_option( 'title' );
 		$this->description           = $this->get_option( 'description' );
 		$this->inline_cc             = $this->get_option( 'inline_cc' );
 		$this->enabled               = $this->get_option( 'enabled' );
 		$this->enable_saved_cards    = $this->get_option( 'enable_saved_cards' );
 		$this->capture_method        = $this->get_option( 'charge_type' );
-		$this->allowed_cards         = $this->get_option( 'allowed_cards' );
+		$this->allowed_cards         = $this->get_allowed_card_brands();
 		$this->credit_card_form_type = 'yes' === $this->get_option( 'payment_form' ) ? 'payment' : '';
 
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_stripe_js' ) );
@@ -129,6 +136,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 	 */
 	public function is_page_supported() {
 		return is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page() || ( function_exists( 'wcs_is_view_subscription_page' ) && wcs_is_view_subscription_page() ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return is_cart() || is_checkout() || isset( $_GET['pay_for_order'] ) || is_add_payment_method_page() || ( function_exists( 'wcs_is_view_subscription_page' ) && wcs_is_view_subscription_page() ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -141,20 +149,20 @@ class CreditCard extends Abstract_Payment_Gateway {
 		$this->form_fields = apply_filters(
 			'fkwcs_card_payment_form_fields',
 			array(
-				'enabled'                 => array(
+				'enabled'               => array(
 					'label'   => ' ',
 					'type'    => 'checkbox',
 					'title'   => __( 'Enable Stripe Gateway', 'funnelkit-stripe-woo-payment-gateway' ),
 					'default' => 'no',
 				),
-				'title'                   => array(
+				'title'                 => array(
 					'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 					'type'        => 'text',
 					'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 					'default'     => __( 'Credit Card (Stripe)', 'funnelkit-stripe-woo-payment-gateway' ),
 					'desc_tip'    => true,
 				),
-				'description'             => array(
+				'description'           => array(
 					'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 					'type'        => 'textarea',
 					'css'         => 'width:25em',
@@ -163,10 +171,10 @@ class CreditCard extends Abstract_Payment_Gateway {
 					'desc_tip'    => true,
 				),
 
-				'charge_type'             => array(
+				'charge_type'           => array(
 					'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 					'type'        => 'select',
-					'description' => $this->get_charge_type_recommendation_text(),
+					'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ), //phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText,FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingTranslation -- This is a dynamic string that is being used to display the charge type recommendation text
 					'default'     => 'automatic',
 					'options'     => array(
 						'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
@@ -174,7 +182,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 					),
 					'desc_tip'    => false,
 				),
-				'enable_saved_cards'      => array(
+				'enable_saved_cards'    => array(
 					'label'       => __( 'Enable Payment via Saved Cards', 'funnelkit-stripe-woo-payment-gateway' ),
 					'title'       => __( 'Saved Cards', 'funnelkit-stripe-woo-payment-gateway' ),
 					'type'        => 'checkbox',
@@ -182,7 +190,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 					'default'     => 'yes',
 					'desc_tip'    => true,
 				),
-				'inline_cc'               => array(
+				'inline_cc'             => array(
 					'label'       => __( 'Enable Inline Credit Card Form', 'funnelkit-stripe-woo-payment-gateway' ),
 					'title'       => __( 'Credit Card Form Style', 'funnelkit-stripe-woo-payment-gateway' ),
 					'type'        => 'checkbox',
@@ -191,7 +199,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 					'desc_tip'    => true,
 					'class'       => 'fkwcs_form_type_selection fkwcs_checkbox_radio',
 				),
-				'standard_payment_form'   => array(
+				'standard_payment_form' => array(
 					'label'       => __( 'Enable Standard Credit Card Form', 'funnelkit-stripe-woo-payment-gateway' ),
 					'title'       => '&nbsp;',
 					'type'        => 'checkbox',
@@ -200,7 +208,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 					'desc_tip'    => true,
 					'class'       => 'fkwcs_form_type_selection fkwcs_checkbox_radio',
 				),
-				'payment_form'            => array(
+				'payment_form'          => array(
 					'label'       => __( 'Enable Enhanced Payment Element (Recommended)', 'funnelkit-stripe-woo-payment-gateway' ),
 					'title'       => '&nbsp;',
 					'type'        => 'checkbox',
@@ -209,70 +217,262 @@ class CreditCard extends Abstract_Payment_Gateway {
 					'desc_tip'    => true,
 					'class'       => 'fkwcs_form_type_selection fkwcs_checkbox_radio',
 				),
-				'link_fields_wrapper'     => array(
 
-					'class' => 'link_fields_wrapper',
-					'type'  => 'fkwcs_admin_fields_start',
-					'value' => 'on_card',
-				),
-				'link_in_card_field'      => array(
-					'label'       => __( 'Enable in Card Field', 'funnelkit-stripe-woo-payment-gateway' ),
-					'title'       => __( 'Stripe Link Authentication', 'funnelkit-stripe-woo-payment-gateway' ),
-					'type'        => 'checkbox',
-					'field_type'  => 'radio',
-					'description' => __( "This setting enables Link in Card Element. By activating the Link feature, Stripe leverages your customer's email address to ascertain whether they have previously utilized Stripe services. In the affirmative, their payment details, along with billing and shipping information, are automatically employed to populate the checkout page. This streamlined process not only enhances conversion rates but also minimizes customer friction. Enabling Link ensures that the Stripe payment form is utilized exclusively, as it is the sole card form compatible with this feature.", 'funnelkit-stripe-woo-payment-gateway' ),
-					'default'     => 'no',
-					'desc_tip'    => true,
-					'class'       => 'fkwcs_checkbox_radio fkwcs_link_type_selection',
-					'value'       => 'on_card',
-				),
-
-				'link_authentication'     => array(
-					'label'       => __( 'Enable on Billing Email Field', 'funnelkit-stripe-woo-payment-gateway' ),
-					'title'       => '&nbsp;',
-					'type'        => 'checkbox',
-					'field_type'  => 'radio',
-					'description' => __( "This setting enabled Link on Billing Email field. As soon as user types email the Link begins to detects to check if Stripe has a saved profile. By activating the Link feature, Stripe leverages your customer's email address to ascertain whether they have previously utilized Stripe services. In the affirmative, their payment details, along with billing and shipping information, are automatically employed to populate the checkout page. This streamlined process not only enhances conversion rates but also minimizes customer friction. Enabling Link ensures that the Stripe payment form is utilized exclusively, as it is the sole card form compatible with this feature.", 'funnelkit-stripe-woo-payment-gateway' ),
-					'default'     => 'no',
-					'desc_tip'    => true,
-					'class'       => 'fkwcs_checkbox_radio fkwcs_link_type_selection',
-					'value'       => 'on_email',
-				),
-				'link_none'               => array(
-					'label'       => __( 'None', 'funnelkit-stripe-woo-payment-gateway' ),
-					'title'       => '&nbsp;',
-					'type'        => 'checkbox',
-					'field_type'  => 'radio',
-					'description' => '',
-					'default'     => 'yes',
-					'desc_tip'    => true,
-					'class'       => 'fkwcs_checkbox_radio fkwcs_link_type_selection',
-					'value'       => 'yes',
-				),
-
-				'link_fields_wrapper_end' => array(
-					'class' => 'link_fields_wrapper',
-					'type'  => 'fkwcs_admin_fields_end',
-				),
-
-				'allowed_cards'           => array(
+				'allowed_cards'         => array(
 					'title'    => __( 'Allowed Card Brands', 'funnelkit-stripe-woo-payment-gateway' ),
 					'type'     => 'multiselect',
 					'class'    => 'fkwcs_select_woo',
 					'desc_tip' => __( 'Accepts payments using selected cads. Please select atleast one card brand.', 'funnelkit-stripe-woo-payment-gateway' ),
-					'options'  => array(
-						'mastercard' => 'MasterCard',
-						'visa'       => 'Visa',
-						'amex'       => 'American Express',
-						'discover'   => 'Discover',
-						'jcb'        => 'JCB',
-						'diners'     => 'Diners Club',
-						'unionpay'   => 'UnionPay',
-					),
-					'default'  => array( 'mastercard', 'visa', 'amex', 'discover', 'jcb', 'dinners', 'unionpay' ),
+					'options'  => self::get_card_brands(),
+					'default'  => array_keys( self::get_card_brands() ),
 				),
 			)
 		);
+	}
+
+	/**
+	 * Canonical card brand list, keyed by the slug Stripe reports. Single source of truth for the
+	 * Allowed Card Brands setting and for validating payments against it.
+	 *
+	 * @return array
+	 */
+	public static function get_card_brands() {
+		return array(
+			'mastercard' => __( 'MasterCard', 'funnelkit-stripe-woo-payment-gateway' ),
+			'visa'       => __( 'Visa', 'funnelkit-stripe-woo-payment-gateway' ),
+			'amex'       => __( 'American Express', 'funnelkit-stripe-woo-payment-gateway' ),
+			'discover'   => __( 'Discover', 'funnelkit-stripe-woo-payment-gateway' ),
+			'jcb'        => __( 'JCB', 'funnelkit-stripe-woo-payment-gateway' ),
+			'diners'     => __( 'Diners Club', 'funnelkit-stripe-woo-payment-gateway' ),
+			'unionpay'   => __( 'UnionPay', 'funnelkit-stripe-woo-payment-gateway' ),
+		);
+	}
+
+	/**
+	 * Every brand slug this gateway knows about.
+	 *
+	 * @return array
+	 */
+	protected function get_card_brand_slugs() {
+		return array_keys( self::get_card_brands() );
+	}
+
+	/**
+	 * Older installs stored 'dinners' because this setting's default shipped with that typo,
+	 * while Stripe reports the brand as 'diners'. Left unmapped, a Diners card would be
+	 * rejected on a store that has Diners Club ticked.
+	 *
+	 * @param string $brand Brand slug.
+	 *
+	 * @return string
+	 */
+	protected function normalize_card_brand( $brand ) {
+		$brand = strtolower( trim( (string) $brand ) );
+
+		return 'dinners' === $brand ? 'diners' : $brand;
+	}
+
+	/**
+	 * Allowed Card Brands setting, normalized to the slugs Stripe reports.
+	 *
+	 * Always read from the card gateway's own settings. Apple Pay and Google Pay extend this class
+	 * but keep separate settings that have no allowed_cards key, so $this->get_option() would hand
+	 * them an empty list and quietly accept every brand.
+	 *
+	 * @return array
+	 */
+	protected function get_allowed_card_brands() {
+		$settings = get_option( 'woocommerce_fkwcs_stripe_settings', array() );
+		$allowed  = isset( $settings['allowed_cards'] ) ? (array) $settings['allowed_cards'] : $this->get_card_brand_slugs();
+		$allowed  = array_map( array( $this, 'normalize_card_brand' ), $allowed );
+
+		return array_values( array_filter( $allowed ) );
+	}
+
+	/**
+	 * Keep the saved setting clean: map the legacy slug, drop anything unknown, and never store
+	 * an empty selection. Saving none would reject every card, so treat it as accept everything.
+	 *
+	 * @param string $key   Field key.
+	 * @param mixed  $value Posted value.
+	 *
+	 * @return array
+	 */
+	public function validate_allowed_cards_field( $key, $value ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter
+		$brands = array_map( array( $this, 'normalize_card_brand' ), (array) $value );
+		$brands = array_values( array_intersect( $brands, $this->get_card_brand_slugs() ) );
+
+		return empty( $brands ) ? $this->get_card_brand_slugs() : $brands;
+	}
+
+	/**
+	 * Brand of the posted payment method when the store does not accept it, otherwise ''.
+	 *
+	 * @return string
+	 */
+	protected function get_disallowed_card_brand() {
+		$allowed = $this->get_allowed_card_brands();
+
+		// Nothing restricted, so skip the work entirely and keep checkout free of an extra API call.
+		if ( empty( $allowed ) || ! array_diff( $this->get_card_brand_slugs(), $allowed ) ) {
+			return '';
+		}
+
+		/*
+		 * A saved card posts its token instead of a new source. The token already records the brand
+		 * Stripe reported when it was created, so it is checked locally with no API call. Resolved
+		 * through find_saved_token() so this shares the gateway's ownership guard, and so validation
+		 * always inspects the same token that process_payment() will charge.
+		 */
+		$token = $this->find_saved_token();
+
+		if ( $token instanceof \WC_Payment_Token_CC ) {
+			return $this->evaluate_card_brand( $token->get_card_type(), $allowed, 'token ' . $token->get_id(), 'none' );
+		}
+
+		if ( $token instanceof \WC_Payment_Token ) {
+			return ''; // A saved non card token, such as ACH or SEPA, carries no brand to match.
+		}
+
+		$source = isset( $_POST['fkwcs_source'] ) ? wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Reading the posted payment method during checkout validation
+
+		if ( '' === $source || 0 !== strpos( $source, 'pm_' ) ) {
+			return '';
+		}
+
+		/*
+		 * Shares the request scoped cache with prepare_source(), which retrieves the same payment
+		 * method moments later to build the charge. Without that the brand check would add a
+		 * second Stripe round trip to every card checkout on a store that restricts brands.
+		 */
+		$payment_method = $this->retrieve_payment_method( $source );
+		if ( ! $payment_method ) {
+			return ''; // Do not block on an API failure, let Stripe decide.
+		}
+
+		/*
+		 * Only card type payment methods carry a brand. Amazon Pay is not a card network at all, and
+		 * Link on the default integration is saved as a "link" payment method that hides the funding
+		 * card, so neither can be matched against this setting. Link on the "Link within card"
+		 * integration does arrive as a card with a real brand and is checked like any other.
+		 */
+		if ( ! isset( $payment_method->type ) || 'card' !== $payment_method->type || empty( $payment_method->card->brand ) ) {
+			return '';
+		}
+
+		return $this->evaluate_card_brand( $payment_method->card->brand, $allowed, $source, empty( $payment_method->card->wallet->type ) ? 'none' : $payment_method->card->wallet->type );
+	}
+
+	/**
+	 * Compare one brand against the allowed list, logging the rejection.
+	 *
+	 * @param string $brand     Brand as reported by Stripe or stored on the token.
+	 * @param array  $allowed   Allowed brand slugs.
+	 * @param string $reference Source or token id, for the log line.
+	 * @param string $wallet    Wallet type, for the log line.
+	 *
+	 * @return string Brand when rejected, '' when accepted.
+	 */
+	protected function evaluate_card_brand( $brand, $allowed, $reference, $wallet ) {
+		$brand = $this->normalize_card_brand( $brand );
+
+		// Stripe sends 'unknown' when it cannot classify the card, which no setting can list.
+		if ( '' === $brand || 'unknown' === $brand || in_array( $brand, $allowed, true ) ) {
+			return '';
+		}
+
+		/*
+		 * Stripe also reports brands this gateway never offered as a checkbox: 'eftpos_au' and
+		 * 'link' are both in its enum today and the list grows over time. The merchant has no way
+		 * to allow those, so rejecting one is a decline they cannot undo, delivered as unusable
+		 * copy ("We do not accept Eftpos_au"). Only enforce against brands the setting lists.
+		 */
+		if ( ! in_array( $brand, $this->get_card_brand_slugs(), true ) ) {
+			Helper::log( sprintf( 'Card brand %1$s is not offered by the Allowed Card Brands setting, allowing it through. Payment method %2$s, wallet %3$s.', $brand, $reference, $wallet ) );
+
+			return '';
+		}
+
+		/**
+		 * Filters whether a rejected brand is actually enforced.
+		 *
+		 * Runs only when a payment is about to be rejected, so the context always describes a real
+		 * decision. Return false to let the payment through. The wallet key is the reliable way to
+		 * target express payments, because Apple Pay and Google Pay usually submit through the card
+		 * gateway rather than their own gateway id.
+		 *
+		 * Example, keep enforcing typed cards but leave the wallets alone:
+		 *
+		 *     add_filter( 'fkwcs_enforce_allowed_card_brands', function ( $enforce, $context ) {
+		 *         return in_array( $context['wallet'], array( 'apple_pay', 'google_pay' ), true ) ? false : $enforce;
+		 *     }, 10, 2 );
+		 *
+		 * @since 1.15.0
+		 *
+		 * @param bool  $enforce True to reject the payment.
+		 * @param array $context {
+		 *     @type string $brand     Normalized brand slug, e.g. 'amex'.
+		 *     @type string $wallet    Wallet type: 'apple_pay', 'google_pay', 'link' or 'none'.
+		 *     @type array  $allowed   Allowed brand slugs.
+		 *     @type string $gateway   Gateway id handling the payment.
+		 *     @type string $reference Payment method id, or 'token <id>' for a saved card.
+		 * }
+		 */
+		$enforce = apply_filters(
+			'fkwcs_enforce_allowed_card_brands',
+			true,
+			array(
+				'brand'     => $brand,
+				'wallet'    => $wallet,
+				'allowed'   => $allowed,
+				'gateway'   => $this->id,
+				'reference' => $reference,
+			)
+		);
+
+		if ( ! $enforce ) {
+			Helper::log( sprintf( 'Card brand %1$s is not allowed but was let through by fkwcs_enforce_allowed_card_brands. Wallet %2$s.', $brand, $wallet ) );
+
+			return '';
+		}
+
+		Helper::log(
+			sprintf(
+				'Card brand %1$s rejected, not in Allowed Card Brands (%2$s). Payment method %3$s, wallet %4$s.',
+				$brand,
+				implode( ', ', $allowed ),
+				$reference,
+				$wallet
+			)
+		);
+
+		return $brand;
+	}
+
+	/**
+	 * Enforce Allowed Card Brands server side.
+	 *
+	 * WooCommerce calls this before the order exists, from the checkout, the pay for order page and
+	 * the add payment method page. Apple Pay and Google Pay extend this gateway and their express
+	 * requests run through the same checkout, so this one check covers every card path. Until now
+	 * the setting was only applied by the card field's JS, which wallets never touch.
+	 *
+	 * @return bool
+	 */
+	public function validate_fields() {
+		$brand = $this->get_disallowed_card_brand();
+
+		if ( '' === $brand ) {
+			return true;
+		}
+
+		$brands = self::get_card_brands();
+		$label  = isset( $brands[ $brand ] ) ? $brands[ $brand ] : ucfirst( $brand );
+
+		/* translators: %s: card brand name, for example American Express. */
+		wc_add_notice( sprintf( __( 'We do not accept %s. Please use a different card.', 'funnelkit-stripe-woo-payment-gateway' ), $label ), 'error' );
+
+		return false;
 	}
 
 	/**
@@ -295,29 +495,29 @@ class CreditCard extends Abstract_Payment_Gateway {
 			return $this->process_change_subscription_payment_method( $order_id, true );
 		}
 
+		if ( $this->maybe_process_pre_orders( $order_id ) ) {
+			return $this->process_pre_order( $order_id );
+		}
 		$order = wc_get_order( $order_id );
-		/**
-		 * Determine save behavior based on payment requirements
-		 * For RBI compliance (Indian cards), we need to set setup_future_usage without attaching the card upfront
-		 * For other regions, we can attach the card immediately
-		 */
-		$should_save_card   = false === $force_prevent_source_creation && true === $this->should_save_card( $order );
-		$is_valid_country   = $this->validate_country_for_save_card();
-		$save_source        = false; // Controls card attachment
-		$setup_future_usage = false; // Controls setup_future_usage parameter
+
+		$should_save_card      = false === $force_prevent_source_creation && true === $this->should_save_card( $order );
+		$attach_payment_method = false; // Controls upfront card attachment
+		$setup_future_usage    = false; // Controls setup_future_usage parameter
 
 		if ( $should_save_card ) {
-			if ( $is_valid_country ) {
-				// Non-Indian cards: Attach card and set setup_future_usage
-				$save_source        = true;
-				$setup_future_usage = true;
-				Helper::log( sprintf( 'Order %d: Card will be attached and setup_future_usage will be set (non-Indian card flow)', $order_id ) );
-			} else {
-				// Indian cards (RBI compliance): Don't attach card but set setup_future_usage for recurring payments
-				$save_source        = false;
-				$setup_future_usage = true;
-				Helper::log( sprintf( 'Order %d: Card will NOT be attached but setup_future_usage will be set (Indian card flow - RBI compliance)', $order_id ) );
-			}
+			/**
+			 * Do not attach the payment method before the Payment Intent exists.
+			 *
+			 * Attaching upfront makes SCA-regulated (EU/UK) cards reject the bare
+			 * PaymentMethod.attach with a 402 authentication_required, and because no
+			 * Payment Intent (and therefore no client_secret) exists yet, the 3DS
+			 * challenge can never be presented. Instead we always rely on
+			 * setup_future_usage = 'off_session' so a single Payment Intent runs 3DS
+			 * via the existing requires_action continuation and saves the card after
+			 * authentication succeeds. This matches the existing Indian/RBI flow.
+			 */
+			$attach_payment_method = false;
+			$setup_future_usage    = true;
 		}
 
 		if ( 0 >= $order->get_total() ) {
@@ -336,14 +536,14 @@ class CreditCard extends Abstract_Payment_Gateway {
 				 */
 				$prepared_source = $this->prepare_order_source( $order );
 			} else {
-				$prepared_source = $this->prepare_source( $order, $save_source );
+				$prepared_source = $this->prepare_source( $order, $attach_payment_method );
 			}
 
 			if ( is_object( $prepared_source ) && empty( $prepared_source->source ) ) {
 				if ( ! empty( $order ) ) {
 					/* translators: error message */
 					$this->mark_order_failed( $order, __( 'Error: Unable to get payment method from the browser, please check for browser console error. ', 'funnelkit-stripe-woo-payment-gateway' ) );
-					throw new \Exception( __( 'Payment processing failed. Please retry.' ), 200 );
+					throw new \Exception( __( 'Payment processing failed. Please retry.', 'funnelkit-stripe-woo-payment-gateway' ), 200 );
 				}
 			}
 			$this->save_payment_method_to_order( $order, $prepared_source );
@@ -360,7 +560,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 				'payment_method_types' => $this->get_payment_method_types(),
 				'payment_method'       => $prepared_source->source,
 				'customer'             => $prepared_source->customer,
-				'capture_method'       => $this->capture_method,
+				'capture_method'       => $this->get_effective_capture_method(),
 				'confirm'              => true,
 			);
 
@@ -372,8 +572,15 @@ class CreditCard extends Abstract_Payment_Gateway {
 			}
 
 			$data['metadata'] = $this->add_metadata( $order );
-			$data             = $this->set_shipping_data( $data, $order );
-			$data             = $this->maybe_mandate_data_required( $data, $order );
+			$amount_data      = $this->add_amount_details( $order, $data['payment_method_types'][0] ?? 'card' );
+			if ( ! empty( $amount_data ) ) {
+				$data = array_merge( $data, $amount_data );
+			}
+			if ( ! isset( $_POST['payment_request_type'] ) ) {//phpcs:ignore WordPress.Security.NonceVerification.Missing , FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+				$data = $this->set_shipping_data( $data, $order );
+
+			}
+			$data = $this->maybe_mandate_data_required( $data, $order );
 
 			$intent_data = $this->make_payment( $order, $prepared_source, $data );
 
@@ -384,7 +591,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 				 */
 				if ( did_action( 'woocommerce_before_pay_action' ) ) {
 
-					if ( $intent_data->status === 'requires_action' ) {
+					if ( 'requires_action' === $intent_data->status || 'authentication_required' === $intent_data->status ) {
 						$return_url = $this->get_return_url( $order );
 
 						return apply_filters(
@@ -414,10 +621,11 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 					/**
 					 * Save payment method if:
-					 * 1. We attached the card upfront ($save_source = true for non-Indian cards)
-					 * 2. OR setup_future_usage was set on the intent (includes Indian cards with RBI compliance)
+					 * 1. The card was attached upfront ($attach_payment_method = true), or
+					 * 2. setup_future_usage = 'off_session' was set on the intent (current default
+					 *    for all save-card flows; Stripe attaches the card on intent confirmation).
 					 */
-					if ( $save_source || 'off_session' === $intent_data->setup_future_usage ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					if ( $attach_payment_method || 'off_session' === $intent_data->setup_future_usage ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 						$this->save_payment_method( $order, $intent_data );
 
 						$charge = $this->get_latest_charge_from_intent( $intent_data );
@@ -438,6 +646,13 @@ class CreditCard extends Abstract_Payment_Gateway {
 						'result'   => 'success',
 						'redirect' => $redirect_url,
 					);
+				} elseif ( 'processing' === $intent_data->status ) {
+					/**
+					 * Handle processing status for credit card - mark as failed
+					 * Credit card payments should not have processing status, this indicates an issue
+					 */
+					Helper::log( 'Credit card payment intent returned processing status for order ' . $order->get_id() . ' - marking as failed' );
+					throw new \Exception( __( 'Payment is still processing. Please try again or use an alternative payment method.', 'funnelkit-stripe-woo-payment-gateway' ), 200 );
 				} elseif ( 'requires_payment_method' === $intent_data->status ) {
 
 					if ( ! $order->has_status( 'failed' ) ) {
@@ -446,6 +661,20 @@ class CreditCard extends Abstract_Payment_Gateway {
 						throw new \Exception( $status_message, 200 );
 
 					}
+				} elseif ( 'requires_action' === $intent_data->status || 'authentication_required' === $intent_data->status ) {
+					// Handle 3DS authentication flow
+					$return_url = $this->get_return_url( $order );
+
+					return apply_filters(
+						'fkwcs_card_payment_return_intent_data',
+						array(
+							'result'              => 'success',
+							'fkwcs_redirect'      => $return_url,
+							'payment_method'      => $prepared_source->source,
+							'fkwcs_intent_secret' => $intent_data->client_secret,
+							'save_card'           => $attach_payment_method,
+						)
+					);
 				}
 
 				/**
@@ -523,7 +752,24 @@ class CreditCard extends Abstract_Payment_Gateway {
 		$order = wc_get_order( $order_id );
 
 		try {
-			$token                   = $this->find_saved_token(); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$token = $this->find_saved_token(); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+			/**
+			 * Guard against a missing / non-owned token before dereferencing it.
+			 *
+			 * The find_saved_token() call returns null when the token id is invalid or
+			 * does not belong to the expected user; without this check $token->get_token()
+			 * would raise a fatal Error (uncaught by the Exception handler below).
+			 */
+			if ( ! $token instanceof \WC_Payment_Token ) {
+				$this->mark_order_failed( $order, __( 'The selected saved card could not be found for this order. Please try a different payment method.', 'funnelkit-stripe-woo-payment-gateway' ) );
+
+				return array(
+					'result'   => 'fail',
+					'redirect' => '',
+				);
+			}
+
 			$stripe_api              = $this->get_client();
 			$response                = $stripe_api->payment_methods( 'retrieve', array( $token->get_token() ) );
 			$payment_method          = $response['success'] ? $response['data'] : false;
@@ -545,13 +791,17 @@ class CreditCard extends Abstract_Payment_Gateway {
 				'description'          => $this->get_order_description( $order ),
 				'customer'             => $prepared_payment_method->customer,
 				'confirm'              => true,
-				'capture_method'       => $this->capture_method,
+				'capture_method'       => $this->get_effective_capture_method(),
 			);
 			if ( Helper::should_customize_statement_descriptor() ) {
 				$request['statement_descriptor_suffix'] = $this->clean_statement_descriptor( Helper::get_gateway_descriptor_suffix( $order ) );
 			}
 			$request['metadata'] = $this->add_metadata( $order );
-			$request             = $this->set_shipping_data( $request, $order );
+			$amount_data         = $this->add_amount_details( $order, $request['payment_method_types'][0] ?? 'card' );
+			if ( ! empty( $amount_data ) ) {
+				$request = array_merge( $request, $amount_data );
+			}
+			$request = $this->set_shipping_data( $request, $order );
 
 			$this->validate_minimum_order_amount( $order );
 			$request = apply_filters( 'fkwcs_payment_intent_data', $request, $order );
@@ -560,7 +810,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 			$this->save_intent_to_order( $order, $intent );
 
-			if ( 'requires_confirmation' === $intent->status || 'requires_action' === $intent->status ) {
+			if ( 'requires_confirmation' === $intent->status || 'requires_action' === $intent->status || 'authentication_required' === $intent->status ) {
 				return apply_filters(
 					'fkwcs_card_payment_return_intent_data',
 					array(
@@ -611,7 +861,6 @@ class CreditCard extends Abstract_Payment_Gateway {
 		}
 	}
 
-
 	/**
 	 * After verify intent got called it's time to save payment method to the order
 	 *
@@ -656,7 +905,18 @@ class CreditCard extends Abstract_Payment_Gateway {
 		if ( isset( $response->balance_transaction ) ) {
 			Helper::update_balance( $order, $response->balance_transaction );
 		}
-		Helper::log( 'Response: ' . print_r( $response->captured, true ) );
+		// Set wallet payment method title early so it shows correctly when order is in progress (authorized/on-hold)
+		if ( ( property_exists( $response->payment_method_details, 'card' ) || isset( $response->payment_method_details->card ) ) && ( property_exists( $response->payment_method_details->card, 'wallet' ) || isset( $response->payment_method_details->card->wallet ) ) ) {
+			if ( 'google_pay' === $response->payment_method_details->card->wallet->type ) {
+				$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_google_pay'];
+				$order->set_payment_method_title( $gateway->get_title() );
+				$order->save();
+			} elseif ( 'apple_pay' === $response->payment_method_details->card->wallet->type ) {
+				$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_apple_pay'];
+				$order->set_payment_method_title( $gateway->get_title() );
+				$order->save();
+			}
+		}
 		if ( wc_string_to_bool( $response->captured ) ) {
 			$order->payment_complete( $response->id );
 			$ifpe = ( 'payment' === $this->credit_card_form_type ) ? ' (PE)' : '';
@@ -666,30 +926,24 @@ class CreditCard extends Abstract_Payment_Gateway {
 			/* translators: 1: Charge ID. 2: Brand name 3: last four digit */
 
 			if ( property_exists( $response->payment_method_details, 'link' ) || isset( $response->payment_method_details->link ) ) {
+				/* translators: 1: Additional info, 2: Charge ID, 3: Payment method */
 				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe%1$s. Charge: %2$s. Payment method: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, 'link' ) );
+				/* translators: 1: Additional info, 2: Charge ID, 3: Payment method */
 				Helper::log( sprintf( __( 'Order charge successful in Stripe%1$s. Charge: %2$s. Payment method: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, 'link' ) );
 
 			}
 			if ( property_exists( $response->payment_method_details, 'card' ) || isset( $response->payment_method_details->card ) ) {
-				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe%1$s. Charge: %2$s. Payment method: %3$s ending in %4$d', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
-				Helper::log( sprintf( __( 'Order charge successful in Stripe%1$s. Charge: %2$s. Payment method: %3$s ending in %4$d', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
+				/* translators: 1: Additional info, 2: Charge ID, 3: Card brand, 4: Last 4 digits */
+				$order->add_order_note( sprintf( __( 'Order charge successful in Stripe%1$s. Charge: %2$s. Payment method: %3$s ending in %4$s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
+				/* translators: 1: Additional info, 2: Charge ID, 3: Card brand, 4: Last 4 digits */
+				Helper::log( sprintf( __( 'Order charge successful in Stripe%1$s. Charge: %2$s. Payment method: %3$s ending in %4$s', 'funnelkit-stripe-woo-payment-gateway' ), $ifpe, $response->id, ucfirst( $response->payment_method_details->card->brand ), $response->payment_method_details->card->last4 ) );
 
 				if ( property_exists( $response->payment_method_details->card, 'wallet' ) || isset( $response->payment_method_details->card->wallet ) ) {
 					$wallet_name = ( 'google_pay' === $response->payment_method_details->card->wallet->type ) ? 'Google Pay' : ( $response->payment_method_details->card->wallet->type === 'apple_pay' ? 'Apple Pay' : $response->payment_method_details->card->wallet->type );
+					/* translators: %s: Wallet name */
 					$order->add_order_note( sprintf( __( 'Wallet Used %s', 'funnelkit-stripe-woo-payment-gateway' ), $wallet_name ) );
 					do_action( 'fkwcs_process_final_order_wallet_payment', $response, $order );
 
-					if ( 'google_pay' === $response->payment_method_details->card->wallet->type ) {
-
-						$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_google_pay'];
-						$order->set_payment_method_title( $gateway->get_title() );
-						$order->save();
-					} elseif ( $response->payment_method_details->card->wallet->type === 'apple_pay' ) {
-						$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_apple_pay'];
-						$order->set_payment_method_title( $gateway->get_title() );
-						$order->save();
-
-					}
 				}
 			}
 
@@ -704,7 +958,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 			$order->set_transaction_id( $response->id );
 			$order->save();
 			/* translators: transaction id */
-			$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Press an eye icon below Transaction Data / Actions to Capture/Void the charge.', 'funnelkit-stripe-woo-payment-gateway' ), $response->id ) );
+			$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Move this order to Processing or Completed to capture the payment, or use the eye icon next to Transaction Data to capture/void it manually.', 'funnelkit-stripe-woo-payment-gateway' ), $response->id ) );
 			/* translators: transaction id */
 			Helper::log( sprintf( 'Charge authorized Order id - %1s', $order->get_id() ) );
 		}
@@ -731,20 +985,33 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		$token_request_key = 'wc-' . $payment_method . '-payment-token';
 
-		if ( ! isset( $_POST[ $token_request_key ] ) || 'new' === wc_clean( wp_unslash( $_POST[ $token_request_key ] ) ) ) {  //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		if ( ! isset( $_POST[ $token_request_key ] ) || 'new' === wc_clean( wp_unslash( $_POST[ $token_request_key ] ) ) ) {  //phpcs:ignore WordPress.Security.NonceVerification.Missing , FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 			return null;
 		}
 
 		$token = WC_Payment_Tokens::get( wc_clean( wp_unslash( $_POST[ $token_request_key ] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
-		if ( ! $token || $token->get_user_id() !== get_current_user_id() ) {
+		/**
+		 * Filters the user the saved token must belong to.
+		 *
+		 * Defaults to the currently logged-in user, so the storefront IDOR guard is
+		 * byte-identical to before. Capability-gated admin flows (e.g. the Edit Order
+		 * "Pay for Order" screen) bind this to the order's customer instead, because
+		 * the admin is not the token owner.
+		 *
+		 * @since 1.14.1
+		 *
+		 * @param int $expected_user_id User ID the saved token must belong to. Default current user.
+		 */
+		$expected_user_id = apply_filters( 'fkwcs_saved_token_expected_user_id', get_current_user_id() );
+
+		if ( ! $token || (int) $token->get_user_id() !== (int) $expected_user_id ) {
 			return null;
 		}
 
 		return $token;
 	}
-
 
 	public function is_using_saved_payment_method() {
 		$payment_method = isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : $this->id; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
@@ -869,18 +1136,17 @@ class CreditCard extends Abstract_Payment_Gateway {
 		return apply_filters( 'woocommerce_gateway_icon', $icons, $this->id );
 	}
 
-
 	/**
 	 * Get test mode description
 	 *
 	 * @return string
 	 */
 	public function get_test_mode_description() {
+		/* translators: 1: Opening bold tag, 2: Closing bold tag, 3: Opening anchor tag, 4: Closing anchor tag */
 		return sprintf( esc_html__( '%1$1s Test Mode Enabled:%2$2s Use demo card 4242424242424242 with any future date and CVV. Check more %3$3sdemo cards%4$4s', 'funnelkit-stripe-woo-payment-gateway' ), '<b>', '</b>', "<a href='https://stripe.com/docs/testing' target='_blank'>", '</a>' );
 	}
 
 	public function localize_element_data( $data ) {
-		$data['link_authentication']  = 'no';
 		$data['inline_cc']            = $this->inline_cc;
 		$data['card_form_type']       = $this->credit_card_form_type;
 		$data['enable_saved_cards']   = $this->enable_saved_cards;
@@ -893,10 +1159,6 @@ class CreditCard extends Abstract_Payment_Gateway {
 			)
 		);
 		$data['allowed_cards']        = $this->allowed_cards;
-		if ( $this->process_link_payment() ) {
-			$data['link_authentication'] = $this->settings['link_authentication'];
-		}
-		$data['link_none'] = isset( $this->settings['link_none'] ) ? $this->settings['link_none'] : 'no';
 		if ( 'payment' === $this->credit_card_form_type ) {
 			$data['fkwcs_payment_data'] = $this->payment_element_data();
 		}
@@ -916,17 +1178,11 @@ class CreditCard extends Abstract_Payment_Gateway {
 		return $fragments;
 	}
 
-
 	public function payment_element_data() {
 
-		$data    = $this->get_payment_element_options();
-		$methods = array( 'card' );
-		if ( isset( $this->settings['link_none'] ) && 'yes' !== $this->settings['link_none'] ) {
-			$methods = $this->get_payment_method_types();
-		}
+		$data = $this->get_payment_element_options();
 
-		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
-		$data['appearance']           = array(
+		$data['appearance'] = array(
 			'theme' => 'stripe',
 		);
 
@@ -936,14 +1192,35 @@ class CreditCard extends Abstract_Payment_Gateway {
 			),
 		);
 
-		// Disable Link only on Add Payment Method and Change Payment Method pages
 		$is_add_payment_method = is_add_payment_method_page();
 		$is_change_payment     = isset( $_GET['change_payment_method'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Processing checkout form data during payment processing
+
+		// Show Link in the card Payment Element only when the Link gateway is enabled and the auth trigger is configured.
+		$link_settings        = get_option( 'woocommerce_fkwcs_stripe_link_settings', array() );
+		$link_gateway_enabled = isset( $link_settings['enabled'] ) && 'yes' === $link_settings['enabled'];
+		$link_auth_trigger    = isset( $link_settings['link_authentication_trigger'] ) ? $link_settings['link_authentication_trigger'] : 'none';
+		$link_in_card_element = $link_gateway_enabled && 'none' !== $link_auth_trigger && ! $is_add_payment_method && ! $is_change_payment;
+
+		/*
+		 * Default integration: "Link as a payment method" ('link' added to payment_method_types, saved as a
+		 * "link" PaymentMethod). wallets.link is the display gate, so it must be 'auto' for Link to render.
+		 * To switch a site to the "Link within card" integration (card-type PaymentMethod that keeps brand/
+		 * last4), filter 'fkwcs_available_payment_element_types' and remove 'link' from the returned list.
+		 */
+		$methods           = array( 'card' );
+		$link_wallet_state = 'never';
+
+		if ( $link_in_card_element ) {
+			$methods           = $this->get_payment_method_types();
+			$link_wallet_state = 'auto';
+		}
+
+		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 
 		$options['wallets'] = array(
 			'applePay'  => 'never',
 			'googlePay' => 'never',
-			'link'      => ( $is_add_payment_method || $is_change_payment ) ? 'never' : 'auto',
+			'link'      => $link_wallet_state,
 		);
 
 		return apply_filters(
@@ -954,11 +1231,6 @@ class CreditCard extends Abstract_Payment_Gateway {
 			),
 			$this
 		);
-	}
-
-
-	public function process_link_payment() {
-		return isset( $this->settings['link_authentication'] ) && 'yes' === $this->settings['link_authentication'] && is_checkout() && WC()->cart instanceof \WC_Cart;
 	}
 
 	/**
@@ -989,6 +1261,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 			$order->update_meta_data( '_fkwcs_webhook_paid', 'yes' );
 			$order->save_meta_data();
+			$order->save();
 		} else {
 
 			try {
@@ -1001,7 +1274,6 @@ class CreditCard extends Abstract_Payment_Gateway {
 			}
 		}
 	}
-
 
 	/**
 	 * Save payment method to meta of the current order
@@ -1102,17 +1374,45 @@ class CreditCard extends Abstract_Payment_Gateway {
 	/**
 	 * Checks if the current request is for a supported payment method via Payment Request Button.
 	 *
+	 * 'link' is included alongside the wallets: Link express orders are submitted with
+	 * payment_method=fkwcs_stripe just like Google Pay / Apple Pay ECE (Link is not a
+	 * registered WC gateway), so without it here a Link express payment dies in
+	 * WooCommerce's "Invalid payment method." validation whenever this gateway is disabled.
+	 *
 	 * @return bool
 	 */
 	private function is_payment_request_for_supported_method() {
-		return isset( $_POST['payment_request_type'], $_POST['payment_method'] ) && in_array( // phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
-			$_POST['payment_request_type'], // phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
-			array(
-				'google_pay',
-				'apple_pay',
-			),
-			true
-		) && 'fkwcs_stripe' === $_POST['payment_method'] && did_action( 'woocommerce_before_checkout_process' ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		return isset( $_POST['payment_request_type'], $_POST['payment_method'] ) && in_array( $_POST['payment_request_type'], array( 'google_pay', 'apple_pay', 'link' ), true ) && 'fkwcs_stripe' === $_POST['payment_method'] && did_action( 'woocommerce_before_checkout_process' );         // phpcs:ignore WordPress.Security.NonceVerification.Missing , FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+	}
+
+	/**
+	 * Resolve the capture method (Charge Type) to use for the current payment.
+	 *
+	 * Express wallet payments (Apple Pay / Google Pay) are processed through the main
+	 * card gateway, but each wallet gateway exposes its own "Charge Type" setting that
+	 * the merchant configures independently. Honour that wallet-specific setting so the
+	 * authorize/capture behaviour matches what is configured for the wallet instead of
+	 * silently falling back to the card gateway's Charge Type.
+	 *
+	 * @return string 'automatic' or 'manual'.
+	 */
+	private function get_effective_capture_method() {
+		$request_type = wc_clean( (string) filter_input( INPUT_POST, 'payment_request_type' ) );
+
+		$wallet_gateway_ids = array(
+			'apple_pay'  => 'fkwcs_stripe_apple_pay',
+			'google_pay' => 'fkwcs_stripe_google_pay',
+		);
+
+		if ( isset( $wallet_gateway_ids[ $request_type ] ) ) {
+			$gateways   = WC()->payment_gateways()->payment_gateways();
+			$gateway_id = $wallet_gateway_ids[ $request_type ];
+			if ( isset( $gateways[ $gateway_id ] ) && ! empty( $gateways[ $gateway_id ]->capture_method ) ) {
+				return $gateways[ $gateway_id ]->capture_method;
+			}
+		}
+
+		return $this->capture_method;
 	}
 
 	/**
@@ -1194,7 +1494,6 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		return $tokens;
 	}
-
 
 	/**
 	 * Fetch all user tokens from users account directly from stripe
@@ -1333,6 +1632,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		// Skip capture check for pre-orders
 		if ( $this->has_pre_order( $order->get_id() ) ) {
+			Helper::log( 'CreditCard Gateway: Skipping capture check for pre-order ' . $order->get_id() );
 			return true;
 		}
 
@@ -1351,7 +1651,8 @@ class CreditCard extends Abstract_Payment_Gateway {
 			// Set order to on-hold if not already
 			if ( ! $order->has_status( 'on-hold' ) ) {
 				$order->set_transaction_id( $intent->id );
-				$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Press an eye icon below Transaction Data / Actions to Capture/Void the charge.', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id ) );
+				/* translators: %s: Charge ID */
+				$order->update_status( 'on-hold', sprintf( __( 'Charge authorized (Charge ID: %s). Move this order to Processing or Completed to capture the payment, or use the eye icon next to Transaction Data to capture/void it manually.', 'funnelkit-stripe-woo-payment-gateway' ), $intent->id ) );
 				Helper::log( 'CreditCard Gateway: Order ' . $order->get_id() . ' set to on-hold for authorization-only charge' );
 			}
 
@@ -1404,7 +1705,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 			}
 
-						$intent = $this->get_intent_from_order( $order );
+			$intent = $this->get_intent_from_order( $order );
 			if ( false === $intent ) {
 				throw new \Exception( 'Intent Not Found' );
 			}
@@ -1427,9 +1728,12 @@ class CreditCard extends Abstract_Payment_Gateway {
 				}
 			}
 			if ( 'setup_intent' === $intent->object && 'succeeded' === $intent->status ) {
-
+				// Check if this is a pre-order and mark accordingly
+				if ( $this->has_pre_order( $order ) ) {
+					$this->mark_order_as_pre_ordered( $order );
+				} else {
 					$order->payment_complete();
-
+				}
 				$redirect_url = $this->get_return_url( $order );
 
 				/**
@@ -1445,6 +1749,18 @@ class CreditCard extends Abstract_Payment_Gateway {
 				}
 			} elseif ( 'succeeded' === $intent->status || 'requires_capture' === $intent->status ) {
 				$redirect_url = $this->process_final_order( end( $intent->charges->data ), $order_id );
+			} elseif ( 'processing' === $intent->status ) {
+				/**
+				 * Handle processing status for credit card - mark as failed
+				 * Credit card payments should not have processing status, this indicates an issue
+				 */
+				$redirect_url = wc_get_checkout_url();
+				wc_add_notice( __( 'Payment is still processing. Please try again or use an alternative payment method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
+				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					$redirect_url = get_the_permalink( wc_clean( wp_unslash( $_GET['wfacp_id'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				}
+				$this->mark_order_failed( $order, __( 'Payment failed: Unexpected "processing" status from Stripe for credit card payment.', 'funnelkit-stripe-woo-payment-gateway' ) );
+				Helper::log( 'Credit card payment intent returned processing status for order ' . $order->get_id() . ' - marking as failed' );
 			} elseif ( 'requires_payment_method' === $intent->status ) {
 
 				$redirect_url = wc_get_checkout_url();

@@ -2,6 +2,10 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use WC_Payment_Gateway;
 use WC_AJAX;
 
@@ -48,6 +52,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @return void
 	 */
 	protected function set_api_keys() {
+
 		if ( Helper::get_mode() === '' ) {
 			$this->test_mode = $this->get_gateway_mode();
 		} else {
@@ -123,6 +128,13 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	abstract protected function init();
 
 	/**
+	 * Filter hooks method for child classes to implement
+	 *
+	 * @return void
+	 */
+	abstract protected function filter_hooks();
+
+	/**
 	 * @return Client|null;
 	 */
 	public function get_client() {
@@ -136,22 +148,26 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function register_stripe_js() {
 
-		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', array(), false, array( 'in_footer' => false ) );
+		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', array(), '3.0', array( 'in_footer' => false ) );
 
 		$wc_jquery_payment_handle = 'jquery-payment';
 		if ( defined( 'WC_VERSION' ) && version_compare( \WC_VERSION, '10.3.0', '>=' ) ) {
 			$wc_jquery_payment_handle = 'wc-jquery-payment';
 		}
+		// in_footer: false — ECE (Express Checkout Element) requires Stripe.js to be available before DOMContentLoaded
+		// so buttons can initialize early enough on product/cart pages.
 		wp_register_script(
 			'fkwcs-stripe-js',
 			FKWCS_URL . 'assets/js/stripe-elements' . Helper::is_min_suffix() . '.js',
 			array(
 				'jquery',
 				$wc_jquery_payment_handle,
-				'fkwcs-stripe-external',
+				Helper::get_stripesdk_handle(),
 			),
 			FKWCS_VERSION,
-			true
+			array(
+				'in_footer' => false,
+			)
 		);
 	}
 
@@ -274,7 +290,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			return;
 		}
 		$this->tokenization_script();
-		wp_enqueue_script( 'fkwcs-stripe-external' );
+		wp_enqueue_script( Helper::get_stripesdk_handle() );
 		wp_enqueue_script( 'fkwcs-stripe-js' );
 		wp_localize_script( 'fkwcs-stripe-js', 'fkwcs_data', $this->localize_data() );
 		add_action( 'wp_head', array( $this, 'enqueue_cc_css' ) );
@@ -339,7 +355,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 		return apply_filters( 'fkwcs_current_user_billing_details', $details, get_current_user_id() );
 	}
-
 
 	/**
 	 * Get current user billing details
@@ -505,7 +520,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 	}
 
-
 	/**
 	 * Validates minimum order amount requirement
 	 *
@@ -521,7 +535,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 	}
 
-
 	/**
 	 * Create payment intent using source
 	 *
@@ -536,6 +549,24 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$intent_data = array();
 		if ( apply_filters( 'fkwcs_execute_payment_intent', true, $order, $prepared_source, $data ) ) {
 			$stripe_api = $this->get_client();
+
+			// Duplicate-charge guard: this path had no intent-reuse check and no idempotency key.
+			// If a PaymentIntent has already succeeded for this order, complete against it instead
+			// of creating (and charging) a brand-new intent.
+			$existing_intent = $this->validate_existing_intent( $order );
+			if ( $existing_intent && in_array( $existing_intent->status, array( 'succeeded', 'success', 'requires_capture' ), true ) ) {
+				$this->save_payment_method( $order, $existing_intent );
+				$redirect_url = $this->process_final_order( end( $existing_intent->charges->data ), $order->get_id() );
+				wp_send_json(
+					apply_filters(
+						'fkwcs_card_payment_return_intent_data',
+						array(
+							'result'   => 'success',
+							'redirect' => $redirect_url,
+						)
+					)
+				);
+			}
 
 			try {
 				if (
@@ -557,15 +588,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			} catch ( \Throwable $e ) {
 				Helper::log( 'Application fee calculation error in make_payment_by_source: ' . $e->getMessage() );
 			}
-
-			// Add idempotency key with retry count logic
-			$idempotency_key = $prepared_source->source . '_' . $order->get_order_key();
-			$retry_count     = Helper::get_meta( $order, '_fkwcs_retry_count' );
-			if ( ! empty( $retry_count ) ) {
-				$idempotency_key = $idempotency_key . '_' . $retry_count;
-			}
-
-			$response    = $stripe_api->payment_intents( 'create', array( $data, array( 'idempotency_key' => $idempotency_key ) ) );
+			$response    = $stripe_api->payment_intents( 'create', array( $data ) );
 			$intent_data = $this->handle_client_response( $response );
 		}
 
@@ -613,12 +636,11 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @param $idempotency_key
 	 * @param $args
 	 *
-	 * @return array
+	 * @return mixed
 	 * @throws \Exception
 	 */
 	public function get_payment_intent( $order, $idempotency_key, $args ) {
-		$stripe_api  = $this->set_client_by_order_payment_mode( $order );
-		$retry_count = Helper::get_meta( $order, '_fkwcs_retry_count' );
+		$stripe_api = $this->set_client_by_order_payment_mode( $order );
 
 		// Use enhanced validation to check if existing intent can be reused
 		$existing_intent = $this->validate_existing_intent( $order );
@@ -650,6 +672,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$args = apply_filters( 'fkwcs_payment_intent_data', $args, $order );
 		unset( $args['application_fee_amount'], $args['application_fee'], $args['transfer_data'], $args['on_behalf_of'] );
 
+		$retry_count = Helper::get_meta( $order, '_fkwcs_retry_count' );
 		if ( ! empty( $retry_count ) ) {
 			$idempotency_key = $idempotency_key . '_' . $retry_count;
 		}
@@ -682,11 +705,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$response = $stripe_api->payment_intents( 'create', $args );
 		$intent   = $this->handle_client_response( $response );
 
-		if ( empty( $retry_count ) ) {
-			$order->update_meta_data( '_fkwcs_retry_count', 1 );
-		} else {
-			$order->update_meta_data( '_fkwcs_retry_count', absint( $retry_count ) + 1 );
-		}
 		$this->save_intent_to_order( $order, $intent );
 
 		return $intent;
@@ -731,6 +749,16 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				if ( $intent_order_id !== $current_order_id ) {
 					return false;
 				}
+			}
+
+			// Verify intent's payment_method_types match current gateway - Stripe does not allow
+			// changing payment_method_types on existing PaymentIntents. When user switches
+			$gateway_types        = $this->get_payment_method_types();
+			$intent_types         = isset( $payment_intent->payment_method_types ) ? (array) $payment_intent->payment_method_types : array();
+			$types_are_compatible = ! empty( array_intersect( $gateway_types, $intent_types ) );
+			if ( ! $types_are_compatible ) {
+				Helper::log( sprintf( 'FunnelKit Stripe: Rejecting existing intent - payment method types mismatch. Intent has: %s, gateway requires: %s', implode( ', ', $intent_types ), implode( ', ', $gateway_types ) ) );
+				return false;
 			}
 
 			return $payment_intent;
@@ -828,6 +856,17 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 			return $absolute_customer_id;
 		}
+
+		// Reached only when the Stripe customer could not be created or resolved — almost always
+		// because the site could not reach Stripe (connection timeout / outbound network issue).
+		// Leave a technical note for the admin explaining the real cause, then abort with a plain,
+		// reassuring message for the shopper — instead of letting an empty customer flow downstream
+		// and surface Stripe's confusing "You passed an empty string for 'customer'" error.
+		if ( $order instanceof \WC_Order ) {
+			$order->add_order_note( esc_html__( 'Payment aborted: the Stripe customer could not be created. The server was unable to reach Stripe (usually a connection timeout / outbound network issue). Please check that the server can connect to api.stripe.com.', 'funnelkit-stripe-woo-payment-gateway' ) );
+		}
+
+		throw new \Exception( esc_html__( 'Sorry, we were unable to process your payment right now. Please try again in a few moments.', 'funnelkit-stripe-woo-payment-gateway' ) );
 	}
 
 	/**
@@ -866,6 +905,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				$description = sprintf( __( 'Name: %1$s %2$s, Username: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), $billing_first_name, $billing_last_name, $user->user_login );
 
 				$args = array(
+					/* translators: 1: Order number, 2: Customer description */
 					'description' => sprintf( __( 'Customer for Order #%1$s %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $order->get_order_number(), $description ),
 					'email'       => $user_email ? $user_email : $order->get_billing_email(),
 					'address'     => array( // sending name and billing address to stripe to support indian exports.
@@ -883,9 +923,11 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				$billing_first_name = method_exists( $order, 'get_billing_first_name' ) ? $order->get_billing_first_name() : $order->billing_first_name;
 				$billing_last_name  = method_exists( $order, 'get_billing_last_name' ) ? $order->get_billing_last_name() : $order->billing_last_name;
 
+				/* translators: 1: First name, 2: Last name */
 				$description = sprintf( __( 'Name: %1$s %2$s, Guest', 'funnelkit-stripe-woo-payment-gateway' ), $billing_first_name, $billing_last_name );
 
 				$args = array(
+					/* translators: 1: Order number, 2: Customer description */
 					'description' => sprintf( __( 'Customer for Order #%1$s %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $order->get_order_number(), $description ),
 					'email'       => $user_email ? $user_email : $order->get_billing_email(),
 					'address'     => array(
@@ -983,15 +1025,16 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 						$billing_last_name = get_user_meta( $order->get_customer_id(), 'last_name', true );
 					}
 
-					// translators: %1$s First name, %2$s Second name, %3$s Username.
-					$username    = ( $user && isset( $user->user_login ) ) ? $user->user_login : 'Unknown';
-					$description = sprintf( __( 'Name: %1$s %2$s, Username: %3$s', 'woocommerce-gateway-stripe' ), $billing_first_name, $billing_last_name, $username );
+					$username = ( $user && isset( $user->user_login ) ) ? $user->user_login : 'Unknown';
+					/* translators: 1: First name, 2: Last name, 3: Username */
+					$description = sprintf( __( 'Name: %1$s %2$s, Username: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), $billing_first_name, $billing_last_name, $username );
 				} else {
 					$name = ( method_exists( $order, 'get_billing_first_name' ) ? $order->get_billing_first_name() : $order->billing_first_name ) . ' ' . ( method_exists( $order, 'get_billing_last_name' ) ? $order->get_billing_last_name() : $order->billing_last_name );
 					// translators: %1$s First name, %2$s Second name.
 					$description = sprintf( __( 'Name: %1$s, Guest', 'funnelkit-stripe-woo-payment-gateway' ), $name );
 				}
 				$args = array(
+					/* translators: 1: Order number, 2: Customer description */
 					'description' => sprintf( __( 'Customer for Order #%1$s %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $order->get_order_number(), $description ),
 					'email'       => $user_email ? $user_email : $order->get_billing_email(),
 					'address'     => array( // sending name and billing address to stripe to support indian exports.
@@ -1009,9 +1052,11 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				$billing_first_name = method_exists( $order, 'get_billing_first_name' ) ? $order->get_billing_first_name() : $order->billing_first_name;
 				$billing_last_name  = method_exists( $order, 'get_billing_last_name' ) ? $order->get_billing_last_name() : $order->billing_last_name;
 
+				/* translators: 1: First name, 2: Last name */
 				$description = sprintf( __( 'Name: %1$s %2$s, Guest', 'funnelkit-stripe-woo-payment-gateway' ), $billing_first_name, $billing_last_name );
 
 				$args = array(
+					/* translators: 1: Order number, 2: Customer description */
 					'description' => sprintf( __( 'Customer for Order #%1$s %2$s', 'funnelkit-stripe-woo-payment-gateway' ), $order->get_order_number(), $description ),
 					'email'       => $user_email ? $user_email : $order->get_billing_email(),
 					'address'     => array(
@@ -1082,7 +1127,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function get_order_description( $order ) {
 
-		return apply_filters( 'fkwcs_get_order_description', wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) . ' - ' . __( 'Order', 'woocommerce' ) . ' ' . $order->get_order_number(), $order );
+		return apply_filters( 'fkwcs_get_order_description', wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) . ' - ' . __( 'Order', 'woocommerce' ) . ' ' . $order->get_order_number(), $order ); //phpcs:ignore WordPress.WP.I18n.TextDomainMismatch
 	}
 
 	/**
@@ -1095,7 +1140,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public function should_save_card( $order ) {  //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		return apply_filters( 'fkwcs_should_save_card', $this->supports( 'tokenization' ), $order );
 	}
-
 
 	public function create_payment_intent() { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter
 		$client = $this->get_client();
@@ -1123,6 +1167,18 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public function create_setup_intent( $source, $customer_id = '', $order = false ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedParameter,VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 		$customer_id = ! empty( $customer_id ) ? $customer_id : $this->get_customer_id();
 		$client      = $this->get_client();
+
+		// Get payment method types - default to gateway's supported types
+		$payment_method_types = $this->get_payment_method_types();
+
+		// If we have a source, try to get the payment method type from it
+		if ( ! empty( $source ) ) {
+			$source_object = $this->get_payment_method_object( $source );
+			if ( $source_object && isset( $source_object->type ) ) {
+				$payment_method_types = array( $source_object->type );
+			}
+		}
+
 		if ( ! empty( $source ) ) {
 			$response = apply_filters(
 				'fkwcs_payment_intent_data',
@@ -1151,6 +1207,22 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return apply_filters( 'fkwcs_execute_setup_payment_intent_data', $obj, $order, $source );
 	}
 
+	/**
+	 * Get payment method object from Stripe
+	 *
+	 * @param string $payment_method_id
+	 * @return object|null
+	 */
+	private function get_payment_method_object( $payment_method_id ) {
+		try {
+			$client   = $this->get_client();
+			$response = $client->payment_methods( 'retrieve', array( $payment_method_id ) );
+			return $response['success'] ? $response['data'] : null;
+		} catch ( \Exception $e ) {
+			Helper::log( 'Get Payment Method Object Error: ' . $e->getMessage() );
+			return null;
+		}
+	}
 
 	/**
 	 * Get intent from the order
@@ -1161,27 +1233,64 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 * @throws \Exception
 	 */
 	public function get_intent_from_order( $order ) {
-		$intent = Helper::get_meta( $order, '_fkwcs_intent_id' );
+		$intent = $this->get_intent_id_from_meta( Helper::get_meta( $order, '_fkwcs_intent_id' ) );
 
 		$client = $this->get_client();
 		if ( ! empty( $intent ) ) {
-			$response = $client->payment_intents( 'retrieve', array( $intent['id'] ) );
-			$obj      = $this->handle_client_response( $response );
+			// Meta may be an array ['id'=>..,'client_secret'=>..] or a bare id string.
+			$intent_id = is_array( $intent ) ? ( isset( $intent['id'] ) ? $intent['id'] : '' ) : $intent;
+			if ( ! empty( $intent_id ) ) {
+				$response = $client->payment_intents( 'retrieve', array( $intent_id ) );
+				$obj      = $this->handle_client_response( $response );
 
-			return $obj;
+				return $obj;
+			}
 		}
 
 		/** The order doesn't have a payment intent, but it may have a setup intent. */
-		$intent = Helper::get_meta( $order, '_fkwcs_setup_intent' );
+		$intent = $this->get_intent_id_from_meta( Helper::get_meta( $order, '_fkwcs_setup_intent' ) );
 
 		if ( ! empty( $intent ) ) {
-			$response = $client->setup_intents( 'retrieve', array( $intent['id'] ) );
-			$obj      = $this->handle_client_response( $response );
+			// Meta may be an array ['id'=>..,'client_secret'=>..] or a bare id string.
+			$intent_id = is_array( $intent ) ? ( isset( $intent['id'] ) ? $intent['id'] : '' ) : $intent;
+			if ( ! empty( $intent_id ) ) {
+				$response = $client->setup_intents( 'retrieve', array( $intent_id ) );
+				$obj      = $this->handle_client_response( $response );
 
-			return $obj;
+				return $obj;
+			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Resolves a Stripe intent ID out of intent order meta, whatever shape it was stored in.
+	 *
+	 * The intent metas are not written consistently. Most writers store an array —
+	 * array( 'id' => ..., 'client_secret' => ... ) — but save_intent_to_order() stores a bare
+	 * setup-intent ID string, and `_fkwcs_intent_id` can arrive as a plain string on stores
+	 * migrated from other Stripe plugins (see Helper::get_compatibility_keys()).
+	 *
+	 * Indexing a string with ['id'] is a fatal TypeError on PHP 8 ("Cannot access offset of type
+	 * string on string"), which is what took down admin-triggered subscription renewals. Normalise
+	 * on read instead of assuming a shape — existing orders already carry both formats, so fixing
+	 * the writers alone would not repair them.
+	 *
+	 * @param mixed $intent_meta Raw meta value: array/object with an `id`, or a plain ID string.
+	 *
+	 * @return string The intent ID, or an empty string when the meta holds nothing usable.
+	 */
+	protected function get_intent_id_from_meta( $intent_meta ) {
+		if ( is_array( $intent_meta ) ) {
+			return isset( $intent_meta['id'] ) ? (string) $intent_meta['id'] : '';
+		}
+
+		if ( is_object( $intent_meta ) ) {
+			return isset( $intent_meta->id ) ? (string) $intent_meta->id : '';
+		}
+
+		return is_scalar( $intent_meta ) ? trim( (string) $intent_meta ) : '';
 	}
 
 	/**
@@ -1423,10 +1532,26 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public function setup_intent( $order, $prepared_source ) {
 		$client = $this->get_client();
 
+		// Get payment method types from the source object if available
+		$payment_method_types = array( 'card' ); // Default to card
+
+		if ( isset( $prepared_source->source_object ) && isset( $prepared_source->source_object->type ) ) {
+			$payment_method_type  = $prepared_source->source_object->type;
+			$payment_method_types = array( $payment_method_type );
+		}
+
+		// Get payment method types from the source object if available
+		$payment_method_types = array( 'card' ); // Default to card
+
+		if ( isset( $prepared_source->source_object ) && isset( $prepared_source->source_object->type ) ) {
+			$payment_method_type  = $prepared_source->source_object->type;
+			$payment_method_types = array( $payment_method_type );
+		}
+
 		$data = array(
 			'payment_method'       => $prepared_source->source,
 			'customer'             => $prepared_source->customer,
-			'payment_method_types' => array( 'card' ),
+			'payment_method_types' => $payment_method_types,
 			'usage'                => 'off_session',
 		);
 
@@ -1533,7 +1658,11 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			$request['customer'] = $prepared_source->customer;
 		}
 		$request['metadata'] = $this->add_metadata( $order );
-		$request             = apply_filters( 'fkwcs_payment_intent_data', $request, $order );
+		$amount_data         = $this->add_amount_details( $order, $request['payment_method_types'][0] ?? 'card' );
+		if ( ! empty( $amount_data ) ) {
+			$request = array_merge( $request, $amount_data );
+		}
+		$request = apply_filters( 'fkwcs_payment_intent_data', $request, $order );
 		unset( $request['application_fee_amount'], $request['application_fee'], $request['transfer_data'], $request['on_behalf_of'] );
 		try {
 			if (
@@ -1696,7 +1825,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function save_intent_to_order( $order, $intent ) {
 		if ( 'payment_intent' === $intent->object ) {
-			Helper::add_payment_intent_to_order( $intent, $order, $this->get_gateway_mode() );
+			$payment_mode = isset( $intent->livemode ) ? ( $intent->livemode ? 'live' : 'test' ) : $this->get_gateway_mode();
+			Helper::add_payment_intent_to_order( $intent, $order, $payment_mode );
 		} elseif ( 'setup_intent' === $intent->object ) {
 			$order->update_meta_data( '_fkwcs_setup_intent', $intent->id );
 		}
@@ -1759,35 +1889,98 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
+	 * Request scoped cache of retrieved Stripe PaymentMethod objects, keyed by payment method id.
+	 *
+	 * One checkout retrieves the same payment method more than once: validate_fields() inspects
+	 * its card brand to enforce Allowed Card Brands, then prepare_source() fetches it again to
+	 * build the charge. Nothing can change it between those two calls inside a single request,
+	 * so the repeat lookups are served from here rather than costing another Stripe round trip.
+	 *
+	 * Static because the two calls do not always land on the same gateway instance. Entries live
+	 * only for the current request.
+	 *
+	 * @var array
+	 */
+	protected static $payment_method_cache = array();
+
+	/**
+	 * Retrieve a Stripe PaymentMethod, reusing the one already fetched in this request.
+	 *
+	 * Failures are deliberately not cached: they are usually transient, and a caller that needs
+	 * to surface its own error must be able to retry the call.
+	 *
+	 * @param string $payment_method_id Stripe payment method id.
+	 *
+	 * @return object|false
+	 */
+	protected function retrieve_payment_method( $payment_method_id ) {
+		if ( ! is_string( $payment_method_id ) || '' === $payment_method_id ) {
+			return false;
+		}
+
+		if ( isset( self::$payment_method_cache[ $payment_method_id ] ) ) {
+			return self::$payment_method_cache[ $payment_method_id ];
+		}
+
+		$client = $this->get_client();
+		if ( ! $client ) {
+			return false;
+		}
+
+		$response = $client->payment_methods( 'retrieve', array( $payment_method_id ) );
+		if ( empty( $response['success'] ) ) {
+			return false;
+		}
+
+		self::$payment_method_cache[ $payment_method_id ] = $response['data'];
+
+		return $response['data'];
+	}
+
+	/**
+	 * Replace a cached PaymentMethod after an operation returns an updated copy, so later reads
+	 * in this request do not see the pre operation state.
+	 *
+	 * @param object $payment_method Updated payment method object.
+	 *
+	 * @return void
+	 */
+	protected function cache_payment_method( $payment_method ) {
+		if ( is_object( $payment_method ) && ! empty( $payment_method->id ) ) {
+			self::$payment_method_cache[ $payment_method->id ] = $payment_method;
+		}
+	}
+
+	/**
 	 * Prepare source OR payment method
 	 *
 	 * @param $order
-	 * @param $force_save_source
+	 * @param $attach_payment_method Whether to attach the PaymentMethod to the customer upfront.
 	 *
 	 * @return object|void
 	 */
-	public function prepare_source( $order, $force_save_source = false ) {
+	public function prepare_source( $order, $attach_payment_method = false ) {
 		$customer_id   = $this->get_customer_id( $order );
 		$source_object = '';
 		$source_id     = '';
 		$stripe_api    = $this->get_client();
 
 		/** New CC info was entered and we have a new source to process */
-		if ( ! empty( $_POST['fkwcs_source'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing
-			$stripe_source = wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
-			$response      = $stripe_api->payment_methods( 'retrieve', array( $stripe_source ) );
+		if ( ! empty( $_POST['fkwcs_source'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			$stripe_source = wc_clean( wp_unslash( $_POST['fkwcs_source'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
-			$source_object = $response['success'] ? $response['data'] : false;
+			$source_object = $this->retrieve_payment_method( $stripe_source );
 			if ( ! $source_object ) {
 				return;
 			}
 
 			$source_id = $source_object->id;
-			if ( true === $force_save_source ) {
+			if ( true === $attach_payment_method ) {
 				// Attach Source to customer
 				$response = $stripe_api->payment_methods( 'attach', array( $source_id, array( 'customer' => $customer_id ) ) );
 				if ( $response['success'] ) {
 					$source_object = $response['data'];
+					$this->cache_payment_method( $source_object );
 				} else {
 					$error_message = $response['message'];
 					throw new \Exception( $error_message ); //phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped,WordPress.Security.EscapeOutput.OutputNotEscaped
@@ -1797,15 +1990,14 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 		/** Get payment source id by token id */
 
-		if ( empty( $source_id ) && ! empty( $_POST[ 'wc-' . $this->id . '-payment-token' ] ) && 'new' !== $_POST[ 'wc-' . $this->id . '-payment-token' ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( empty( $source_id ) && ! empty( $_POST[ 'wc-' . $this->id . '-payment-token' ] ) && 'new' !== $_POST[ 'wc-' . $this->id . '-payment-token' ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 			$token = $this->find_saved_token();
 
 			$source_id = ( $token ) ? $token->get_token() : '';
 		}
 
-		if ( empty( $source_object ) ) {
-			$response      = $stripe_api->payment_methods( 'retrieve', array( $source_id ) );
-			$source_object = $response['success'] ? $response['data'] : false;
+		if ( empty( $source_object ) && ! empty( $source_id ) ) {
+			$source_object = $this->retrieve_payment_method( $source_id );
 		}
 		if ( ! empty( $source_object ) && empty( $source_object->customer ) && ! empty( $customer_id ) ) {
 			$source_object->customer = $customer_id;
@@ -1946,14 +2138,18 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				'klarna'            => '<img src="' . FKWCS_URL . 'assets/icons/klarna.svg" class="stripe-klarna-icon stripe-icon" alt="klarna" />',
 				'afterpay_clearpay' => '<img src="' . FKWCS_URL . 'assets/icons/afterpay.png" class="stripe-afterpay-icon stripe-icon" alt="afterpay" style="width:auto;height:24px" />',
 				'mobilepay'         => '<img src="' . FKWCS_URL . 'assets/icons/mobilepay.svg" class="stripe-afterpay-icon stripe-icon" alt="mobilepay" style="width:auto;height:24px" />',
+				'mb_way'            => '<img src="' . FKWCS_URL . 'assets/icons/mbway.svg" class="stripe-mbway-icon stripe-icon" alt="MB WAY" style="width:auto;height:24px" />',
 				'cashapp'           => '<img src="' . FKWCS_URL . 'assets/icons/cashapp.svg" class="stripe-cashapp-icon stripe-icon" alt="pix" style="width:auto;height:24px" />',
 				'pix'               => '<img src="' . FKWCS_URL . 'assets/icons/pix.svg" class="stripe-pix-icon stripe-icon" alt="pix" style="width:auto;height:24px" />',
 				'multibanco'        => '<img src="' . FKWCS_URL . 'assets/icons/multibanco.svg" class="stripe-multibanco-icon stripe-icon" alt="multibanco" style="width:auto;height:24px" />',
-				'eps'               => '<img src="' . FKWCS_URL . 'assets/icons/multibanco.svg" class="stripe-eps-icon stripe-icon" alt="eps" style="width:auto;height:24px" />',
+				'eps'               => '<img src="' . FKWCS_URL . 'assets/icons/eps.svg" class="stripe-eps-icon stripe-icon" alt="eps" style="width:auto;height:24px" />',
+				'twint'             => '<img src="' . FKWCS_URL . 'assets/icons/twint.svg" class="stripe-twint-icon stripe-icon" alt="TWINT" style="width:auto;height:24px" />',
+				'alipay'            => '<img src="' . FKWCS_URL . 'assets/icons/alipay.svg" class="stripe-alipay-icon stripe-icon" alt="alipay" style="width:auto;height:24px" />',
+				'blik'              => '<img src="' . FKWCS_URL . 'assets/icons/blik.svg" class="stripe-blik-icon stripe-icon" alt="BLIK" style="width:auto;height:24px" />',
+				'amazon_pay'        => '<img src="' . FKWCS_URL . 'assets/icons/amazon_pay.svg" class="stripe-amazon_pay-icon stripe-icon" alt="AmazonPay" style="width:auto;height:15px;" />',
 			)
 		);
 	}
-
 
 	/**
 	 * Get return URL
@@ -2138,7 +2334,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		);
 	}
 
-
 	/**
 	 * Prepare shipping data to pass onto api calls
 	 *
@@ -2185,6 +2380,61 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return $data;
 	}
 
+	/**
+	 * Prepare amount_details/payment_details for the PI request.
+	 *
+	 * @param \WC_Order $order                 Order (used for currency/address when package_only; ignored for line items when package_only).
+	 * @param string    $payment_method_type   Payment method type (e.g. 'card'). Pass string; array is normalized to first element.
+	 * @param array     $products              Line item source: array with 'products' (and optionally 'total') for package/upsell, or empty for order items.
+	 * @param bool      $package_only          When true, amount details are built only from $products (e.g. upsell package). Order line items are not used; empty package returns empty.
+	 *
+	 * @return array
+	 */
+	public function add_amount_details( $order, $payment_method_type = 'card', $products = array(), $package_only = false ) {
+		if ( ! $order instanceof \WC_Order ) {
+			return array();
+		}
+
+		$payment_method_type = is_array( $payment_method_type ) ? ( $payment_method_type[0] ?? 'card' ) : $payment_method_type;
+		$package_only        = (bool) $package_only;
+
+		$amount_details = new Amount_Details( $order, $payment_method_type, $products, $package_only );
+		if ( ! $amount_details->is_enabled() ) {
+			return array();
+		}
+
+		$amount_details_data = $amount_details->build();
+		if ( empty( $amount_details_data ) ) {
+			return array();
+		}
+
+		$order_reference = Line_Items\Formatter::sanitize_reference( $order->get_order_key() );
+		$payment_details = array(
+			'order_reference' => $order_reference ? $order_reference : $order->get_order_key(),
+		);
+
+		if ( 'card' === strtolower( (string) $payment_method_type ) ) {
+			$billing_email = $order->get_billing_email();
+			if ( ! empty( $billing_email ) ) {
+				$customer_reference = Line_Items\Formatter::sanitize_reference( $billing_email );
+				if ( $customer_reference ) {
+					$payment_details['customer_reference'] = $customer_reference;
+				}
+			}
+		}
+
+		return apply_filters(
+			'fkwcs_payment_amount_details',
+			array(
+				'amount_details'  => $amount_details_data,
+				'payment_details' => $payment_details,
+			),
+			$order,
+			$payment_method_type,
+			$products,
+			$package_only
+		);
+	}
 
 	/**
 	 * Prepare metadata to the api calls to create charge/PI
@@ -2277,7 +2527,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return apply_filters( 'fkwcs_metadata_details', $details, $order );
 	}
 
-
 	/**
 	 * Checks if subscription plugin exists and order contains subscription items
 	 *
@@ -2288,7 +2537,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public function has_subscription( $order_id ) {
 		return ( function_exists( 'wcs_order_contains_subscription' ) && ( wcs_order_contains_subscription( $order_id ) || wcs_is_subscription( $order_id ) || wcs_order_contains_renewal( $order_id ) ) );
 	}
-
 
 	/**
 	 * Get key value from the order meta or look for relative area
@@ -2357,7 +2605,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return true;
 	}
 
-
 	/**
 	 * Checks if a given payment gateway is available locally
 	 * Invoked from gateways like iDeal, Sepa, Alipay etc
@@ -2366,6 +2613,10 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	 */
 	public function is_available_local_gateway() {
 		if ( 'yes' !== $this->enabled ) {
+			return false;
+		}
+
+		if ( false === $this->is_configured() ) {
 			return false;
 		}
 
@@ -2440,8 +2691,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$is_token_used = isset( $result['token_used'] ) && $result['token_used'] === 'yes' ? 'yes' : 'no';
 
 		if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$output['wfacp_id']                   = wc_clean( $_GET['wfacp_id'] ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$output['wfacp_is_checkout_override'] = wc_clean( $_GET['wfacp_is_checkout_override'] ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$output['wfacp_id']                   = wc_clean( wp_unslash( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$output['wfacp_is_checkout_override'] = wc_clean( wp_unslash( $_GET['wfacp_is_checkout_override'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
 
 		// Put the final thank you page redirect into the verification URL.
@@ -2465,7 +2716,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		);
 	}
 
-
 	/**
 	 * Save Meta Data Like Balance Charge ID & status
 	 * Add respective  order notes according to stripe charge status
@@ -2486,11 +2736,9 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return $return_url;
 	}
 
-
 	public function get_payment_method_types() {
 		return array( $this->payment_method_types );
 	}
-
 
 	public function get_latest_charge_from_intent( $intent ) {
 		if ( ! empty( $intent->charges->data ) ) {
@@ -2501,7 +2749,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 
 		return '';
 	}
-
 
 	/**
 	 * Get charge object by charge ID.
@@ -2540,11 +2787,11 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		wc_maybe_define_constant( 'WOOCOMMERCE_CHECKOUT', true );
 
 		try {
-			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = isset( $_GET['order'] ) ? sanitize_text_field( wp_unslash( $_GET['order'] ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			Helper::clear_order_cache( $order_id );
 			$order = wc_get_order( $order_id );
 
-			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( $_GET['order_key'] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( ! isset( $_GET['order_key'] ) || ! $order instanceof \WC_Order || ! $order->key_is_valid( wc_clean( wp_unslash( $_GET['order_key'] ) ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				throw new \Exception( __( 'Invalid Order Key.', 'funnelkit-stripe-woo-payment-gateway' ) );
 
 			}
@@ -2565,6 +2812,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 					array(
 						'pending',
 						'failed',
+						'cancelled',
 					),
 					$order
 				)
@@ -2624,7 +2872,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 				$redirect_url = wc_get_checkout_url();
 				wc_add_notice( __( 'Unable to process this payment, please try again or use alternative method.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 				if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-					$redirect_url = get_the_permalink( wc_clean( $_GET['wfacp_id'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					$redirect_url = get_the_permalink( wc_clean( wp_unslash( $_GET['wfacp_id'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				}
 				/**
 				 * Handle intent with no payment method here, we mark the order as failed and show users a notice
@@ -2644,7 +2892,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			Helper::log( 'Redirecting to :' . $redirect_url );
 		} catch ( \Exception $e ) {
 			$redirect_url = $woocommerce->cart->is_empty() ? get_permalink( wc_get_page_id( 'shop' ) ) : wc_get_checkout_url();
-			wc_add_notice( esc_html( $e->getMessage() ), 'error' );
+			Helper::log( 'Payment exception: ' . $e->getMessage() );
+			wc_add_notice( __( 'Payment failed. Please try again or contact support.', 'funnelkit-stripe-woo-payment-gateway' ), 'error' );
 		}
 		if ( ! isset( $_GET['is_ajax'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			remove_all_actions( 'wp_redirect' );
@@ -2716,7 +2965,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 	}
 
-
 	/**
 	 * Create multiple countries selection HTML
 	 *
@@ -2764,7 +3012,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			<td class="forminp">
 				<select multiple="multiple" name="<?php echo esc_attr( $data['id'] ); ?>[]" style="width:350px"
 						data-placeholder="<?php esc_attr_e( 'Choose countries / regions&hellip;', 'funnelkit-stripe-woo-payment-gateway' ); ?>"
-						aria-label="<?php esc_attr_e( 'Country / Region', 'funnelkit-stripe-woo-payment-gateway' ); ?>" class="wc-enhanced-select <?php esc_attr_e( $data['class'] ); ?>">
+						aria-label="<?php esc_attr_e( 'Country / Region', 'funnelkit-stripe-woo-payment-gateway' ); ?>" class="wc-enhanced-select <?php echo esc_attr( $data['class'] ); ?>">
 					<?php
 					if ( ! empty( $countries ) ) {
 						foreach ( $countries as $key => $val ) {
@@ -2795,7 +3043,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return is_array( $value ) ? array_map( 'wc_clean', array_map( 'stripslashes', $value ) ) : '';
 	}
 
-
 	/**
 	 * Validate country before moving forward with the save card process
 	 * We recently came across the limitation of attaching customer and payment method prior to intent calls
@@ -2809,7 +3056,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	}
 
 	public function prevent_stripe_script_blocking( $tag, $handle ) {
-		if ( 'fkwcs-stripe-external' === $handle ) {
+		if ( Helper::get_stripesdk_handle() === $handle ) {
 			// Add the custom attribute
 			$tag = str_replace( ' src', ' data-cookieconsent="ignore" src', $tag );
 		}
@@ -2932,7 +3179,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return true;
 	}
 
-	private function get_gateway_mode() {
+	public function get_gateway_mode() {
 		return ( 'test_admin_only' === get_option( 'fkwcs_mode', 'test' ) && is_super_admin() ) ? 'test' : get_option( 'fkwcs_mode', 'test' );
 	}
 
@@ -2949,14 +3196,8 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public function maybe_mandate_data_required( $request, $order ) {
 
 		try {
-			$is_mandate = false;
-			$is_link    = ! empty( $this->settings ) && isset( $this->settings['link_none'] ) ? $this->settings['link_none'] : 'no';
-			if ( ! empty( $this->credit_card_form_type ) && 'payment' === $this->credit_card_form_type && $is_link === 'no' ) {
-				$is_mandate = true;
-			}
-
 			// Check if the payment method requires a mandate
-			if ( $is_mandate ) {
+			if ( in_array( 'link', $this->get_payment_method_types(), true ) ) {
 				$request = self::add_mandate_data( $request, $order );
 			}
 		} catch ( \Exception $e ) {
@@ -3022,7 +3263,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		return $client;
 	}
 
-
 	/**
 	 * @param string|array $customer_id
 	 *
@@ -3048,14 +3288,19 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	}
 
 	public function get_element_options() {
+		/**
+		 * get_minimum_amount() is already in the currency's smallest unit, the cart total is a
+		 * decimal. Comparing them directly meant any cart below the minimum's numeric value kept
+		 * the minimum, which was then multiplied again -- a 25.00 USD cart reported 5000.
+		 * Convert first, compare in the same unit, and do not format an already-converted value.
+		 */
+		$amount = Helper::get_minimum_amount();
+
 		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
-			$order_amount = WC()->cart->get_total( 'edit' );
-			$amount       = Helper::get_minimum_amount();
-			if ( $order_amount >= $amount ) {
-				$amount = $order_amount;
+			$cart_amount = Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) );
+			if ( $cart_amount > $amount ) {
+				$amount = $cart_amount;
 			}
-		} else {
-			$amount = Helper::get_minimum_amount();
 		}
 
 		return array(
@@ -3063,7 +3308,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			'mode'                  => 'payment',
 			'paymentMethodCreation' => 'manual',
 			'currency'              => strtolower( $this->get_currency() ),
-			'amount'                => Helper::get_formatted_amount( $amount ), // keeping it as sample
+			'amount'                => $amount,
 		);
 	}
 
@@ -3104,26 +3349,75 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 		try {
 
+			$client = $this->get_client();
+
+			// Append (never replace) the issuer decline code so the note carries the real reason instead of
+			// only Stripe's generic message. The shopper-facing notice is untouched.
+			$reason = $message . $this->get_decline_code_note_suffix();
+
 			if ( $order->has_status( $status ) ) {
 
-				if ( empty( $this->get_client()->request_log_url ) ) {
-					$order->add_order_note( 'Reason: ' . $message );
+				if ( empty( $client ) || empty( $client->request_log_url ) ) {
+					$order->add_order_note( 'Reason: ' . $reason );
 				} else {
-					$error_message = sprintf( '%s <br/><a href="%s" target="_blank">%s</a>', $message, $this->get_client()->request_log_url, __( 'View this in Stripe dashboard', 'funnelkit-stripe-woo-payment-gateway' ) );
+					$error_message = sprintf( '%s <br/><a href="%s" target="_blank">%s</a>', $reason, esc_url( $client->request_log_url ), __( 'View this in Stripe dashboard', 'funnelkit-stripe-woo-payment-gateway' ) );
 					$order->add_order_note( 'Reason: ' . $error_message );
 
 				}
 			} else {
 				add_filter( 'woocommerce_new_order_note_data', array( $this, 'add_transition_suffix_in_note' ), 9999 );
-				$order->update_status( $status, 'Reason: ' . $message );
+				$order->update_status( $status, 'Reason: ' . $reason );
 				remove_filter( 'woocommerce_new_order_note_data', array( $this, 'add_transition_suffix_in_note' ), 9999 );
 
 			}
+
+			// Increment and save retry count when order is marked as failed
+			$retry_count = Helper::get_meta( $order, '_fkwcs_retry_count' );
+			if ( empty( $retry_count ) ) {
+				$retry_count = 1;
+			} else {
+				$retry_count = absint( $retry_count ) + 1;
+			}
+			$order->update_meta_data( '_fkwcs_retry_count', $retry_count );
+			$order->save_meta_data();
+
 			do_action( 'fkwcs_order_failed', $order->get_id(), $message );
 		} catch ( \Exception $e ) {
 			/* translators: error message */
 			Helper::log( 'Error in mark_order_failed: ' . $e->getMessage() );
 		}
+	}
+
+	/**
+	 * Builds the issuer decline-code suffix appended to the failure order note.
+	 *
+	 * Merchant-facing only. The shopper keeps seeing Stripe's own generic message, which Stripe already
+	 * masks for sensitive declines (fraudulent, lost_card, stolen_card resolve to "Your card was declined.").
+	 *
+	 * Returns an empty string whenever the last API call was not an issuer decline, so notes raised for
+	 * non-Stripe reasons are left exactly as the caller passed them.
+	 *
+	 * @return string
+	 */
+	protected function get_decline_code_note_suffix() {
+		$client = $this->get_client();
+		$error  = ( $client instanceof Client ) ? $client->get_last_error() : null;
+
+		if ( ! is_object( $error ) || empty( $error->decline_code ) ) {
+			return '';
+		}
+
+		$decline_code = (string) $error->decline_code;
+		$messages     = Helper::get_localized_messages();
+
+		/* translators: %s: raw Stripe decline code */
+		$suffix = sprintf( __( 'Stripe decline code: %s', 'funnelkit-stripe-woo-payment-gateway' ), $decline_code );
+
+		if ( isset( $messages[ $decline_code ] ) ) {
+			$suffix .= ' - ' . $messages[ $decline_code ];
+		}
+
+		return ' | ' . $suffix;
 	}
 
 	/**
@@ -3164,7 +3458,6 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 	public function get_charge_type_recommendation_text() {
 		return __( '<strong>Recommendation:</strong> Use "Charge" for immediate payment (recommended for most stores) or "Authorize" to hold funds and manually capture later. Note: Authorized orders will be placed on hold until manually captured.', 'funnelkit-stripe-woo-payment-gateway' );
 	}
-
 
 	/**
 	 * Ensures WooCommerce order is marked as paid on the thank you page if payment intent succeeded but status is not correct.

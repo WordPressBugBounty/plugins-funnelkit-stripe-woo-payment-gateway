@@ -2,6 +2,10 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use WC_Payment_Token;
 
 #[\AllowDynamicProperties]
@@ -26,9 +30,9 @@ class CashAppToken extends WC_Payment_Token {
 	 *
 	 * @var array
 	 */
-	protected $extra_data = [
+	protected $extra_data = array(
 		'payment_method_type' => 'cashapp',
-	];
+	);
 
 	/**
 	 * Hook prefix

@@ -21,7 +21,6 @@ trait WC_Subscriptions_Helper_Trait {
 	 *
 	 * @return bool Whether subscriptions is enabled or not.
 	 * @since 5.6.0
-	 *
 	 */
 	public function is_subscriptions_enabled() {
 		return class_exists( 'WC_Subscriptions' ) && version_compare( WC_Subscriptions::$version, '2.2.0', '>=' );
@@ -34,7 +33,6 @@ trait WC_Subscriptions_Helper_Trait {
 	 *
 	 * @return boolean
 	 * @since 5.6.0
-	 *
 	 */
 	public function has_subscription( $order_id ) {
 		return ( function_exists( 'wcs_order_contains_subscription' ) && ( wcs_order_contains_subscription( $order_id ) || wcs_is_subscription( $order_id ) || wcs_order_contains_renewal( $order_id ) ) );
@@ -45,7 +43,6 @@ trait WC_Subscriptions_Helper_Trait {
 	 *
 	 * @return bool
 	 * @since 5.6.0
-	 *
 	 */
 	public function is_changing_payment_method_for_subscription() {
 		if ( isset( $_GET['change_payment_method'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
@@ -62,7 +59,6 @@ trait WC_Subscriptions_Helper_Trait {
 	 * @param int $order_id ID for corresponding WC_Order in process.
 	 *
 	 * @return bool
-	 *
 	 */
 	public function is_payment_recurring( $order_id ) {
 		if ( ! $this->is_subscriptions_enabled() ) {
@@ -82,7 +78,6 @@ trait WC_Subscriptions_Helper_Trait {
 	 * @param bool $display Bool indicating whether to show the save payment checkbox in the absence of subscriptions.
 	 *
 	 * @return bool Indicates whether the save payment method checkbox should be displayed or not.
-	 *
 	 */
 	public function display_save_payment_method_checkbox( $display ) {
 		if ( WC_Subscriptions_Cart::cart_contains_subscription() || $this->is_changing_payment_method_for_subscription() ) {
@@ -98,7 +93,6 @@ trait WC_Subscriptions_Helper_Trait {
 	 * contains a subscription or subscription renewal item
 	 *
 	 * @return bool
-	 *
 	 */
 	public function is_subscription_item_in_cart() {
 		if ( $this->is_subscriptions_enabled() ) {
@@ -112,7 +106,6 @@ trait WC_Subscriptions_Helper_Trait {
 	 * Checks the cart to see if it contains a subscription product renewal.
 	 *
 	 * @return mixed The cart item containing the renewal as an array, else false.
-	 *
 	 */
 	public function cart_contains_renewal() {
 		if ( ! function_exists( 'wcs_cart_contains_renewal' ) ) {
@@ -121,5 +114,4 @@ trait WC_Subscriptions_Helper_Trait {
 
 		return wcs_cart_contains_renewal();
 	}
-
 }

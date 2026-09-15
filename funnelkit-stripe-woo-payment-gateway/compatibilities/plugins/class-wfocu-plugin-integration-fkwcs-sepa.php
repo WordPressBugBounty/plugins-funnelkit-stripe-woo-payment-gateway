@@ -16,6 +16,17 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 		public $current_intent;
 		public $current_order_id = null;
 
+		/**
+		 * Whether this upsell gateway supports refunding offer (child) orders.
+		 *
+		 * Setting this to true makes WFOCU render the refund metabox on the
+		 * SEPA upsell/child order and route refunds to process_refund_offer().
+		 *
+		 * @since 1.14.0.4
+		 * @var bool
+		 */
+		public $refund_supported = true;
+
 		public function __construct() {
 			parent::__construct();
 			add_action( 'fkwcs_' . $this->key . '_before_redirect', array( $this, 'maybe_setup_upsell_on_sepa' ), 99, 1 );
@@ -187,7 +198,8 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 				/* translators: 1) dollar amount */
 				throw new \Exception( sprintf( __( 'Sorry, the minimum allowed order total is %1$s to use this payment method.', 'funnelkit-stripe-woo-payment-gateway' ), wc_price( Helper::get_minimum_amount() / 100 ) ), 101, $this->key ); //phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 			}
-			$post_data['amount']      = $total;
+			$post_data['amount'] = $total;
+			/* translators: 1: Site name, 2: Order number, 3: Current offer name */
 			$post_data['description'] = sprintf( __( '%1$s - Order %2$s - 1 click upsell: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), $order->get_order_number(), WFOCU_Core()->data->get( 'current_offer' ) );
 			$billing_first_name       = $order->get_billing_first_name();
 			$billing_last_name        = $order->get_billing_last_name();
@@ -219,6 +231,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 		protected function create_intent( $order, $prepared_source ) {
 			// The request for a charge contains metadata for the intent.
 			$full_request = $this->generate_payment_request( $order, $prepared_source );
+			$get_package  = WFOCU_Core()->data->get( '_upsell_package' );
 
 			$request = array(
 				'payment_method'       => $prepared_source->source,
@@ -237,7 +250,12 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			}
 
 			// Create an intent that awaits an action.
-			$gateway    = new Sepa();
+			$gateway = new Sepa();
+			// Amount details for upsell must be built from the upsell package only; original order items are not used.
+			$amount_data = $gateway->add_amount_details( $order, $gateway->get_payment_method_types(), $this->get_offer_items_data( $get_package ), true );
+			if ( ! empty( $amount_data ) ) {
+				$request = array_merge( $request, $amount_data );
+			}
 			$stripe_api = $gateway->get_client();
 			$intent     = (object) $stripe_api->payment_intents( 'create', array( $request ) );
 
@@ -252,6 +270,17 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			$this->current_intent = $intent;
 
 			return $intent;
+		}
+
+		protected function get_offer_items_data( $package ) {
+			if ( empty( $package ) || empty( $package['products'] ) || ! is_array( $package['products'] ) ) {
+				return array();
+			}
+
+			return array(
+				'products' => $package['products'],
+				'total'    => isset( $package['total'] ) ? $package['total'] : null,
+			);
 		}
 
 		protected function confirm_intent( $intent, $order ) {
@@ -585,6 +614,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 		}
 
 		public function process_client_payment() {
+			check_ajax_referer( 'wfocu_front_charge', 'nonce' );
 
 			/**
 			 * Prepare and populate client collected data to process further.
@@ -592,7 +622,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 			$get_current_offer      = WFOCU_Core()->data->get( 'current_offer' );
 			$get_current_offer_meta = WFOCU_Core()->offers->get_offer_meta( $get_current_offer );
 			WFOCU_Core()->data->set( '_offer_result', true );
-			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 			/**
 			 * return if found error in the charge request
@@ -864,6 +894,81 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Sepa' ) && class_exists( 'W
 				return apply_filters( 'woocommerce_payment_complete_order_status', $order->needs_processing() ? 'processing' : 'completed', $order->get_id(), $order );
 			}
 			return $status;
+		}
+
+		/**
+		 * Handle a refund offer request for a SEPA upsell (child) order.
+		 *
+		 * Called by WFOCU when an admin submits the refund metabox on a SEPA
+		 * upsell order. Refunds the original SEPA charge in Stripe against the
+		 * order's own test/live keys and reconciles the WooCommerce balance.
+		 *
+		 * SEPA stores _transaction_id as a charge id (py_/ch_), never pi_, so
+		 * the refund is issued against the `charge` parameter.
+		 *
+		 * @since 1.14.0.4
+		 *
+		 * @param WC_Order $order The upsell (child) order being refunded.
+		 *
+		 * @return string|bool Stripe refund id (or true) on success, false on failure.
+		 */
+		public function process_refund_offer( $order ) {
+			// Defence in depth: refunds are an admin action (WFOCU verifies the nonce upstream).
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return false;
+			}
+
+			// Use filter_input for superglobal access (avoids direct $_POST + nonce sniff).
+			$txn_id        = (string) filter_input( INPUT_POST, 'txn_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+			$amount        = (string) filter_input( INPUT_POST, 'amt', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+			$refund_reason = (string) filter_input( INPUT_POST, 'refund_reason', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+
+			$get_client     = $this->get_wc_gateway()->set_client_by_order_payment_mode( $order );
+			$client_details = $get_client->get_clients_details();
+
+			$refund_request = array(
+				'amount'   => Helper::get_stripe_amount( $amount, $order->get_currency() ),
+				'reason'   => 'requested_by_customer',
+				'metadata' => array(
+					'customer_ip'       => $client_details['ip'],
+					'agent'             => $client_details['agent'],
+					'referer'           => $client_details['referer'],
+					'reason_for_refund' => $refund_reason,
+				),
+			);
+
+			// SEPA transaction id is a charge id (py_/ch_), so this takes the charge branch.
+			if ( 0 === strpos( $txn_id, 'pi_' ) ) {
+				$refund_request['payment_intent'] = $txn_id;
+			} else {
+				$refund_request['charge'] = $txn_id;
+			}
+
+			$refund_params = apply_filters( 'fkwcs_refund_request_args', $refund_request );
+			$response      = $this->get_wc_gateway()->execute_refunds( $refund_params, $get_client );
+
+			if ( $response['success'] && $response['data'] ) {
+				$refund_response = $response['data'];
+				if ( isset( $refund_response->balance_transaction ) ) {
+					Helper::update_balance( $order, $refund_response->balance_transaction, true );
+				}
+
+				return $refund_response->id ?? true;
+			}
+
+			// Log failure and add order note so the SEPA upsell refund is not silently marked done.
+			$order->add_order_note(
+				sprintf(
+				/* translators: 1: Refund reason, 2: Currency symbol, 3: Refund amount */
+					__( 'SEPA upsell refund failed - Reason: %1$s, Amount: %2$s%3$s', 'funnelkit-stripe-woo-payment-gateway' ),
+					$refund_reason,
+					get_woocommerce_currency_symbol(),
+					$amount
+				)
+			);
+			Helper::log( $response['message'] );
+
+			return false;
 		}
 	}
 

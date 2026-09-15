@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use FKWCS\Gateway\Stripe\Helper;
 
 if ( class_exists( 'WFOCU_Gateway' ) ) {
@@ -79,11 +83,24 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 		}
 
 
+		/**
+		 * Payment-method data for the client-side confirm* call. Override to add gateway-specific keys
+		 * (e.g. iDEAL requires payment_method.ideal). Default: billing_details only.
+		 *
+		 * @param array    $payment_method
+		 * @param WC_Order $order
+		 *
+		 * @return array
+		 */
+		protected function get_confirm_payment_method_data( $payment_method, $order ) { // phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+			return $payment_method;
+		}
+
 		public function process_client_payment() {
 			$get_current_offer      = WFOCU_Core()->data->get( 'current_offer' );
 			$get_current_offer_meta = WFOCU_Core()->offers->get_offer_meta( $get_current_offer );
 			WFOCU_Core()->data->set( '_offer_result', true );
-			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 			/**
 			 * return if found error in the charge request
@@ -115,11 +132,32 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 			$data            = array(
 				'amount'               => Helper::get_formatted_amount( $offer_package['total'] ),
 				'currency'             => $gateway->get_currency(),
+				/* translators: 1: Site name, 2: Order number, 3: Current offer name */
 				'description'          => sprintf( __( '%1$s - Order %2$s - 1 click upsell: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), $order->get_order_number(), WFOCU_Core()->data->get( 'current_offer' ) ),
 				'payment_method_types' => array( $this->payment_method_type ),
 				'customer'             => $customer_id,
-				'capture_method'       => $gateway->capture_method,
 			);
+
+			// Only send capture_method when the gateway actually defines one. Redirect gateways
+			// like iDEAL/Bancontact don't set it, and Stripe rejects an empty/null capture_method
+			// ("'capture_method' cannot be unset"), which fails the entire upsell charge.
+			if ( ! empty( $gateway->capture_method ) ) {
+				$data['capture_method'] = $gateway->capture_method;
+			}
+
+			// Amount details for upsell must be built from the upsell package only; original order items are not used.
+			$amount_data = $gateway->add_amount_details(
+				$order,
+				$this->payment_method_type,
+				array(
+					'products' => isset( $offer_package['products'] ) ? $offer_package['products'] : array(),
+					'total'    => isset( $offer_package['total'] ) ? $offer_package['total'] : null,
+				),
+				true
+			);
+			if ( ! empty( $amount_data ) ) {
+				$data = array_merge( $data, $amount_data );
+			}
 
 			$data       = $gateway->set_shipping_data( $data, $order, $this->need_shipping_address );
 			$stripe_api = $gateway->get_client();
@@ -132,6 +170,7 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 			$response    = $stripe_api->payment_intents( 'create', $args );
 			$intent_data = $gateway->handle_client_response( $response );
 
+			/* translators: 1: Payment method title, 2: Order ID, 3: Order total */
 			Helper::log( sprintf( __( 'Begin processing payment with %1$s for order %2$s for the amount of %3$s', 'funnelkit-stripe-woo-payment-gateway' ), $order->get_payment_method_title(), $order->get_id(), $order->get_total() ) );
 			if ( $intent_data ) {
 				/**
@@ -163,6 +202,9 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 					),
 				);
 
+				// Redirect gateways can add method-specific confirm data here (iDEAL needs payment_method.ideal).
+				$payment_Details = $this->get_confirm_payment_method_data( $payment_Details, $order );
+
 				$response = array(
 					'result'         => 'success',
 					'payment_method' => $payment_Details,
@@ -184,7 +226,7 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 		}
 
 		public function process_refund_offer( $order ) {
-			$refund_data = wc_clean( $_POST );  // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$refund_data = wc_clean( wp_unslash( $_POST ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing refund form data during payment processing
 
 			$txn_id        = isset( $refund_data['txn_id'] ) ? $refund_data['txn_id'] : '';
 			$amnt          = isset( $refund_data['amt'] ) ? $refund_data['amt'] : '';
@@ -312,7 +354,7 @@ if ( class_exists( 'WFOCU_Gateway' ) ) {
 				$existing_package = WFOCU_Core()->data->get( 'upsell_package', '', 'gateway' );
 				WFOCU_Core()->data->set( '_upsell_package', $existing_package );
 
-				$order_id       = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$order_id       = isset( $_GET['order'] ) ? sanitize_text_field( wp_unslash( $_GET['order'] ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				$order          = wc_get_order( $order_id );
 				$payment_intent = $order->get_meta( '_fkwcs_localgateway_upsell_payment_intent' );
 				if ( empty( $payment_intent ) ) {

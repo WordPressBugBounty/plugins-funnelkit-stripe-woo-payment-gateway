@@ -272,6 +272,7 @@
                 $('#fkwcs_debug_log').closest('tr').hide();
                 $('#fkwcs_test_connection').closest('tr').hide();
                 $('#fkwcs_currency_fee').closest('tr').hide();
+                $('#fkwcs_line_items_enabled').closest('tr').hide();
                 $('#fkwcs_stripe_statement_descriptor_full').closest('tr').hide();
                 $('#fkwcs_stripe_statement_descriptor_should_customize').closest('tr').hide();
                 $('.fkwcs-cards-wrap').hide();
@@ -321,85 +322,6 @@
         }
     }
 
-    function show_google_pay_button() {
-
-        if (fkwcs_admin_data.pub_key === '') {
-            return;
-        }
-        let data = {
-            environment: 'TEST',
-            merchantId: '',
-            merchantName: '',
-            paymentDataCallbacks: {
-                onPaymentAuthorized: function onPaymentAuthorized() {
-                    return new Promise(function (resolve) {
-                        resolve({
-                            transactionState: "SUCCESS"
-                        });
-                    }.bind(this));
-                },
-            }
-        };
-        let version_data = {
-            "apiVersion": 2,
-            "apiVersionMinor": 0
-        };
-        let brand_data = {
-            type: 'CARD',
-            parameters: {
-                allowedAuthMethods: ["PAN_ONLY"],
-                allowedCardNetworks: ["AMEX", "DISCOVER", "INTERAC", "JCB", "MASTERCARD", "VISA"],
-                assuranceDetailsRequired: true
-            },
-            tokenizationSpecification: {
-                type: "PAYMENT_GATEWAY",
-                parameters: {
-                    gateway: 'stripe',
-                    "stripe:version": "2018-10-31",
-                    "stripe:publishableKey": fkwcs_admin_data.pub_key
-                }
-            }
-        };
-        const button_settings = () => {
-            let btn_color = $('#woocommerce_fkwcs_stripe_google_pay_button_color');
-            let btn_theme = $('#woocommerce_fkwcs_stripe_google_pay_button_theme');
-            return {
-                buttonColor: btn_color.val(),
-                buttonType: btn_theme.val(),
-                onClick: () => {
-                    console.log('Gpay Not Working in Admin Area');
-                }
-            };
-        };
-        const createButton = (google_pay_client) => {
-            $('#woocommerce_fkwcs_stripe_google_pay_button_dummy_button').replaceWith('<div id="woocommerce_fkwcs_stripe_google_pay_button_dummy_button"></div>');
-            $('#woocommerce_fkwcs_stripe_google_pay_button_color , #woocommerce_fkwcs_stripe_google_pay_button_theme')?.on('change', () => {
-                $('#woocommerce_fkwcs_stripe_google_pay_button_dummy_button').html($(google_pay_client.createButton(button_settings())));
-            });
-            $('#woocommerce_fkwcs_stripe_google_pay_button_dummy_button').html($(google_pay_client.createButton(button_settings())));
-        };
-        const init = () => {
-            try {
-
-                let google_pay_client = new google.payments.api.PaymentsClient(data);
-                let request_data = version_data;
-                version_data.allowedPaymentMethods = [brand_data];
-                google_pay_client.isReadyToPay(request_data).then(() => {
-                    createButton(google_pay_client);
-                }).catch((err) => {
-                    console.log(err);
-                });
-
-
-            } catch (e) {
-                console.log(e);
-            }
-
-
-        };
-        $.getScript('https://pay.google.com/gp/p/js/pay.js', init);
-    }
-
 
     if (fkwcs_admin_data.is_connected === '' && 'fkwcs_api_settings' === fkwcs_admin_data.fkwcs_admin_settings_tab) {
         $('.woocommerce-save-button').hide();
@@ -425,7 +347,6 @@
             $('.fkwcs_inline_notice').hide();
         }
         checkPaymentRequestAvailibility();
-        show_google_pay_button();
 
         $('#fkwcs_express_checkout_button_text, #fkwcs_express_checkout_button_theme').change(function () {
             style = {
@@ -576,7 +497,7 @@
             $.blockUI({message: ''});
             const mode = ('undefined' === typeof $(this).data('mode')) ? '' : $(this).data('mode');
             $.ajax({
-                type: 'GET',
+                type: 'POST',
                 dataType: 'json',
                 url: fkwcs_admin_data.ajax_url,
                 data: {action: 'fkwcs_test_stripe_connection', _security: fkwcs_admin_data.fkwcs_admin_nonce, fkwcs_test_sec_key: fkwcsTestSecretKey, fkwcs_secret_key: fkwcsSecretKey},
@@ -691,7 +612,7 @@
         if (('test' === mode && '' !== fkwcsTestSecretKey && '' !== fkwcsTestPubKey) || ('live' === mode && '' !== fkwcsSecretKey && '' !== fkwcsPubKey)) {
             $.blockUI({message: ''});
             $.ajax({
-                type: 'GET', dataType: 'json', url: fkwcs_admin_data.ajax_url, data: {
+                type: 'POST', dataType: 'json', url: fkwcs_admin_data.ajax_url, data: {
                     action: 'fkwcs_create_webhook',
                     _security: fkwcs_admin_data.fkwcs_admin_nonce,
                     fkwcs_test_sec_key: fkwcsTestSecretKey,
@@ -824,16 +745,21 @@
     if (window.location.href.indexOf('page=wc-settings') !== -1 && window.location.href.indexOf('tab=fkwcs_api_settings') !== -1) {
         $.post(ajaxurl, { action: 'fkwcs_check_live_webhook_url', _security: fkwcs_admin_data.fkwcs_admin_nonce }, function(response) {
             if (response && response.data && response.data.mismatch) {
+                function fkwcsEscapeHtml(text) {
+                    var d = document.createElement('div');
+                    d.appendChild(document.createTextNode(String(text)));
+                    return d.innerHTML;
+                }
                 // If we have actual and expected URLs, show the detailed message
                 if (response.data.actual_url && response.data.expected_url) {
                     let msg = '<div class="fkwcs_inline_message_error">' +
-                        '<p>The current webhook seems to have been configured with the URL: <strong>' + response.data.actual_url + '</strong>, however, the webhook should be configured for <strong>' + response.data.expected_url + '</strong>. Kindly delete the current webhook and a create webhook button will appear.</p>' +
+                        '<p>The current webhook seems to have been configured with the URL: <strong>' + fkwcsEscapeHtml(response.data.actual_url) + '</strong>, however, the webhook should be configured for <strong>' + fkwcsEscapeHtml(response.data.expected_url) + '</strong>. Kindly delete the current webhook and a create webhook button will appear.</p>' +
                         '</div>';
                     $('#fkwcs_delete_webhook_button').closest('fieldset').append(msg);
                 } else if (response.data.mismatch) {
                     // Generic mismatch message
                     let msg = '<div class="fkwcs_inline_message_error">' +
-                        '<p>There is no matching webhook found with id : <strong>' + response.data.webhook_id + '</strong>. Kindly delete the webhook and a create webhook button will appear.</p>' +
+                        '<p>There is no matching webhook found with id : <strong>' + fkwcsEscapeHtml(response.data.webhook_id) + '</strong>. Kindly delete the webhook and a create webhook button will appear.</p>' +
                         '</div>';
                     $('#fkwcs_delete_webhook_button').closest('fieldset').append(msg);
                 }
@@ -898,4 +824,6 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) {
         console.log('FKWCS Admin Navigation Error:', e);
     }
+
+
 });

@@ -1,7 +1,11 @@
 <?php
 
-
 namespace FKWCS\Gateway\Stripe;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 #[\AllowDynamicProperties]
 class klarna extends LocalGateway {
 
@@ -10,9 +14,9 @@ class klarna extends LocalGateway {
 	 *
 	 * @var string
 	 */
-	public $id = 'fkwcs_stripe_klarna';
-	public $payment_method_types = 'klarna';
-	protected $payment_element = true;
+	public $id                       = 'fkwcs_stripe_klarna';
+	public $payment_method_types     = 'klarna';
+	protected $payment_element       = true;
 	public $supports_success_webhook = true;
 
 	/**
@@ -31,15 +35,13 @@ class klarna extends LocalGateway {
 		$this->description    = $this->get_option( 'description' );
 		$this->enabled        = $this->get_option( 'enabled' );
 		$this->capture_method = $this->get_option( 'charge_type' );
-		add_action( 'fkwcs_webhook_event_intent_succeeded', [ $this, 'handle_webhook_intent_succeeded' ], 10, 2 );
-
-
+		add_action( 'fkwcs_webhook_event_intent_succeeded', array( $this, 'handle_webhook_intent_succeeded' ), 10, 2 );
 	}
 
 	protected function override_defaults() {
-		$this->supported_currency          = [ 'EUR', 'DKK', 'GBP', 'NOK', 'SEK', 'USD', 'CZK', 'AUD', 'NZD', 'CAD', 'CHF', 'PLN' ];
-		$this->specific_country            = [ 'AU', 'CA', 'US', 'DK', 'NO', 'SE', 'GB', 'PL', 'CH', 'NZ', 'AT', 'BE', 'DE', 'ES', 'FI', 'FR', 'GR', 'IE', 'IT', 'NL', 'PT' ];
-		$this->except_country              = [];
+		$this->supported_currency          = array( 'EUR', 'DKK', 'GBP', 'NOK', 'SEK', 'USD', 'CZK', 'AUD', 'NZD', 'CAD', 'CHF', 'PLN' );
+		$this->specific_country            = array( 'AU', 'CA', 'US', 'DK', 'NO', 'SE', 'GB', 'PL', 'CH', 'NZ', 'AT', 'BE', 'DE', 'ES', 'FI', 'FR', 'GR', 'IE', 'IT', 'NL', 'PT' );
+		$this->except_country              = array();
 		$this->setting_enable_label        = __( 'Enable Klarna', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = __( 'Klarna - Pay Over Time', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_description_default = __( 'After clicking the checkout button, you will be redirected to Klarna to <br> complete your purchase securely', 'funnelkit-stripe-woo-payment-gateway' );
@@ -47,42 +49,42 @@ class klarna extends LocalGateway {
 
 	public function init_form_fields() {
 
-		$settings = [
-			'enabled'          => [
+		$settings = array(
+			'enabled'          => array(
 				'label'   => ' ',
 				'type'    => 'checkbox',
 				'title'   => $this->setting_enable_label,
 				'default' => 'no',
-			],
-			'title'            => [
+			),
+			'title'            => array(
 				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'text',
 				'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_title_default,
 				'desc_tip'    => true,
-			],
-			'description'      => [
+			),
+			'description'      => array(
 				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'textarea',
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_description_default,
 				'desc_tip'    => true,
-			],
-			'charge_type'      => [
+			),
+			'charge_type'      => array(
 				'title'       => __( 'Charge Type', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'select',
-				'description' => __( $this->get_charge_type_recommendation_text(), 'funnelkit-stripe-woo-payment-gateway' ),
+				'description' => $this->get_charge_type_recommendation_text(),
 				'default'     => 'automatic',
-				'options'     => [
+				'options'     => array(
 					'automatic' => __( 'Charge', 'funnelkit-stripe-woo-payment-gateway' ),
 					'manual'    => __( 'Authorize', 'funnelkit-stripe-woo-payment-gateway' ),
-				],
+				),
 				'desc_tip'    => false,
-			],
-			'paylater_section' => [
+			),
+			'paylater_section' => array(
 				'title'       => __( 'Klarna Message Location', 'funnelkit-stripe-woo-payment-gateway' ),
-				'default'     => [ 'cart' ],
+				'default'     => array( 'cart' ),
 				'type'        => 'multiselect',
 				'class'       => 'wc-enhanced-select',
 				'css'         => 'min-width: 350px;',
@@ -94,10 +96,10 @@ class klarna extends LocalGateway {
 					'cart'    => __( 'Cart Page', 'funnelkit-stripe-woo-payment-gateway' ),
 					'shop'    => __( 'Shop/Categories Page', 'funnelkit-stripe-woo-payment-gateway' ),
 				),
-			]
-		];
+			),
+		);
 
-		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', [] );
+		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', array() );
 
 		$admin_country = ! empty( $stripe_account_settings ) ? strtoupper( $stripe_account_settings['country'] ) : wc_format_country_state_string( get_option( 'woocommerce_default_country', '' ) )['country'];
 
@@ -107,10 +109,10 @@ class klarna extends LocalGateway {
 
 				$this->specific_country = $this->list_of_eaa_and_supported_across_countries();
 			} else {
-				$this->specific_country = [ $admin_country ];
+				$this->specific_country = array( $admin_country );
 			}
 		} else {
-			$this->specific_country = [];
+			$this->specific_country = array();
 		}
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
 		if ( isset( $countries_fields['allowed_countries']['options']['all'] ) ) {
@@ -147,9 +149,8 @@ class klarna extends LocalGateway {
 			'ES', // Spain - EEA
 			'SE', // Sweden - EEA
 			'CH', // Switzerland
-			'GB'  // United Kingdom - GB
+			'GB',  // United Kingdom - GB
 		);
-
 
 		return $countryCodes;
 	}
@@ -193,9 +194,5 @@ class klarna extends LocalGateway {
 
 			}
 		}
-
-
 	}
-
-
 }

@@ -126,12 +126,12 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 				if ( 'card_error' === $intent->error->type ) {
 					$localized_message = $intent->error->message;
 				}
-				throw new \Exception( 'fkwcs Stripe : ' . $localized_message, 102, $this->key );
+				throw new \Exception( 'fkwcs Stripe : ' . $localized_message, 102, $this->key ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 			}
 
 			if ( ! empty( $intent ) ) {
 				if ( 'requires_action' === $intent->status ) {
-					throw new \Exception( 'fkwcs Stripe : Auth required for the charge but unable to complete.', 102, $this->key );
+					throw new \Exception( 'fkwcs Stripe : Auth required for the charge but unable to complete.', 102, $this->key ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 				}
 			}
 
@@ -139,7 +139,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			if ( is_wp_error( $response ) ) {
 				WFOCU_Core()->log->log( 'Order #' . WFOCU_WC_Compatibility::get_order_id( $order ) . ': Payment Failed For Stripe' );
 			} elseif ( ! empty( $response->error ) ) {
-					throw new \Exception( $response->error->message, 102, $this->key );
+					throw new \Exception( $response->error->message, 102, $this->key ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 			} else {
 				WFOCU_Core()->data->set( '_transaction_id', $response->id );
 				$is_successful = true;
@@ -168,6 +168,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 		protected function create_intent( $order, $prepared_source ) {
 			$full_request = $this->generate_payment_request( $order, $prepared_source );
 			$gateway      = $this->get_wc_gateway();
+			$get_package  = WFOCU_Core()->data->get( '_upsell_package' );
 
 			$request = array(
 				'amount'               => $full_request['amount'],
@@ -185,6 +186,11 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			}
 
 			// Create an intent that awaits an action.
+			// Amount details for upsell must be built from the upsell package only; original order items are not used.
+			$amount_data = $gateway->add_amount_details( $order, $gateway->get_payment_method_types(), $this->get_offer_items_data( $get_package ), true );
+			if ( ! empty( $amount_data ) ) {
+				$request = array_merge( $request, $amount_data );
+			}
 			$stripe_api = $gateway->get_client();
 
 			$response = $stripe_api->payment_intents( 'create', array( $request ) );
@@ -205,6 +211,17 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			$this->current_intent = $intent;
 
 			return $intent;
+		}
+
+		protected function get_offer_items_data( $package ) {
+			if ( empty( $package ) || empty( $package['products'] ) || ! is_array( $package['products'] ) ) {
+				return array();
+			}
+
+			return array(
+				'products' => $package['products'],
+				'total'    => isset( $package['total'] ) ? $package['total'] : null,
+			);
 		}
 
 		/**
@@ -279,10 +296,12 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 			$total                 = Helper::get_stripe_amount( $get_package['total'], $post_data['currency'] );
 
 			if ( $get_package['total'] * 100 < Helper::get_minimum_amount() ) {
-				throw new \Exception( sprintf( __( 'Sorry, the minimum allowed order total is %1$s to use this payment method.', 'funnelkit-stripe-woo-payment-gateway' ), wc_price( Helper::get_minimum_amount() / 100 ) ), 101, $this->key );
+				/* translators: 1: Dollar amount */
+				throw new \Exception( sprintf( __( 'Sorry, the minimum allowed order total is %1$s to use this payment method.', 'funnelkit-stripe-woo-payment-gateway' ), wc_price( Helper::get_minimum_amount() / 100 ) ), 101, $this->key ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 			}
 
-			$post_data['amount']      = $total;
+			$post_data['amount'] = $total;
+			/* translators: 1: Site name, 2: Order number, 3: Current offer name */
 			$post_data['description'] = sprintf( __( '%1$s - Order %2$s - 1 click upsell: %3$s', 'funnelkit-stripe-woo-payment-gateway' ), wp_specialchars_decode( get_bloginfo( 'name' ) ), $order->get_order_number(), WFOCU_Core()->data->get( 'current_offer' ) );
 
 			$billing_first_name = $order->get_billing_first_name();
@@ -391,6 +410,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 				return;
 			}
 			?>
+			<?php // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript ?>
 			<script src="https://js.stripe.com/v3/?ver=3.0" data-cookieconsent="ignore"></script>
 			<script>
 				(function ($) {
@@ -690,10 +710,11 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 		 * @since 1.0.0
 		 */
 		public function process_client_payment() {
+			check_ajax_referer( 'wfocu_front_charge', 'nonce' );
 			$get_current_offer      = WFOCU_Core()->data->get( 'current_offer' );
 			$get_current_offer_meta = WFOCU_Core()->offers->get_offer_meta( $get_current_offer );
 			WFOCU_Core()->data->set( '_offer_result', true );
-			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST );
+			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- nonce verified above via check_ajax_referer; current_user_can() is not appropriate for guest upsell flow
 
 			if ( false === WFOCU_AJAX_Controller::validate_charge_request( $posted_data ) ) {
 				wp_send_json(
@@ -716,7 +737,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 
 			if ( ! empty( $intent_from_posted ) ) {
 				// Handle post-voucher-display processing
-				$intent_secret_from_posted = filter_input( INPUT_POST, 'intent_secret' );
+				$intent_secret_from_posted = isset( $_POST['intent_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['intent_secret'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- nonce verified above via check_ajax_referer; capability check not applicable in guest upsell flow
 				$voucher_shown             = filter_input( INPUT_POST, 'multibanco_voucher_shown', FILTER_VALIDATE_BOOLEAN );
 
 				// If voucher was shown to user, treat as immediate success
@@ -815,7 +836,8 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Multibanco' ) && class_exis
 						}
 					}
 				} catch ( Exception $e ) {
-					$this->handle_api_error( __( 'Offer payment failed. Reason: ' . $e->getMessage() . '', 'funnelkit-stripe-woo-payment-gateway' ), 'Error Captured: ' . print_r( $e->getMessage() . ' <-- Generated on' . $e->getFile() . ':' . $e->getLine(), true ), $get_order, true );
+					/* translators: %s: Error message */
+					$this->handle_api_error( sprintf( __( 'Offer payment failed. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $e->getMessage() ), 'Error Captured: ' . print_r( $e->getMessage() . ' <-- Generated on' . $e->getFile() . ':' . $e->getLine(), true ), $get_order, true );
 				}
 			}
 

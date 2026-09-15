@@ -858,3 +858,11 @@ div#woocommerce_fkwcs_stripe_google_pay_button_dummy_button {
 table.fkwcs_f_table {
     display: none;
 }
+/* Legacy Google Pay Merchant ID notice — core styles the .notice-dismiss cross as
+   position:absolute, but only makes the notice a positioning context via
+   .is-dismissible, which we cannot use here (core JS would append a second,
+   non-persisting button). Provide the context and the gutter ourselves. */
+.fkwcs-legacy-merchant-id-notice {
+    position: relative;
+    padding-right: 38px;
+}

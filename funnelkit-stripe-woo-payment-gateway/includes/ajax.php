@@ -2,6 +2,10 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 class AJAX {
 
 	protected static $instance = null;
@@ -25,12 +29,17 @@ class AJAX {
 		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_cashapp_payments', array( $this, 'ajax_for_upsells_cashapp' ) );
 		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_multibanco_localgateway_payment', array( $this, 'ajax_for_upsells_multibanco' ) );
 		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_pix_localgateway_payment', array( $this, 'ajax_for_upsells_pix' ) );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_mbway_localgateway_payment', array( $this, 'ajax_for_upsells_mbway' ) );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_twint_localgateway_payment', array( $this, 'ajax_for_upsells_twint' ) );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_blik_localgateway_payment', array( $this, 'ajax_for_upsells_blik' ) );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_eps_localgateway_payment', array( $this, 'ajax_for_upsells_eps' ) );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_ideal_localgateway_payment', array( $this, 'ajax_for_upsells_ideal' ) );
+		add_action( 'wc_ajax_wfocu_front_handle_fkwcs_stripe_amazon_pay_payments', array( $this, 'ajax_for_upsells_amazon' ) );
 		add_action( 'wp_ajax_fkwcs_js_errors', array( $this, 'log_frontend_error' ) );
 		add_action( 'wp_ajax_nopriv_fkwcs_js_errors', array( $this, 'log_frontend_error' ) );
 		add_action( 'wp_ajax_fkwcs_create_payment_intent', array( $this, 'fkwcs_create_payment_intent' ) );
 		add_action( 'wp_ajax_nopriv_fkwcs_create_payment_intent', array( $this, 'fkwcs_create_payment_intent' ) );
 	}
-
 
 	/**
 	 * @return Ajax
@@ -42,7 +51,6 @@ class AJAX {
 
 		return self::$instance;
 	}
-
 
 	public function create_intent() {
 
@@ -74,10 +82,36 @@ class AJAX {
 
 		$source = isset( $_POST['fkwcs_source'] ) ? sanitize_text_field( wp_unslash( $_POST['fkwcs_source'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above
 		if ( ! empty( $source ) ) {
-			$source = htmlspecialchars( sanitize_text_field( $source ) );
+			$source = htmlspecialchars( $source );
 		}
 
-		$response = $gateway->create_setup_intent( $source );
+		/**
+		 * A subscription is present only on the My-Account change-payment-method
+		 * flow. Passing it lets the SetupIntent request pick up India
+		 * card.mandate_options (applied via maybe_add_emandate_data_to_request())
+		 * so Stripe mints a valid recurring mandate for the new card (ticket 86bbb5gg8).
+		 * The helper returns the subscription only when the current user owns it.
+		 */
+		$subscription = $this->get_change_pm_subscription();
+
+		$response = $gateway->create_setup_intent( $source, '', $subscription );
+
+		/**
+		 * Persist the SetupIntent id on the subscription so the change-PM handler can
+		 * retrieve the resulting mandate server-side after client-side confirmation.
+		 */
+		if ( $subscription instanceof \WC_Subscription && is_object( $response ) && ! empty( $response->id ) ) {
+			// Store the canonical array shape used by every other writer/reader so the
+			// array-expecting get_intent_from_order() reader never indexes a string.
+			$subscription->update_meta_data(
+				'_fkwcs_setup_intent',
+				array(
+					'id'            => $response->id,
+					'client_secret' => isset( $response->client_secret ) ? $response->client_secret : '',
+				)
+			);
+			$subscription->save_meta_data();
+		}
 
 		wp_send_json(
 			array(
@@ -93,21 +127,32 @@ class AJAX {
 	}
 
 	public function verify_intent_gateway() {
-
-		if ( isset( $_GET['gateway'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			WC()->payment_gateways()->payment_gateways()[ wc_clean( $_GET['gateway'] ) ]->verify_intent(); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET['gateway'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
 		}
+
+		$gateway_id       = wc_clean( wp_unslash( $_GET['gateway'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$payment_gateways = WC()->payment_gateways()->payment_gateways();
+
+		// Validate gateway exists and is a valid payment gateway instance
+		if ( ! isset( $payment_gateways[ $gateway_id ] ) || ! $payment_gateways[ $gateway_id ] instanceof \WC_Payment_Gateway ) {
+			return;
+		}
+
+		$payment_gateways[ $gateway_id ]->verify_intent();
 	}
 
 	public function verify_intent_sepa() {
 		WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_sepa']->verify_intent();
 	}
 
-
 	public function ajax_for_upsells() {
 		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe' )->process_client_payment();
 	}
 
+	public function ajax_for_upsells_amazon() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_amazon_pay' )->process_client_payment();
+	}
 
 	public function ajax_for_upsells_sepa() {
 		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_sepa' )->process_client_payment();
@@ -145,12 +190,32 @@ class AJAX {
 		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_pix' )->process_client_payment();
 	}
 
+	public function ajax_for_upsells_mbway() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_mbway' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_blik() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_blik' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_eps() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_eps' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_ideal() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_ideal' )->process_client_payment();
+	}
+
 	public function ajax_for_upsells_cashapp() {
 		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_cashapp' )->process_client_payment();
 	}
 
 	public function ajax_for_upsells_multibanco() {
 		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_multibanco' )->process_client_payment();
+	}
+
+	public function ajax_for_upsells_twint() {
+		WFOCU_Core()->gateways->get_integration( 'fkwcs_stripe_twint' )->process_client_payment();
 	}
 
 	/**
@@ -160,9 +225,7 @@ class AJAX {
 	 */
 	public function log_frontend_error() {
 		$_security = wc_clean( filter_input( INPUT_POST, '_security' ) );
-		$str       = "====Frontend Js Error Log start=== \n\n " . print_r( $_POST, true ) . " \n\n ====End==="; //phpcs:ignore
 
-		Helper::log( $str, 'info' );
 		if ( is_null( $_security ) || ! wp_verify_nonce( $_security, 'fkwcs_js_nonce' ) ) {
 			wp_send_json_error(
 				array(
@@ -171,7 +234,32 @@ class AJAX {
 				)
 			);
 		}
-		if ( ! isset( $_POST['error'] ) ) {
+
+		// Log only after nonce is verified to prevent log injection from unauthenticated requests.
+		// Allowlist specific diagnostic fields, sanitize each, and strip CR/LF to prevent log forgery
+		// and avoid dumping arbitrary checkout PII into the log file.
+		$error      = isset( $_POST['error'] ) && is_array( $_POST['error'] ) ? wp_unslash( $_POST['error'] ) : array(); //phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above, frontend AJAX handler; individual fields sanitized below
+		$log_fields = array(
+			'order_id'       => isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : '', //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above, frontend AJAX handler for error logging
+			'error_type'     => isset( $error['type'] ) && is_string( $error['type'] ) ? $error['type'] : '',
+			'error_code'     => isset( $error['code'] ) && is_string( $error['code'] ) ? $error['code'] : '',
+			'decline_code'   => isset( $error['decline_code'] ) && is_string( $error['decline_code'] ) ? $error['decline_code'] : '',
+			'error_message'  => isset( $error['message'] ) && is_string( $error['message'] ) ? $error['message'] : '',
+			'payment_intent' => isset( $error['payment_intent']['id'] ) && is_string( $error['payment_intent']['id'] ) ? wc_clean( $error['payment_intent']['id'] ) : '',
+		);
+
+		$log_parts = array();
+		foreach ( $log_fields as $label => $value ) {
+			if ( '' === $value || null === $value ) {
+				continue;
+			}
+			$value       = preg_replace( '/[\r\n]+/', ' ', sanitize_text_field( (string) $value ) );
+			$log_parts[] = $label . ': ' . $value;
+		}
+
+		Helper::log( '====Frontend Js Error=== ' . implode( ' | ', $log_parts ) . ' ====End====', 'info' );
+
+		if ( ! isset( $_POST['error'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above
 			wp_send_json( array( 'status' => 'false' ) );
 		}
 
@@ -191,10 +279,7 @@ class AJAX {
 					$error_message .= "\n\n" . $localized_message;
 
 					if ( ! empty( $error_message ) ) {
-
-						if ( method_exists( WC()->payment_gateways()->payment_gateways()[ $order->get_payment_method() ], 'mark_order_failed' ) ) {
-							WC()->payment_gateways()->payment_gateways()[ $order->get_payment_method() ]->mark_order_failed( $order, $error_message );
-						}
+						WC()->payment_gateways()->payment_gateways()[ $order->get_payment_method() ]->mark_order_failed( $order, $error_message );
 					}
 				}
 			}
@@ -203,9 +288,6 @@ class AJAX {
 		wp_send_json( array( 'status' => 'true' ) );
 	}
 
-
-
-
 	public function fkwcs_create_payment_intent() {
 		global $wp;
 		check_ajax_referer( 'fkwcs_nonce', 'security' );
@@ -213,6 +295,7 @@ class AJAX {
 		$order_id   = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer, frontend AJAX handler for checkout processing
 		$order_key  = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer, frontend AJAX handler for checkout processing
 		$gateway_id = isset( $_POST['gateway_id'] ) ? sanitize_text_field( wp_unslash( $_POST['gateway_id'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer, frontend AJAX handler for checkout processing
+		$type       = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( $_POST['type'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer, frontend AJAX handler for checkout processing
 
 		try {
 			$order = wc_get_order( $order_id );
@@ -230,8 +313,8 @@ class AJAX {
 			}
 
 			$gateway            = $payment_gateways[ $gateway_id ];
-			$order_pay_gateways = array( 'fkwcs_stripe_ideal', 'fkwcs_stripe_multibanco', 'fkwcs_stripe_pix', 'fkwcs_stripe_multibanco', 'fkwcs_stripe_eps', 'fkwcs_stripe_cashapp' );
-			if ( in_array( $gateway_id, $order_pay_gateways ) ) {
+			$order_pay_gateways = array( 'fkwcs_stripe_ideal', 'fkwcs_stripe_multibanco', 'fkwcs_stripe_pix', 'fkwcs_stripe_multibanco', 'fkwcs_stripe_eps', 'fkwcs_stripe_cashapp', 'fkwcs_stripe_blik' );
+			if ( in_array( $gateway_id, $order_pay_gateways ) && $type === 'order_review' ) {
 				$wp->set_query_var( 'order-pay', $order_id );
 				$order->set_payment_method( $gateway );
 				$order->update_meta_data( '_is_order_pay_request', 'yes' );
@@ -264,6 +347,10 @@ class AJAX {
 			}
 
 			$data['metadata'] = $gateway->add_metadata( $order );
+			$amount_data      = $gateway->add_amount_details( $order, $gateway->payment_method_types );
+			if ( ! empty( $amount_data ) ) {
+				$data = array_merge( $data, $amount_data );
+			}
 
 			$intent_data = $gateway->get_payment_intent( $order, $idempotency_key, $data );
 
@@ -275,9 +362,9 @@ class AJAX {
 				'gateway'           => $gateway->id,
 			);
 
-			if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === $_GET['wfacp_is_checkout_override'] ) {
-				$output['wfacp_id']                   = wc_clean( $_GET['wfacp_id'] );
-				$output['wfacp_is_checkout_override'] = wc_clean( $_GET['wfacp_is_checkout_override'] );
+			if ( isset( $_GET['wfacp_id'] ) && isset( $_GET['wfacp_is_checkout_override'] ) && 'no' === wc_clean( wp_unslash( $_GET['wfacp_is_checkout_override'] ) ) ) {
+				$output['wfacp_id']                   = wc_clean( wp_unslash( $_GET['wfacp_id'] ) );
+				$output['wfacp_is_checkout_override'] = wc_clean( wp_unslash( $_GET['wfacp_is_checkout_override'] ) );
 			}
 
 			// Put the final thank you page redirect into the verification URL.
@@ -362,6 +449,41 @@ class AJAX {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Resolve and authorize the subscription targeted by a My-Account
+	 * change-payment-method SetupIntent request.
+	 *
+	 * Returns the subscription only when it exists AND belongs to the current
+	 * logged-in user, so the handler can never apply mandate options to - or write
+	 * meta on - a subscription the requester does not own (ticket 86bbb5gg8).
+	 *
+	 * @return \WC_Subscription|false
+	 */
+	private function get_change_pm_subscription() {
+		if ( ! function_exists( 'wcs_get_subscription' ) ) {
+			return false;
+		}
+
+		// Nonce already verified in create_intent() before this helper is reached.
+		$subscription_id = absint( filter_input( INPUT_POST, 'fkwcs_change_subscription_id', FILTER_SANITIZE_NUMBER_INT ) );
+		if ( $subscription_id <= 0 ) {
+			return false;
+		}
+
+		$subscription = wcs_get_subscription( $subscription_id );
+		if ( ! $subscription instanceof \WC_Subscription ) {
+			return false;
+		}
+
+		// Ownership gate mirrors verify_order_ownership() - only the owning user may target this subscription.
+		$user_id = get_current_user_id();
+		if ( 0 === $user_id || (int) $subscription->get_user_id() !== $user_id ) {
+			return false;
+		}
+
+		return $subscription;
 	}
 }
 

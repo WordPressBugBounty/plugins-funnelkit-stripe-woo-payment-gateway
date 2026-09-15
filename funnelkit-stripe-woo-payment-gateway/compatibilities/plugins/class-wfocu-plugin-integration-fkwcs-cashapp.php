@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use FKWCS\Gateway\Stripe\Helper;
 
 if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Cashapp' ) && class_exists( 'WFOCU_Gateway' ) ) {
@@ -53,6 +57,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Cashapp' ) && class_exists(
 		// --- Main Payment Processing (Simplified Entry Point) ---
 		public function process_client_payment() {
 			$this->log_important( 'Payment processing started' );
+			check_ajax_referer( 'wfocu_front_charge', 'nonce' );
 
 			// Step 1: Initialize and validate
 			$validation_result = $this->initialize_payment_request();
@@ -79,7 +84,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Cashapp' ) && class_exists(
 			$get_current_offer_meta = WFOCU_Core()->offers->get_offer_meta( $get_current_offer );
 
 			WFOCU_Core()->data->set( '_offer_result', true );
-			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST );
+			$posted_data = WFOCU_Core()->process_offer->parse_posted_data( $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 			// Validate charge request
 			if ( false === WFOCU_AJAX_Controller::validate_charge_request( $posted_data ) ) {
@@ -208,6 +213,19 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Cashapp' ) && class_exists(
 					'order_id'  => $order->get_id(),
 				),
 			);
+			// Amount details for upsell must be built from the upsell package only; original order items are not used.
+			$amount_data = $gateway->add_amount_details(
+				$order,
+				'cashapp',
+				array(
+					'products' => isset( $offer_package['products'] ) ? $offer_package['products'] : array(),
+					'total'    => isset( $offer_package['total'] ) ? $offer_package['total'] : null,
+				),
+				true
+			);
+			if ( ! empty( $amount_data ) ) {
+				$request = array_merge( $request, $amount_data );
+			}
 
 			return array(
 				'success' => true,
@@ -503,7 +521,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Cashapp' ) && class_exists(
 				return;
 			}
 			?>
-			<script src="https://js.stripe.com/v3/?ver=3.0" data-cookieconsent="ignore"></script>
+			<script src="https://js.stripe.com/v3/?ver=3.0" data-cookieconsent="ignore"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- External Stripe script loaded directly //phpcbf:ignore ?>
 			<script>
 				(function ($) {
 					"use strict";
@@ -672,7 +690,10 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Cashapp' ) && class_exists(
 		 * Handle refund offer request from admin
 		 */
 		public function process_refund_offer( $order ) {
-			$refund_data   = wc_clean( $_POST );
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+			$refund_data   = wc_clean( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			$txn_id        = $refund_data['txn_id'] ?? '';
 			$amount        = $refund_data['amt'] ?? '';
 			$refund_reason = $refund_data['refund_reason'] ?? '';
@@ -712,6 +733,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Cashapp' ) && class_exists(
 			// Log failure and add order note
 			$order->add_order_note(
 				sprintf(
+					/* translators: 1: Refund reason, 2: Currency symbol, 3: Refund amount */
 					__( 'Refund failed - Reason: %1$s, Amount: %2$s%3$s', 'funnelkit-stripe-woo-payment-gateway' ),
 					$refund_reason,
 					get_woocommerce_currency_symbol(),

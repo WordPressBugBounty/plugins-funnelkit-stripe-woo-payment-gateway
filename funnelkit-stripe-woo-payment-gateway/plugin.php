@@ -3,19 +3,40 @@
 namespace FKWCS\Gateway;
 
 use FKWCS\Gateway\Stripe\Admin;
+use FKWCS\Gateway\Stripe\Migration;
 use FKWCS\Gateway\Stripe\Onboard;
 use FKWCS\Gateway\Stripe\Webhook;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 class Stripe {
 	private static $instance = null;
 
+	/**
+	 * Action Scheduler hook for the daily webhook-health check. Scheduling and hook
+	 * registration live here in the bootstrap file so neither requires Admin (or any other
+	 * class) to be loaded on every request — only run_webhook_health_check() below, which
+	 * fires solely inside Action Scheduler's own execution of the queued action, loads Admin
+	 * to do the actual check.
+	 *
+	 * @var string
+	 */
+	const WEBHOOK_HEALTH_CHECK_HOOK = 'fkwcs_webhook_health_check';
+
 	private function __construct() {
 		add_action( 'plugins_loaded', array( $this, 'load_core' ) );
+		add_action( 'init', array( $this, 'load_textdomain' ) );
+	}
 
-		/**
-		 * Load text domain from our local folder
-		 */
-		load_plugin_textdomain( 'funnelkit-stripe-woo-payment-gateway', false, plugin_basename( dirname( FKWCS_FILE ) ) . '/languages/' );
+	/**
+	 * Load text domain from our local folder
+	 *
+	 * @return void
+	 */
+	public function load_textdomain() {
+		load_plugin_textdomain( 'funnelkit-stripe-woo-payment-gateway', false, plugin_basename( dirname( FKWCS_FILE ) ) . '/languages/' ); //phpcs:ignore FKWCS.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound
 	}
 
 	public static function get_instance() {
@@ -33,25 +54,76 @@ class Stripe {
 	 */
 	public function load_core() {
 		if ( ! class_exists( 'woocommerce' ) ) {
-			add_action( 'admin_notices', [ $this, 'wc_is_not_active' ] );
+			add_action( 'admin_notices', array( $this, 'wc_is_not_active' ) );
 
 			return;
 		}
 
 		if ( ! class_exists( '\Stripe\Stripe', false ) ) {
-			require_once plugin_dir_path( FKWCS_FILE ) . 'library/stripe-php/init.php';
+			$stripe_sdk = plugin_dir_path( FKWCS_FILE ) . 'library/stripe-php/init.php';
+			if ( ! file_exists( $stripe_sdk ) ) {
+				add_action( 'admin_notices', array( $this, 'stripe_sdk_missing_notice' ) );
+				return;
+			}
+			require_once $stripe_sdk;
 		}
-		spl_autoload_register( [ $this, 'autoload' ] );
+		spl_autoload_register( array( $this, 'autoload' ) );
+		add_action(
+			'init',
+			function () {
+				if ( class_exists( Migration::class ) ) {
+					Migration::run();
+				}
+			}
+		);
+		add_action( 'init', array( $this, 'maybe_schedule_webhook_health_check' ) );
+		add_action( self::WEBHOOK_HEALTH_CHECK_HOOK, array( $this, 'run_webhook_health_check' ) );
 
 		$this->admin();
 
-
 		include plugin_dir_path( FKWCS_FILE ) . '/includes/ajax.php';
-
 
 		$this->hooks();
 		$this->webhook();
 		$this->include_gateways();
+	}
+
+	/**
+	 * Schedules the daily webhook-health check via Action Scheduler, if it isn't already
+	 * scheduled. Pure scheduling — deliberately doesn't touch Admin or any other class, so
+	 * it costs nothing beyond the as_next_scheduled_action() lookup on every 'init'. Runs
+	 * once at the next upcoming 6 AM (today's if still ahead, otherwise tomorrow's) and then
+	 * recurs daily.
+	 *
+	 * @return void
+	 */
+	public function maybe_schedule_webhook_health_check() {
+		if ( ! function_exists( 'as_next_scheduled_action' ) || ! function_exists( 'as_schedule_recurring' ) ) {
+			return;
+		}
+		if ( as_next_scheduled_action( self::WEBHOOK_HEALTH_CHECK_HOOK, array(), 'fkwcs' ) ) {
+			return;
+		}
+		$next_six_am = strtotime( 'today 06:00' );
+		if ( false === $next_six_am || $next_six_am <= time() ) {
+			$next_six_am = strtotime( 'tomorrow 06:00' );
+		}
+		as_schedule_recurring( $next_six_am, DAY_IN_SECONDS, self::WEBHOOK_HEALTH_CHECK_HOOK, array(), 'fkwcs' );
+	}
+
+	/**
+	 * Action Scheduler callback for the daily webhook-health check. This only ever runs
+	 * inside Action Scheduler's own execution of the queued action — not on regular
+	 * front-end/admin requests — so loading Admin here (instead of keeping it instantiated
+	 * on every request just to have this hook registered) costs nothing in the common case.
+	 *
+	 * @return void
+	 */
+	public function run_webhook_health_check() {
+		if ( ! class_exists( '\FKWCS\Gateway\Stripe\Admin' ) ) {
+			include plugin_dir_path( FKWCS_FILE ) . '/admin/admin.php';
+		}
+		Admin::get_instance()->run_webhook_health_check();
 	}
 
 	function autoload( $class ) {
@@ -92,7 +164,7 @@ class Stripe {
 	}
 
 	public function get_gateways() {
-		$methods                            = [];
+		$methods                            = array();
 		$methods['fkwcs_stripe']            = 'FKWCS\Gateway\Stripe\CreditCard';
 		$methods['fkwcs_ideal']             = 'FKWCS\Gateway\Stripe\Ideal';
 		$methods['fkwcs_bancontact']        = 'FKWCS\Gateway\Stripe\Bancontact';
@@ -106,11 +178,14 @@ class Stripe {
 		$methods['fkwcs_applepay']          = 'FKWCS\Gateway\Stripe\ApplePay';
 		$methods['fkwcs_alipay']            = 'FKWCS\Gateway\Stripe\Alipay';
 		$methods['fkwcs_mobilepay']         = 'FKWCS\Gateway\Stripe\Mobilepay';
+		$methods['fkwcs_stripe_mbway']      = 'FKWCS\Gateway\Stripe\MBWay';
 		$methods['fkwcs_stripe_pix']        = 'FKWCS\Gateway\Stripe\Pix';
 		$methods['fkwcs_cashapp']           = 'FKWCS\Gateway\Stripe\CashApp';
 		$methods['fkwcs_stripe_multibanco'] = 'FKWCS\Gateway\Stripe\Multibanco';
 		$methods['fkwcs_stripe_eps']        = 'FKWCS\Gateway\Stripe\EPS';
-
+		$methods['fkwcs_stripe_twint']      = 'FKWCS\Gateway\Stripe\Twint';
+		$methods['fkwcs_stripe_blik']       = 'FKWCS\Gateway\Stripe\Blik';
+		$methods['fkwcs_stripe_amazon_pay'] = 'FKWCS\Gateway\Stripe\AmazonPay';
 		return $methods;
 	}
 
@@ -126,7 +201,6 @@ class Stripe {
 			Admin::get_instance();
 			Onboard::get_instance();
 		}
-
 	}
 
 	public function include_gateways() {
@@ -135,6 +209,7 @@ class Stripe {
 		 */
 		include plugin_dir_path( FKWCS_FILE ) . '/includes/traits/wc-subscriptions-helper-trait.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/includes/traits/wc-subscriptions-trait.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/includes/traits/wc-pre-orders-trait.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/includes/traits/wc-smart-button-functions.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/localgateway.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/creditcard.php';
@@ -149,13 +224,18 @@ class Stripe {
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/afterpay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/googlepay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/applepay.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/link.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/amazonpay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/alipay.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/includes/paylater.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/mobilepay.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/mbway.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/pix.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/cashapp.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/multibanco.php';
 		include plugin_dir_path( FKWCS_FILE ) . '/gateways/eps.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/twint.php';
+		include plugin_dir_path( FKWCS_FILE ) . '/gateways/blik.php';
 
 		do_action( 'fkwcs_gateways_included' );
 
@@ -171,38 +251,55 @@ class Stripe {
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-afterpay-upsell.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-p24-upsell.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-bancontact-upsell.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-ideal.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-twint-upsell.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe-apple-pay.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe-google-pay.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-stripe-amazon-pay.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-alipay-upsell.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-pix.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-pix.php';
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-multibanco.php';
 
 				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-cashapp.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-mbway.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-blik.php';
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-wfocu-plugin-integration-fkwcs-eps.php';
 
 			}
 
+			if ( class_exists( 'QPilotPaymentData' ) ) {
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-fkwcs-autoship-cloud-compat.php';
+			}
 
-		} catch ( \Exception|\Error $e ) {
+			if ( defined( 'CFW_VERSION' ) ) {
+				include plugin_dir_path( FKWCS_FILE ) . 'compatibilities/plugins/class-fkwcs-checkoutwc-compat.php';
+			}
+		} catch ( \Exception | \Error $e ) {
 		}
-
 
 		/**
 		 * Load Smart buttons class separately as this is not the registered gateway itself, it simply extends the credit card gateway
 		 */
 		add_action( 'wp_loaded', 'FKWCS\Gateway\Stripe\SmartButtons' . '::get_instance' );
 		add_filter( 'fkwcs_localized_data', array( $this, 'localize_data' ), 100000 );
+
 		/**
 		 * Init Gpay Integration on ajax calls
 		 */
-		add_action( 'parse_request', function () {
-			if ( wp_doing_ajax() ) {
-				\FKWCS\Gateway\Stripe\GooglePay::get_instance();
-			}
-		}, 1 );
+		add_action(
+			'parse_request',
+			function () {
+				if ( wp_doing_ajax() ) {
+					\FKWCS\Gateway\Stripe\GooglePay::get_instance();
+				}
+			},
+			1
+		);
 	}
 
 	public function localize_data( $localize_data ) {
-		$gateways        = WC()->payment_gateways()->get_available_payment_gateways();
+		$gateways        = WC()->payment_gateways()->payment_gateways();
 		$enable_gateways = array();
 		foreach ( $gateways as $gateway ) {
 			if ( ! $gateway instanceof \FKWCS\Gateway\Stripe\Abstract_Payment_Gateway || 'yes' !== $gateway->enabled ) {
@@ -213,8 +310,39 @@ class Stripe {
 		}
 		$localize_data['enable_gateways'] = $enable_gateways;
 
+		// The Credit Card gateway (fkwcs_stripe) normally supplies cart_data, but Express Checkout
+		// wallets are independent gateways: cart_data must still populate when the card gateway is
+		// disabled or has been unregistered by a filter. Fall back to the first available Stripe
+		// express gateway so this assembly filter never throws and never truncates fkwcs_data.
+		$cart_source = isset( $gateways['fkwcs_stripe'] ) ? $gateways['fkwcs_stripe'] : null;
+		if ( is_null( $cart_source ) ) {
+			// Apple Pay / Google Pay are always registered as WC gateways (keyed by their id) even when
+			// the card gateway is disabled, so either can supply cart_data. Link is intentionally omitted:
+			// it is not registered via woocommerce_payment_gateways and is never a key here.
+			foreach ( array( 'fkwcs_stripe_apple_pay', 'fkwcs_stripe_google_pay' ) as $express_id ) {
+				if ( isset( $gateways[ $express_id ] ) ) {
+					$cart_source = $gateways[ $express_id ];
+					break;
+				}
+			}
+		}
+
+		// cart_data MUST always be present (acceptance criteria: cart_data.order_data.total). Seed a safe
+		// default so a missing/unresolvable source degrades gracefully instead of dropping the key entirely.
+		$localize_data['cart_data'] = array(
+			'order_data' => array(
+				'total'    => 0,
+				'currency' => strtolower( get_woocommerce_currency() ),
+			),
+		);
+		if ( $cart_source instanceof \FKWCS\Gateway\Stripe\Abstract_Payment_Gateway && method_exists( $cart_source, 'ajax_get_cart_details' ) ) {
+			$localize_data['cart_data'] = $cart_source->ajax_get_cart_details( true );
+		}
+
 		return $localize_data;
 	}
+
+
 
 	/**
 	 * Loads classes on plugins_loaded hook.
@@ -223,13 +351,23 @@ class Stripe {
 	 */
 	public function wc_is_not_active() {
 		?>
-        <div class="error">
-            <p>
+		<div class="error">
+			<p>
 				<?php
 				echo __( '<strong> Attention: </strong>WooCommerce is not installed or activated. Funnelkit Stripe Plugin is a WooCommerce Payment Gateway and would only work if WooCommerce is activated. Please install the WooCommerce Plugin first.', 'funnelkit-stripe-woo-payment-gateway' ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				?>
-            </p>
-        </div>
+			</p>
+		</div>
+		<?php
+	}
+
+	public function stripe_sdk_missing_notice() {
+		?>
+		<div class="error">
+			<p>
+				<?php echo __( '<strong>FunnelKit Stripe:</strong> The Stripe PHP SDK is missing. This usually happens during a plugin update. Please deactivate and reactivate the FunnelKit Stripe plugin to complete the update.', 'funnelkit-stripe-woo-payment-gateway' ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			</p>
+		</div>
 		<?php
 	}
 
@@ -249,10 +387,16 @@ class Stripe {
 		$gateways['fkwcs_stripe_p24']        = 'WFOCU_Plugin_Integration_Fkwcs_p24';
 		$gateways['fkwcs_stripe_google_pay'] = 'WFOCU_Plugin_Integration_Fkwcs_Google_Pay';
 		$gateways['fkwcs_stripe_apple_pay']  = 'WFOCU_Plugin_Integration_Fkwcs_Apple_Pay';
+		$gateways['fkwcs_stripe_amazon_pay'] = 'WFOCU_Plugin_Integration_Fkwcs_Amazon_Pay';
 		$gateways['fkwcs_stripe_alipay']     = 'WFOCU_Plugin_Integration_Fkwcs_Alipay';
 		$gateways['fkwcs_stripe_pix']        = 'WFOCU_Plugin_Integration_Fkwcs_Pix';
 		$gateways['fkwcs_stripe_cashapp']    = 'WFOCU_Plugin_Integration_Fkwcs_Cashapp';
 		$gateways['fkwcs_stripe_multibanco'] = 'WFOCU_Plugin_Integration_Fkwcs_Multibanco';
+		$gateways['fkwcs_stripe_mbway']      = 'WFOCU_Plugin_Integration_Fkwcs_Mbway';
+		$gateways['fkwcs_stripe_twint']      = 'WFOCU_Plugin_Integration_Fkwcs_Twint';
+		$gateways['fkwcs_stripe_blik']       = 'WFOCU_Plugin_Integration_Fkwcs_Blik';
+		$gateways['fkwcs_stripe_eps']        = 'WFOCU_Plugin_Integration_Fkwcs_Eps';
+		$gateways['fkwcs_stripe_ideal']      = 'WFOCU_Plugin_Integration_Fkwcs_Ideal';
 
 		return $gateways;
 	}
@@ -271,8 +415,10 @@ class Stripe {
 		$gateways[] = 'fkwcs_stripe_klarna';
 		$gateways[] = 'fkwcs_stripe_afterpay';
 		$gateways[] = 'fkwcs_stripe_p24';
+		$gateways[] = 'fkwcs_stripe_ideal';
 		$gateways[] = 'fkwcs_stripe_google_pay';
 		$gateways[] = 'fkwcs_stripe_apple_pay';
+		$gateways[] = 'fkwcs_stripe_amazon_pay';
 		$gateways[] = 'fkwcs_stripe_alipay';
 		$gateways[] = 'fkwcs_stripe_cashapp';
 
@@ -317,6 +463,15 @@ class Stripe {
 		if ( isset( $resp['fkwcs_stripe_multibanco'] ) && true === $resp['fkwcs_stripe_multibanco'] ) {
 			array_push( $all_options['gateways'], 'fkwcs_stripe_multibanco' );
 		}
+		if ( isset( $resp['fkwcs_stripe_twint'] ) && true === $resp['fkwcs_stripe_twint'] ) {
+			array_push( $all_options['gateways'], 'fkwcs_stripe_twint' );
+		}
+		if ( isset( $resp['fkwcs_stripe_blik'] ) && true === $resp['fkwcs_stripe_blik'] ) {
+			array_push( $all_options['gateways'], 'fkwcs_stripe_blik' );
+		}
+		if ( isset( $resp['fkwcs_stripe_eps'] ) && true === $resp['fkwcs_stripe_eps'] ) {
+			array_push( $all_options['gateways'], 'fkwcs_stripe_eps' );
+		}
 		WFOCU_Core()->data->update_options( $all_options );
 	}
 
@@ -327,40 +482,42 @@ class Stripe {
 	 */
 	public function hooks() {
 
-		add_filter( 'woocommerce_payment_gateways', [ $this, 'register_gateway' ], 999 );
+		add_filter( 'woocommerce_payment_gateways', array( $this, 'register_gateway' ), 999 );
 
 		/**
 		 * Upsell compatible hooks
 		 */
-		add_filter( 'wfocu_wc_get_supported_gateways', [ $this, 'add_supported_gateways' ] );
+		add_filter( 'wfocu_wc_get_supported_gateways', array( $this, 'add_supported_gateways' ) );
 
 		add_filter( 'wfocu_subscriptions_get_supported_gateways', array( $this, 'enable_subscription_upsell_support' ) );
 		add_action( 'fkwcs_wizard_gateways_save', array( $this, 'enable_upsell_default_gateway_on_setup' ) );
 
-		add_filter( 'option_woocommerce_gateway_order', [ $this, 'move_gateway_to_first_in_the_list' ], 9999 );
-		add_filter( 'default_option_woocommerce_gateway_order', [ $this, 'move_gateway_to_first_in_the_list' ], 9999 );
+		add_filter( 'option_woocommerce_gateway_order', array( $this, 'move_gateway_to_first_in_the_list' ), 9999 );
+		add_filter( 'default_option_woocommerce_gateway_order', array( $this, 'move_gateway_to_first_in_the_list' ), 9999 );
 
-		add_action( 'fkwcs_wizard_gateways_save', [ $this, 'disable_other_gateways' ] );
-		add_action( 'before_woocommerce_init', [ $this, 'declare_hpos_compatibility' ] );
+		add_action( 'fkwcs_wizard_gateways_save', array( $this, 'disable_other_gateways' ) );
+		add_action( 'before_woocommerce_init', array( $this, 'declare_hpos_compatibility' ) );
 
-		add_action( 'woocommerce_payment_token_class', [ $this, 'modify_token_class' ], 15, 2 );
+		add_action( 'woocommerce_payment_token_class', array( $this, 'modify_token_class' ), 15, 2 );
 
-		add_action( 'woocommerce_api_wc_stripe', [ $this, 'control_webhook' ] );
-		add_filter( 'rest_pre_dispatch', [ $this, 'control_webhook' ], 10, 3 );
-
+		add_action( 'woocommerce_api_wc_stripe', array( $this, 'control_webhook' ) );
+		add_filter( 'rest_pre_dispatch', array( $this, 'control_webhook' ), 10, 3 );
 
 		add_filter( 'woocommerce_order_get_payment_method', array( $this, 'change_payment_method' ), 99, 2 );
 		add_filter( 'woocommerce_subscription_get_payment_method', array( $this, 'change_payment_method' ), 99, 2 );
 
-		add_action( 'wp', function () {
-			global $wp;
+		add_action(
+			'wp',
+			function () {
+				global $wp;
 
-			if ( isset( $wp->query_vars['delete-payment-method'] ) ) {
-				WC()->payment_gateways();
-			}
-		}, 19 );
+				if ( isset( $wp->query_vars['delete-payment-method'] ) ) {
+					WC()->payment_gateways();
+				}
+			},
+			19
+		);
 	}
-
 
 	/**
 	 * Include Webhook class and initialize instance
@@ -371,7 +528,6 @@ class Stripe {
 		if ( $this->is_rest_api_request() ) {
 			Webhook::get_instance();
 		}
-
 	}
 
 
@@ -386,13 +542,11 @@ class Stripe {
 	public function move_gateway_to_first_in_the_list( $ordering ) {
 		$ordering = (array) $ordering;
 
-
 		$key = 'fkwcs_stripe';
 		if ( ! isset( $ordering[ $key ] ) || ! is_numeric( $ordering[ $key ] ) ) {
 			$is_empty         = empty( $ordering ) || ( count( $ordering ) === 1 && $ordering[0] === false );
 			$ordering[ $key ] = $is_empty ? 0 : ( min( $ordering ) - 1 );
 		}
-
 
 		return $ordering;
 	}
@@ -436,7 +590,7 @@ class Stripe {
 	}
 
 	public function is_rest_api_request() {
-		return ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ( isset( $_SERVER['REQUEST_URI'] ) && ( strpos( $_SERVER['REQUEST_URI'], '/wp-json/' ) !== false || strpos( $_SERVER['REQUEST_URI'], 'rest_route' ) !== false ) ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		return ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ( isset( $_SERVER['REQUEST_URI'] ) && ( strpos( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), '/wp-json/' ) !== false || strpos( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), 'rest_route' ) !== false ) );
 	}
 
 	/**
@@ -446,12 +600,11 @@ class Stripe {
 	 * @param string $type gateway name.
 	 *
 	 * @return string
-	 *
 	 */
 	public function modify_token_class( $class, $type ) {
 		if ( 'fkwcs_stripe_sepa' === $type ) {
 			return 'FKWCS\Gateway\Stripe\Token';
-		} else if ( 'fkwcs_stripe_ach' === $type ) {
+		} elseif ( 'fkwcs_stripe_ach' === $type ) {
 			return 'FKWCS\Gateway\Stripe\ACHToken';
 		}
 		if ( 'fkwcs_stripe_cashapp' === $type ) {
@@ -463,10 +616,10 @@ class Stripe {
 
 	/**
 	 * This method simply overrides webhook for the WooCommerce stripe gateway, so that stripe will no longer notify sellers about webhook endpoint returning 400.
+	 *
 	 * @return null|void
 	 */
 	public function control_webhook( $return = null, $rest = null, $request = null ) { //  phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.VoidReturn,WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement
-
 
 		if ( current_action() === 'woocommerce_api_wc_stripe' ) {
 			if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || ( 'POST' !== $_SERVER['REQUEST_METHOD'] ) || ! isset( $_GET['wc-api'] ) || ( 'wc_stripe' !== $_GET['wc-api'] && 'wt_stripe' !== $_GET['wc-api'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -527,23 +680,28 @@ class Stripe {
 
 
 	private function maybe_prevent_change_method() {
+		$gateways = WC()->payment_gateways()->payment_gateways();
 
-		if ( current_action() === 'woocommerce_scheduled_subscription_payment' && ! WC()->payment_gateways()->payment_gateways()['fkwcs_stripe']->is_configured() ) {
+		if ( current_action() === 'woocommerce_scheduled_subscription_payment' && ( ! isset( $gateways['fkwcs_stripe'] ) || ! $gateways['fkwcs_stripe']->is_configured() ) ) {
 			return true;
 		}
-		if ( isset( $_GET['wc-ajax'] ) && 'wc_stripe_frontend_request' === wc_clean( $_GET['wc-ajax'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( did_action( 'woocommerce_create_refund' ) && ( ! isset( $gateways['fkwcs_stripe'] ) || ! $gateways['fkwcs_stripe']->is_configured() ) ) {
+			return true;
+		}
+
+		if ( isset( $_GET['wc-ajax'] ) && 'wc_stripe_frontend_request' === wc_clean( wp_unslash( $_GET['wc-ajax'] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 			return true;
 		}
-		if ( isset( $_GET['wc-ajax'] ) && 'wc_stripe_verify_intent' === wc_clean( $_GET['wc-ajax'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['wc-ajax'] ) && 'wc_stripe_verify_intent' === wc_clean( wp_unslash( $_GET['wc-ajax'] ) ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 			return true;
 		}
 
 		return false;
 	}
-
-
 }
 
 Stripe::get_instance();
+

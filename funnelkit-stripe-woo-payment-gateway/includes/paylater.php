@@ -2,17 +2,23 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 #[\AllowDynamicProperties]
 class PayLater_Helper {
-	private static $instance = null;
-	private $paylater_gateways = [ 'single' => [], 'cart' => [], 'shop' => [] ];
+	private static $instance        = null;
+	private $paylater_gateways      = array(
+		'single' => array(),
+		'cart'   => array(),
+		'shop'   => array(),
+	);
 	private $paylater_gateway_count = 0;
 
 	private function __construct() {
-		add_action( 'template_redirect', [ $this, 'attach_actions' ] );
+		add_action( 'template_redirect', array( $this, 'attach_actions' ) );
 		$this->fkcart_actions();
-
 	}
 
 	/**
@@ -38,31 +44,46 @@ class PayLater_Helper {
 		if ( ! empty( $this->paylater_gateways['single'] ) && is_product() ) {
 			$single_product_hook   = apply_filters( 'fkwcs_paylater_message_product_position', 'woocommerce_after_add_to_cart_form' );
 			$product_page_priority = apply_filters( 'fkwcs_paylater_message_button_product_position_priority', 10 );
-			add_filter( 'woocommerce_available_variation', [ $this, 'add_variation_product_price' ] );
-			add_action( $single_product_hook, [ $this, 'single_button_wrapper' ], $product_page_priority );
+			add_filter( 'woocommerce_available_variation', array( $this, 'add_variation_product_price' ) );
+			add_action( $single_product_hook, array( $this, 'single_button_wrapper' ), $product_page_priority );
 			$need_js = true;
 		}
 
-		if ( ! empty( $this->paylater_gateways['cart'] ) && ( is_cart() || class_exists( 'FKCart\Plugin' ) && \FKCart\Includes\Data::is_cart_enabled() ) ) {
+		if ( ! empty( $this->paylater_gateways['cart'] ) && ( is_cart() || ( class_exists( 'FKCart\Plugin' ) && \FKCart\Includes\Data::is_cart_enabled() ) || $this->is_fkcart_accessible_via_shortcode() ) ) {
 			$cart_page_hook     = apply_filters( 'fkwcs_paylater_message_cart_position', 'woocommerce_proceed_to_checkout' );
 			$cart_page_priority = apply_filters( 'fkwcs_paylater_message_cart_position_priority', 10 );
-			add_action( $cart_page_hook, [ $this, 'cart_button_wrapper' ], $cart_page_priority );
+			add_action( $cart_page_hook, array( $this, 'cart_button_wrapper' ), $cart_page_priority );
 			$need_js = true;
 		}
 
 		if ( ! empty( $this->paylater_gateways['shop'] ) && is_archive() ) {
 			$cart_page_hook     = apply_filters( 'fkwcs_paylater_message_shop_position', 'woocommerce_after_shop_loop_item' );
 			$cart_page_priority = apply_filters( 'fkwcs_paylater_message_shop_position_priority', 999 );
-			add_action( $cart_page_hook, [ $this, 'shop_button_wrapper' ], $cart_page_priority );
+			add_action( $cart_page_hook, array( $this, 'shop_button_wrapper' ), $cart_page_priority );
 			$need_js = true;
 		}
 
 		if ( $need_js ) {
 
-			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_stripe_js' ], 11 );
-			add_action( 'wp_footer', [ $this, 'print_css' ] );
+			add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_stripe_js' ), 11 );
+			add_action( 'wp_footer', array( $this, 'print_css' ) );
 		}
+	}
 
+	/**
+	 * Check if FK Cart is accessible via shortcode [fk_cart_menu] when icon visibility is none
+	 *
+	 * @return bool
+	 */
+	private function is_fkcart_accessible_via_shortcode() {
+		if ( ! class_exists( 'FKCart\Plugin' ) ) {
+			return false;
+		}
+		if ( 'none' !== \FKCart\Includes\Data::get_value( 'cart_display' ) ) {
+			return false;
+		}
+		$val = \FKCart\Includes\Data::get_value( 'enable_menu' );
+		return 1 === intval( $val ) || true === $val || 'true' === strval( $val );
 	}
 
 	public function fkcart_actions() {
@@ -71,17 +92,14 @@ class PayLater_Helper {
 		}
 		$cart_page_hook     = apply_filters( 'fkwcs_paylater_message_button_fkcart_mini_cart_position', 'fkcart_before_smart_button' );
 		$cart_page_priority = apply_filters( 'fkwcs_paylater_message_button_fkcart_mini_cart_priority', - 1 );
-		add_action( $cart_page_hook, [ $this, 'fkcart_mini_cart_wrapper' ], $cart_page_priority );
+		add_action( $cart_page_hook, array( $this, 'fkcart_mini_cart_wrapper' ), $cart_page_priority );
 	}
 
-
 	public function enqueue_stripe_js() {
+		wp_register_script( Helper::get_stripesdk_handle(), 'https://js.stripe.com/v3/', array(), '3.0', true );
 
-		wp_register_script( 'fkwcs-stripe-external', 'https://js.stripe.com/v3/', [], false, true );
-
-		wp_enqueue_script( 'fkwcs-stripe-paylater', FKWCS_URL . 'assets/js/paylater.js', [ 'fkwcs-stripe-external' ], FKWCS_VERSION );
+		wp_enqueue_script( 'fkwcs-stripe-paylater', FKWCS_URL . 'assets/js/paylater.js', array( Helper::get_stripesdk_handle() ), FKWCS_VERSION, true );
 		wp_localize_script( 'fkwcs-stripe-paylater', 'fkwcs_paylater', $this->update_localize_data() );
-
 	}
 
 	public function update_localize_data() {
@@ -137,12 +155,11 @@ class PayLater_Helper {
 				}
 			}
 		}
-
 	}
 
 	public function cart_button_wrapper() {
 		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
-			$paylater_data = [ 'amount' => Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) ) ];
+			$paylater_data = array( 'amount' => Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) ) );
 			echo "<div class='fkwcs_paylater_messaging fkwcs_cart_page' paylater-data='" . wp_json_encode( $paylater_data ) . "'></div>";
 		}
 	}
@@ -153,7 +170,10 @@ class PayLater_Helper {
 			return;
 		}
 
-		$paylater_data = [ 'amount' => Helper::get_formatted_amount( $product->get_price( 'edit' ) ), 'product_type' => $product->get_type() ];
+		$paylater_data = array(
+			'amount'       => Helper::get_formatted_amount( $product->get_price( 'edit' ) ),
+			'product_type' => $product->get_type(),
+		);
 		echo "<div class='fkwcs_paylater_messaging fkwcs_single_product'  paylater-data='" . wp_json_encode( $paylater_data ) . "'></div>";
 	}
 
@@ -173,7 +193,10 @@ class PayLater_Helper {
 		if ( is_null( WC()->cart ) || ! WC()->cart instanceof \WC_Cart ) {
 			return;
 		}
-		$paylater_data = [ 'amount' => Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) ) ];
+		if ( empty( $this->paylater_gateways['cart'] ) ) {
+			return;
+		}
+		$paylater_data = array( 'amount' => Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) ) );
 		echo "<div class='fkwcs_paylater_messaging fkwcs_fkcart_drawer fkcart-checkout-wrap fkcart-panel' paylater-data='" . esc_attr( wp_json_encode( $paylater_data ) ) . "'></div>";
 	}
 
@@ -184,7 +207,7 @@ class PayLater_Helper {
 			return;
 		}
 
-		$paylater_data = [ 'amount' => Helper::get_formatted_amount( $product->get_price( 'edit' ) ) ];
+		$paylater_data = array( 'amount' => Helper::get_formatted_amount( $product->get_price( 'edit' ) ) );
 		$product_id    = $product->get_id();
 		$json_data     = wp_json_encode( $paylater_data );
 		echo "<div class='fkwcs_paylater_messaging fkwcs_shop_page fkwcs_shop_pro_" . esc_attr( $product_id ) . "' paylater-product-id='" . esc_attr( $product_id ) . "' paylater-data='" . esc_attr( $json_data ) . "'></div>";
@@ -192,23 +215,22 @@ class PayLater_Helper {
 
 	public function print_css() {
 		?>
-        <style type="text/css">
-            .fkwcs_paylater_messaging {
-                clear: both;
-                margin-bottom: 12px;
-            }
+		<style type="text/css">
+			.fkwcs_paylater_messaging {
+				clear: both;
+				margin-bottom: 12px;
+			}
 
-            .fkwcs_paylater_messaging.fkwcs_shop_page div > iframe {
-                min-height: 40px;
-            }
+			.fkwcs_paylater_messaging.fkwcs_shop_page div > iframe {
+				min-height: 40px;
+			}
 
-            .fkwcs_paylater_messaging.fkwcs_fkcart_drawer {
-                margin-bottom: 12px;
-                margin-top: 12px;
-            }
-        </style>
+			.fkwcs_paylater_messaging.fkwcs_fkcart_drawer {
+				margin-bottom: 12px;
+				margin-top: 12px;
+			}
+		</style>
 		<?php
-
 	}
 }
 

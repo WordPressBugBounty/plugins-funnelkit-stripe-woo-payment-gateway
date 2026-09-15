@@ -83,6 +83,10 @@
 
                 this.fkcartMiniCart();
             });
+            // Dedicated hook so the FunnelKit slide cart can refresh ONLY the drawer BNPL messaging
+            $('body').on('fkcart_paylater_refresh', () => {
+                this.fkcartMiniCart();
+            });
             this.singleProduct();
             this.cartPage();
             this.archiveProduct();
@@ -90,6 +94,10 @@
 
         createMessage(amount, methods, selector) {
             try {
+                if (!Array.isArray(methods) || methods.length === 0) {
+                    $(selector).hide();
+                    return;
+                }
                 let supported_currency = ["USD", "GBP", "EUR", "DKK", "NOK", "SEK", "CAD", "AUD"];
                 let supported_countries = ["US", "CA", "AU", "NZ", "GB", "IE", "FR", "ES", "DE", "AT", "BE", "DK", "FI", "IT", "NL", "NO", "SE", "GR"];
 
@@ -183,6 +191,27 @@
 
     }
 
+
+    /**
+     * One Stripe instance per publishable key, shared by every FunnelKit script on the page.
+     *
+     * stripe-elements.js, express-checkout.js and paylater.js each used to call Stripe()
+     * separately, so a checkout page could carry three instances. Each opens its own
+     * connection and iframes, refetches shared.js, and keeps its own Link/wallet state.
+     * Keyed by publishable key, since paylater does not pass it through the
+     * fkwcs_api_client_public_key filter and could in theory differ. Defined defensively so
+     * whichever script loads first creates it.
+     */
+    window.fkwcsGetStripe = window.fkwcsGetStripe || function (pubKey, options) {
+        window.fkwcsStripeInstances = window.fkwcsStripeInstances || {};
+
+        if (!window.fkwcsStripeInstances[pubKey]) {
+            window.fkwcsStripeInstances[pubKey] = Stripe(pubKey, options);
+        }
+
+        return window.fkwcsStripeInstances[pubKey];
+    };
+
     function init_bnpl_messages() {
         const pubKey = fkwcs_paylater.pub_key;
         const mode = fkwcs_paylater.mode;
@@ -191,7 +220,7 @@
             return;
         }
         try {
-            const stripe = Stripe(pubKey, {locale: fkwcs_paylater.locale});
+            const stripe = window.fkwcsGetStripe(pubKey, {locale: fkwcs_paylater.locale});
             new PayLaterMessages(stripe);
 
         } catch (e) {

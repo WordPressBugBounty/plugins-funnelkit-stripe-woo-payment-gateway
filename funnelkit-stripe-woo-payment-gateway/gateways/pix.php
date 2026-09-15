@@ -2,11 +2,15 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 #[\AllowDynamicProperties]
 class Pix extends LocalGateway {
-	public $id = 'fkwcs_stripe_pix';
+	public $id                   = 'fkwcs_stripe_pix';
 	public $payment_method_types = 'pix';
-	protected $payment_element = true;
+	protected $payment_element   = true;
 
 	/**
 	 * Initialize the Pix gateway settings and configuration.
@@ -26,17 +30,15 @@ class Pix extends LocalGateway {
 		$this->title       = $this->get_option( 'title' );
 		$this->description = $this->get_option( 'description' );
 		$this->enabled     = $this->get_option( 'enabled' );
-		add_filter( 'fkwcs_localized_data', [ $this, 'localize_element_data' ], 999 );
-
+		add_filter( 'fkwcs_localized_data', array( $this, 'localize_element_data_pix' ), 999 );
 	}
 
 	protected function override_defaults() {
-		$this->supported_currency          = [ 'BRL', 'USD' ];
-		$this->specific_country            = [ 'BR', 'US' ];
+		$this->supported_currency          = array( 'BRL', 'USD' );
+		$this->specific_country            = array( 'BR', 'US' );
 		$this->setting_enable_label        = esc_html__( 'Enable Stripe Pix Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = esc_html__( 'Stripe Pix', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_description_default = esc_html__( 'Pay with Pix', 'funnelkit-stripe-woo-payment-gateway' );
-
 	}
 
 	/**
@@ -51,30 +53,30 @@ class Pix extends LocalGateway {
 	 */
 	public function init_form_fields() {
 
-		$settings = [
-			'enabled'     => [
+		$settings = array(
+			'enabled'     => array(
 				'label'   => ' ',
 				'type'    => 'checkbox',
 				'title'   => $this->setting_enable_label,
 				'default' => 'no',
-			],
-			'title'       => [
+			),
+			'title'       => array(
 				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'text',
 				'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_title_default,
 				'id'          => $this->setting_title_default,
 				'desc_tip'    => true,
-			],
-			'description' => [
+			),
+			'description' => array(
 				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'textarea',
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_description_default,
 				'desc_tip'    => true,
-			]
-		];
+			),
+		);
 
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
 
@@ -90,7 +92,7 @@ class Pix extends LocalGateway {
 		}
 
 		$countries_fields['specific_countries']['options'] = $this->specific_country;
-		$countries_fields['specific_countries']['default'] = [ 'BR' ];
+		$countries_fields['specific_countries']['default'] = array( 'BR' );
 		$this->form_fields                                 = apply_filters( $this->id . '_payment_form_fields', array_merge( $settings, $countries_fields ) );
 	}
 
@@ -105,12 +107,11 @@ class Pix extends LocalGateway {
 	 * @return array Modified data array with Pix payment element data
 	 * @since 1.0.0
 	 */
-	public function localize_element_data( $data ) {
+	public function localize_element_data_pix( $data ) {
 		if ( ! $this->is_available() ) {
 			return $data;
 		}
 		$data['fkwcs_payment_data_pix'] = $this->payment_element_data();
-
 
 		return $data;
 	}
@@ -128,23 +129,31 @@ class Pix extends LocalGateway {
 	public function payment_element_data() {
 
 		$data    = $this->get_payment_element_options();
-		$methods = [ 'Pix' ];
-
+		$methods = array( 'Pix' );
 
 		$data['payment_method_types'] = apply_filters( 'fkwcs_available_payment_element_types', $methods );
 		$data['appearance']           = array(
-			'theme' => 'stripe'
+			'theme' => 'stripe',
 		);
 
-		$options            = [
-			'fields' => [
-				'billingDetails' => 'never'
-			]
-		];
-		$options['wallets'] = [ 'applePay' => 'never', 'googlePay' => 'never' ];
+		$options            = array(
+			'fields' => array(
+				'billingDetails' => 'never',
+			),
+		);
+		$options['wallets'] = array(
+			'applePay'  => 'never',
+			'googlePay' => 'never',
+		);
 
-		return apply_filters( 'fkwcs_stripe_payment_element_data_Pix', [ 'element_data' => $data, 'element_options' => $options ], $this );
-
+		return apply_filters(
+			'fkwcs_stripe_payment_element_data_Pix',
+			array(
+				'element_data'    => $data,
+				'element_options' => $options,
+			),
+			$this
+		);
 	}
 
 	public function save_payment_method_details( $order, $charge_response ) {
@@ -157,10 +166,24 @@ class Pix extends LocalGateway {
 			} else {
 				Helper::log( 'No tax ID found in charge response billing details' );
 			}
-		} catch ( Exception|Error $e ) {
+		} catch ( Exception | Error $e ) {
 			Helper::log( 'Error saving Pix payment method details: ' . $e->getMessage() );
 		}
 	}
 
-
+	/**
+	 * Get element data for fragments to support dynamic gateway availability
+	 * Inherits add_element_data_to_fragments from LocalGateway parent class
+	 *
+	 * @return array Element data for this gateway.
+	 */
+	protected function get_element_data_for_fragments() {
+		try {
+			// Return the same data structure as payment_element_data method
+			return $this->payment_element_data();
+		} catch ( \Throwable $e ) {
+			Helper::log( sprintf( 'Error getting PIX element data for fragments: %s', $e->getMessage() ) );
+			return array();
+		}
+	}
 }

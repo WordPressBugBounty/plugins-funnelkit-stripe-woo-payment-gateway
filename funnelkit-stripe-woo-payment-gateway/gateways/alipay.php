@@ -2,15 +2,19 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 class AliPay extends LocalGateway {
 	/**
 	 * Gateway id
 	 *
 	 * @var string
 	 */
-	public $id = 'fkwcs_stripe_alipay';
+	public $id                   = 'fkwcs_stripe_alipay';
 	public $payment_method_types = 'alipay';
-	protected $payment_element = true;
+	protected $payment_element   = true;
 
 	/**
 	 * Setup general properties and settings
@@ -30,7 +34,7 @@ class AliPay extends LocalGateway {
 
 	protected function override_defaults() {
 		// Supported currencies
-		$this->supported_currency = [
+		$this->supported_currency = array(
 			'CNY', // Chinese Yuan
 			'AUD', // Australian Dollar
 			'CAD', // Canadian Dollar
@@ -41,54 +45,12 @@ class AliPay extends LocalGateway {
 			'SGD', // Singapore Dollar
 			'MYR', // Malaysian Ringgit
 			'NZD', // New Zealand Dollar
-			'USD'  // US Dollar
-		];
+			'USD',  // US Dollar
+		);
 
-		// All supported countries based on Stripe documentation
-		$this->specific_country = [
-			'AU', // Australia
-			'AT', // Austria
-			'BE', // Belgium
-			'BG', // Bulgaria
-			'CA', // Canada
-			'HR', // Croatia
-			'CY', // Cyprus
-			'CZ', // Czech Republic
-			'DK', // Denmark
-			'EE', // Estonia
-			'FI', // Finland
-			'FR', // France
-			'DE', // Germany
-			'GI', // Gibraltar
-			'GR', // Greece
-			'HK', // Hong Kong
-			'HU', // Hungary
-			'IE', // Ireland
-			'IT', // Italy
-			'JP', // Japan
-			'LV', // Latvia
-			'LI', // Liechtenstein
-			'LT', // Lithuania
-			'LU', // Luxembourg
-			'MY', // Malaysia
-			'MT', // Malta
-			'NL', // Netherlands
-			'NZ', // New Zealand
-			'NO', // Norway
-			'PT', // Portugal
-			'RO', // Romania
-			'SG', // Singapore
-			'SK', // Slovakia
-			'SI', // Slovenia
-			'ES', // Spain
-			'SE', // Sweden
-			'CH', // Switzerland
-			'GB', // United Kingdom
-			'US'  // United States
-		];
-
-		$this->selling_country_type = 'specific';
-		$this->except_country       = [];
+		$this->specific_country     = array();
+		$this->selling_country_type = 'all';
+		$this->except_country       = array();
 
 		$this->setting_enable_label        = __( 'Enable Alipay Payment Gateway', 'funnelkit-stripe-woo-payment-gateway' );
 		$this->setting_title_default       = __( 'Alipay', 'funnelkit-stripe-woo-payment-gateway' );
@@ -97,46 +59,33 @@ class AliPay extends LocalGateway {
 
 	public function init_form_fields() {
 
-		$settings                = [
-			'enabled'     => [
+		$settings = array(
+			'enabled'     => array(
 				'label'   => ' ',
 				'type'    => 'checkbox',
 				'title'   => $this->setting_enable_label,
 				'default' => 'no',
-			],
-			'title'       => [
+			),
+			'title'       => array(
 				'title'       => __( 'Title', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'text',
 				'description' => __( 'Change the payment gateway title that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_title_default,
 				'desc_tip'    => true,
-			],
-			'description' => [
+			),
+			'description' => array(
 				'title'       => __( 'Description', 'funnelkit-stripe-woo-payment-gateway' ),
 				'type'        => 'textarea',
 				'css'         => 'width:25em',
 				'description' => __( 'Change the payment gateway description that appears on the checkout.', 'funnelkit-stripe-woo-payment-gateway' ),
 				'default'     => $this->setting_description_default,
 				'desc_tip'    => true,
-			]
-		];
-		$stripe_account_settings = get_option( 'fkwcs_stripe_account_settings', [] );
+			),
+		);
 
 		$countries_fields = $this->get_countries_admin_fields( $this->selling_country_type, $this->except_country, $this->specific_country );
 
-		if ( isset( $countries_fields['allowed_countries']['options']['all'] ) ) {
-			unset( $countries_fields['allowed_countries']['options']['all'] );
-		}
-
-		if ( isset( $countries_fields['allowed_countries']['options']['all_except'] ) ) {
-			unset( $countries_fields['allowed_countries']['options']['all_except'] );
-		}
-		if ( isset( $countries_fields['except_countries'] ) ) {
-			unset( $countries_fields['except_countries'] );
-		}
-
-		$countries_fields['specific_countries']['options'] = $this->specific_country;
-
+		// Don't limit options - specific_countries shows all countries like except_countries
 		$this->form_fields = apply_filters( $this->id . '_payment_form_fields', array_merge( $settings, $countries_fields ) );
 	}
 }

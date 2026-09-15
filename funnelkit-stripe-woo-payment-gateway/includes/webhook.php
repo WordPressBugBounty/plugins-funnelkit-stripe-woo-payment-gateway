@@ -1,35 +1,37 @@
 <?php
+
+namespace FKWCS\Gateway\Stripe;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Stripe Webhook Class
  */
 
-namespace FKWCS\Gateway\Stripe;
-
 use Automattic\WooCommerce\Utilities\OrderUtil;
-use Exception as Exception;
+use Exception;
 use Stripe\Exception\SignatureVerificationException as SignatureException;
 use UnexpectedValueException as UnexpectedException;
 
 #[\AllowDynamicProperties]
 class Webhook {
 
-	private static $instance = null;
-	private $mode = 'test';
-	const FKWCS_LIVE_BEGAN_AT = 'fkwcs_live_webhook_began_at';
+	private static $instance         = null;
+	private $mode                    = 'test';
+	const FKWCS_LIVE_BEGAN_AT        = 'fkwcs_live_webhook_began_at';
 	const FKWCS_LIVE_LAST_SUCCESS_AT = 'fkwcs_live_webhook_last_success_at';
 	const FKWCS_LIVE_LAST_FAILURE_AT = 'fkwcs_live_webhook_last_failure_at';
-	const FKWCS_LIVE_LAST_ERROR = 'fkwcs_live_webhook_last_error';
+	const FKWCS_LIVE_LAST_ERROR      = 'fkwcs_live_webhook_last_error';
 
-	const FKWCS_TEST_BEGAN_AT = 'fkwcs_test_webhook_began_at';
+	const FKWCS_TEST_BEGAN_AT        = 'fkwcs_test_webhook_began_at';
 	const FKWCS_TEST_LAST_SUCCESS_AT = 'fkwcs_test_webhook_last_success_at';
 	const FKWCS_TEST_LAST_FAILURE_AT = 'fkwcs_test_webhook_last_failure_at';
-	const FKWCS_TEST_LAST_ERROR = 'fkwcs_test_webhook_last_error';
-
+	const FKWCS_TEST_LAST_ERROR      = 'fkwcs_test_webhook_last_error';
 
 	public function __construct() {
-		add_action( 'rest_api_init', [ $this, 'register_endpoints' ] );
-
-
+		add_action( 'rest_api_init', array( $this, 'register_endpoints' ) );
 	}
 
 	/**
@@ -44,7 +46,6 @@ class Webhook {
 
 		return self::$instance;
 	}
-
 
 	/**
 	 * Returns message about interaction with Stripe webhook
@@ -90,7 +91,7 @@ class Webhook {
 
 				/* translators: time, status, reason */
 
-				return sprintf( __( 'Last webhook call was %1$1s. Status : %2$2s. %3$3s', 'funnelkit-stripe-woo-payment-gateway' ), self::  time_elapsed_string( gmdate( 'Y-m-d H:i:s e', $last_failure_at ) ), '<b>' . ucfirst( $status ) . '</b>', $reason );
+				return sprintf( __( 'Last webhook call was %1$1s. Status : %2$2s. %3$3s', 'funnelkit-stripe-woo-payment-gateway' ), self::time_elapsed_string( gmdate( 'Y-m-d H:i:s e', $last_failure_at ) ), '<b>' . ucfirst( $status ) . '</b>', $reason );
 
 			case 'began':
 				/* translators: timestamp */ return sprintf( __( 'No webhook call since %1s.', 'funnelkit-stripe-woo-payment-gateway' ), gmdate( 'Y-m-d H:i:s e', $start_at ) );
@@ -121,13 +122,17 @@ class Webhook {
 	 * @return void
 	 */
 	public function register_endpoints() {
-		register_rest_route( 'fkwcs', '/v1/webhook', array(
-			'methods'             => 'POST',
-			'callback'            => [ $this, 'webhook_listener' ],
-			'permission_callback' => function () {
-				return true;
-			},
-		) );
+		register_rest_route(
+			'fkwcs',
+			'/v1/webhook',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'webhook_listener' ),
+				'permission_callback' => function () {
+					return true;
+				},
+			)
+		);
 	}
 
 	/**
@@ -141,10 +146,10 @@ class Webhook {
 		/**
 		 * Sleep for 2 seconds to avoid rate limiting
 		 */
-		sleep(2);
+		sleep( 2 );
 
 		if ( class_exists( 'WFOCU_Core' ) ) {
-			remove_action( 'woocommerce_pre_payment_complete', [ WFOCU_Core()->public, 'maybe_setup_upsell' ], 99 );
+			remove_action( 'woocommerce_pre_payment_complete', array( WFOCU_Core()->public, 'maybe_setup_upsell' ), 99 );
 		}
 
 		$payload = file_get_contents( 'php://input' ); //phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsRemoteFile
@@ -169,19 +174,21 @@ class Webhook {
 			update_option( $began, time(), 'no' );
 		}
 
-		$sig_header = isset( $_SERVER['HTTP_STRIPE_SIGNATURE'] ) ? wc_clean( $_SERVER['HTTP_STRIPE_SIGNATURE'] ) : '';
+		$sig_header = isset( $_SERVER['HTTP_STRIPE_SIGNATURE'] ) ? wc_clean( wp_unslash( $_SERVER['HTTP_STRIPE_SIGNATURE'] ) ) : '';
 
 		try {
 			$event = \Stripe\Webhook::constructEvent( $payload, $sig_header, $endpoint_secret );
-			Helper::log( 'Webhook data: ' . wp_json_encode( $event->toArray() ) );
-		} catch ( UnexpectedException|SignatureException $e ) {
-			Helper::log( 'Webhook error : ' . $e->getMessage() . ' Full Payload below: ' . $payload );
+			Helper::log( 'Webhook data: ' . wp_json_encode( Helper::redact_for_log( $event ) ) );
+		} catch ( UnexpectedException | SignatureException $e ) {
+			// Log only the error message — the raw payload is intentionally omitted to avoid dumping
+			// PII that may be embedded in webhook event data into the log file.
+			Helper::log( 'Webhook error : ' . $e->getMessage() );
 			$error_at = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_FAILURE_AT' );
 			update_option( $error_at, time(), 'no' );
 			$error = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_ERROR' );
 			update_option( $error, $e->getMessage(), 'no' );
 
-			wp_send_json_error( [ 'message' => $e->getMessage() ], 400 );
+			wp_send_json_error( array( 'message' => $e->getMessage() ), 400 );
 			exit();
 
 		}
@@ -191,87 +198,94 @@ class Webhook {
 
 		if ( is_null( $object ) ) {
 
-			wp_send_json_error( [ 'message' => __( 'Stripe Object found to be null in payload', 'funnelkit-stripe-woo-payment-gateway' ) ], 400 );
+			wp_send_json_error( array( 'message' => __( 'Stripe Object found to be null in payload', 'funnelkit-stripe-woo-payment-gateway' ) ), 400 );
 
 			exit;
 		}
 		Helper::set_mode( $this->mode );
 		http_response_code( 200 );
 
-		switch ( $event->type ) {
-			case 'charge.captured':
-				$this->charge_capture( $object );
-				break;
-			case 'charge.succeeded':
-				$this->charge_succeeded( $object );
-				break;
-			case 'charge.refunded':
-				$this->charge_refund( $object );
-				break;
-			case 'charge.dispute.created':
-				$this->charge_dispute_created( $object );
-				break;
-			case 'charge.dispute.closed':
-				$this->charge_dispute_closed( $object );
-				break;
-			case 'payment_intent.succeeded':
-				$this->payment_intent_succeeded( $object );
-				break;
-			case 'charge.failed':
-				$this->charge_failed( $object );
-				break;
-			case 'review.opened':
-				$this->review_opened( $object );
-				break;
-			case 'review.closed':
-				$this->review_closed( $object );
-				break;
-			case 'invoice.created':
-				if ( $object->subscription ) {
-					// Void the invoice
-				}
+		try {
+			switch ( $event->type ) {
+				case 'charge.captured':
+					$this->charge_capture( $object );
+					break;
+				case 'charge.succeeded':
+					$this->charge_succeeded( $object );
+					break;
+				case 'charge.refunded':
+					$this->charge_refund( $object );
+					break;
+				case 'charge.dispute.created':
+					$this->charge_dispute_created( $object );
+					break;
+				case 'charge.dispute.closed':
+					$this->charge_dispute_closed( $object );
+					break;
+				case 'payment_intent.succeeded':
+					$this->payment_intent_succeeded( $object );
+					break;
+				case 'charge.failed':
+					$this->charge_failed( $object );
+					break;
+				case 'review.opened':
+					$this->review_opened( $object );
+					break;
+				case 'review.closed':
+					$this->review_closed( $object );
+					break;
+				case 'invoice.created':
+					if ( $object->subscription ) {
+						// Void the invoice
+					}
 
+					do_action( 'fkwcs_invoice.created_webhook', $object );
+					break;
+				case 'invoice.draft':
+					do_action( 'fkwcs_invoice.draft_webhook', $object );
+					break;
+				case 'invoice.paid':
+					do_action( 'fkwcs_invoice.paid_webhook', $object );
+					break;
+				case 'invoice.voided':
+					do_action( 'fkwcs_invoice.voided_webhook', $object );
+					break;
 
-				do_action( 'fkwcs_invoice.created_webhook', $object );
-				break;
-			case 'invoice.draft':
-				do_action( 'fkwcs_invoice.draft_webhook', $object );
-				break;
-			case 'invoice.paid':
-				do_action( 'fkwcs_invoice.paid_webhook', $object );
-				break;
-			case 'invoice.voided':
-				do_action( 'fkwcs_invoice.voided_webhook', $object );
-				break;
+				case 'invoice.finalized':
+					do_action( 'fkwcs_invoice.finalized_webhook', $object );
+					break;
 
-
-			case 'invoice.finalized':
-				do_action( 'fkwcs_invoice.finalized_webhook', $object );
-				break;
-
-			case 'customer.subscription.deleted':
-				do_action( 'fkwcs_customer.subscription.deleted_webhook', $object );
-				break;
-			case 'customer.subscription.trial_will_end':
-				do_action( 'fkwcs_customer.subscription.trial_will_end_webhook', $object );
-				break;
-			case 'invoice.marked_uncollectible':
-				do_action( 'fkwcs_invoice.marked_uncollectible_webhook', $object );
-				break;
-			case 'customer.subscription.updated':
-				do_action( 'fkwcs_customer.subscription.updated_webhook', $object );
-				break;
-			case 'payment_intent.requires_action':
-				$this->require_action( $object );
-				break;
-			case 'refund.updated':
-				$this->refund_updated( $object );
-				break;
-			default:
-				do_action( 'fkwcs_webhook_event_' . $event->type, $event );
+				case 'customer.subscription.deleted':
+					do_action( 'fkwcs_customer.subscription.deleted_webhook', $object );
+					break;
+				case 'customer.subscription.trial_will_end':
+					do_action( 'fkwcs_customer.subscription.trial_will_end_webhook', $object );
+					break;
+				case 'invoice.marked_uncollectible':
+					do_action( 'fkwcs_invoice.marked_uncollectible_webhook', $object );
+					break;
+				case 'customer.subscription.updated':
+					do_action( 'fkwcs_customer.subscription.updated_webhook', $object );
+					break;
+				case 'payment_intent.requires_action':
+					$this->require_action( $object );
+					break;
+				case 'refund.updated':
+					$this->refund_updated( $object );
+					break;
+				default:
+					do_action( 'fkwcs_webhook_event_' . $event->type, $event );
+			}
+			$success = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_SUCCESS_AT' );
+			update_option( $success, time(), 'no' );
+		} catch ( \Throwable $e ) {
+			Helper::log( 'Webhook processing error for event ' . $event->type . ': ' . $e->getMessage() );
+			$error_at = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_FAILURE_AT' );
+			update_option( $error_at, time(), 'no' );
+			$error = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_ERROR' );
+			update_option( $error, $e->getMessage(), 'no' );
+			wp_send_json_error( array( 'message' => $e->getMessage() ), 500 );
 		}
-		$success = constant( 'self::FKWCS_' . strtoupper( $this->mode ) . '_LAST_SUCCESS_AT' );
-		update_option( $success, time(), 'no' );
 		exit;
 	}
 	/**
@@ -282,7 +296,7 @@ class Webhook {
 	 * @return void
 	 */
 	public function refund_updated( $refund ) {
-		Helper::log( "refund updated" );
+		Helper::log( 'refund updated' );
 
 		if ( ! isset( $refund->charge ) ) {
 			Helper::log( 'No charge ID in refund object' );
@@ -294,8 +308,8 @@ class Webhook {
 			return;
 		}
 
-		$client = Helper::get_new_client( $client_secret );
-		$charge_response = $client->charges( 'retrieve', [ $refund->charge ] );
+		$client          = Helper::get_new_client( $client_secret );
+		$charge_response = $client->charges( 'retrieve', array( $refund->charge ) );
 		if ( ! $charge_response['success'] ) {
 			Helper::log( 'Could not retrieve charge for refund validation' );
 			return;
@@ -313,14 +327,14 @@ class Webhook {
 		}
 
 		$order_id = $refund->metadata->order_id;
-		$order = wc_get_order( $order_id );
+		$order    = wc_get_order( $order_id );
 		if ( ! $order ) {
 			Helper::log( 'Could not find order ' . $order_id . ' for refund ' . $refund->id );
 			return;
 		}
 
 		// Check if this is for Multibanco payment method only
-		if ( ! in_array( $order->get_payment_method(), [ 'fkwcs_stripe_multibanco' ], true ) ) {
+		if ( ! in_array( $order->get_payment_method(), array( 'fkwcs_stripe_multibanco' ), true ) ) {
 			Helper::log( 'Refund update webhook only processed for Multibanco. Payment method: ' . $order->get_payment_method() );
 			return;
 		}
@@ -332,7 +346,7 @@ class Webhook {
 
 		$processed_refunds = Helper::get_meta( $order, '_fkwcs_refund_succeeded_ids' );
 		if ( ! is_array( $processed_refunds ) ) {
-			$processed_refunds = [];
+			$processed_refunds = array();
 		}
 
 		if ( in_array( $refund->id, $processed_refunds, true ) ) {
@@ -341,13 +355,13 @@ class Webhook {
 		}
 
 		// Add order note about the refund status update
-		$currency = strtoupper( $refund->currency );
-		$amount = Helper::get_original_amount( $refund->amount, $currency );
-		$formatted_amount = wc_price( $amount, [ 'currency' => $currency ] );
-		$refund_time = gmdate( 'Y-m-d H:i:s', time() );
+		$currency         = strtoupper( $refund->currency );
+		$amount           = Helper::get_original_amount( $refund->amount, $currency );
+		$formatted_amount = wc_price( $amount, array( 'currency' => $currency ) );
+		$refund_time      = gmdate( 'Y-m-d H:i:s', time() );
 
 		// Add note about successful refund
-		$note = __( 'Refund Status Update', 'funnelkit-stripe-woo-payment-gateway' ) . ':<br>';
+		$note  = __( 'Refund Status Update', 'funnelkit-stripe-woo-payment-gateway' ) . ':<br>';
 		$note .= __( 'Status', 'funnelkit-stripe-woo-payment-gateway' ) . ': ' . __( 'Succeeded', 'funnelkit-stripe-woo-payment-gateway' ) . '<br>';
 		$note .= __( 'Amount', 'funnelkit-stripe-woo-payment-gateway' ) . ': ' . $formatted_amount . '<br>';
 		$note .= __( 'Transaction ID', 'funnelkit-stripe-woo-payment-gateway' ) . ': ' . $refund->id . '<br>';
@@ -365,7 +379,7 @@ class Webhook {
 		$order->add_order_note( $note );
 
 		// Check if this is a full refund and update order status
-		$order_total = $order->get_total();
+		$order_total    = $order->get_total();
 		$total_refunded = $order->get_total_refunded();
 
 		$current_refund_amount = Helper::get_original_amount( $refund->amount, $currency );
@@ -401,7 +415,7 @@ class Webhook {
 	 * @return void
 	 */
 	public function charge_capture( $charge ) {
-		Helper::log( "Charge capture" );
+		Helper::log( 'Charge capture' );
 
 		if ( ! $this->validate_site_url( $charge ) ) {
 			Helper::log( 'Website url check failed ' . $charge->id );
@@ -417,22 +431,24 @@ class Webhook {
 
 		try {
 			$order = wc_get_order( $order_id );
+			if ( ! $order instanceof \WC_Order ) {
+				Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+				return;
+			}
 			if ( 'fkwcs_stripe_sepa' === $order->get_payment_method() ) {
 				$order->set_transaction_id( $charge->id );
 				$this->make_charge( $charge, $order );
 			}
 			do_action( 'fkwcs_webhook_event_charge_capture', $charge, $order );
 		} catch ( \WC_Data_Exception $exception ) {
-			Helper::log( " Charge Failed " . $exception->getMessage() );
+			Helper::log( ' Charge Failed ' . $exception->getMessage() );
 		}
-
-
 	}
 
 	/**
 	 * Make charge via webhook call
 	 *
-	 * @param object $intent Stripe intent object.
+	 * @param object    $intent Stripe intent object.
 	 * @param \WC_Order $order WC order object.
 	 *
 	 * @return void
@@ -459,7 +475,7 @@ class Webhook {
 			Helper::update_balance( $order, $intent->balance_transaction );
 		}
 
-		if ( is_callable( [ $order, 'save' ] ) ) {
+		if ( is_callable( array( $order, 'save' ) ) ) {
 			$order->save();
 		}
 	}
@@ -474,7 +490,7 @@ class Webhook {
 	 */
 	public function charge_refund( $charge ) {
 
-		Helper::log( "charge refund" );
+		Helper::log( 'charge refund' );
 
 		if ( ! $this->validate_site_url( $charge ) ) {
 			Helper::log( 'Website url check failed ' . $charge->id );
@@ -489,6 +505,10 @@ class Webhook {
 		}
 		try {
 			$order = wc_get_order( $order_id );
+			if ( ! $order instanceof \WC_Order ) {
+				Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+				return;
+			}
 			if ( 0 === strpos( $order->get_payment_method(), 'fkwcs_' ) ) {
 
 				$intent = $this->get_intent_from_order( $order );
@@ -522,7 +542,7 @@ class Webhook {
 
 				$raw_amount = Helper::get_original_amount( $raw_amount, $currency );
 
-				$amount = wc_price( $raw_amount, [ 'currency' => $currency ] );
+				$amount = wc_price( $raw_amount, array( 'currency' => $currency ) );
 
 				if ( ! $captured ) {
 					if ( 'cancelled' !== $order->get_status() ) {
@@ -542,11 +562,13 @@ class Webhook {
 
 					$reason = __( 'Refunded via Stripe dashboard', 'funnelkit-stripe-woo-payment-gateway' );
 
-					$refund = wc_create_refund( [
-						'order_id' => $order_id,
-						'amount'   => ( $charge->amount_refunded > 0 ) ? $raw_amount : false,
-						'reason'   => $reason,
-					] );
+					$refund = wc_create_refund(
+						array(
+							'order_id' => $order_id,
+							'amount'   => ( $charge->amount_refunded > 0 ) ? $raw_amount : false,
+							'reason'   => $reason,
+						)
+					);
 
 					if ( is_wp_error( $refund ) ) {
 						Helper::log( $refund->get_error_message() );
@@ -592,11 +614,16 @@ class Webhook {
 		}
 
 		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+			return;
+		}
+		$status_before = $order->get_status();
 		$order->update_status( 'on-hold', __( 'This order is under dispute. Please respond via Stripe dashboard.', 'funnelkit-stripe-woo-payment-gateway' ) );
-		$order->update_meta_data( 'fkwcs_status_before_dispute', $order->get_status() );
+		$order->update_meta_data( 'fkwcs_status_before_dispute', $status_before );
+		$order->save();
 		self::send_failed_order_email( $order_id );
-		
-		
+
 		do_action( 'fkwcs_charge_dispute_created', $dispute, $order );
 	}
 
@@ -611,20 +638,23 @@ class Webhook {
 
 		Helper::log( 'charge dispute closed' );
 
-
 		if ( ! $this->validate_site_url( $dispute->payment_intent ) ) {
 			Helper::log( 'Website url check failed ' . $dispute->payment_intent->id );
 
 			return;
 		}
 		$order_id = $this->get_order_id_from_intent_query( $dispute->payment_intent );
-		if ( ! $order_id ) { 
+		if ( ! $order_id ) {
 			Helper::log( 'Could not find order for dispute ID: ' . $dispute->id );
 
 			return;
 		}
 
-		$order   = wc_get_order( $order_id );
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+			return;
+		}
 		$message = '';
 		switch ( $dispute->status ) {
 			case 'lost':
@@ -642,19 +672,18 @@ class Webhook {
 
 		$status = 'lost' === $dispute->status ? 'failed' : Helper::get_meta( $order, 'fkwcs_status_before_dispute' );
 		$order->update_status( $status, $message );
-		
+
 		do_action( 'fkwcs_charge_dispute_closed', $dispute, $order, $dispute->status );
 	}
 
 	/**
 	 * Handles webhook call of event payment_intent.succeeded
 	 *
-	 * @param object $intent intent object received from Stripe. 
+	 * @param object $intent intent object received from Stripe.
 	 *
 	 * @return void
 	 */
 	public function payment_intent_succeeded( $intent ) {
-
 
 		if ( ! $this->validate_site_url( $intent ) ) {
 			Helper::log( 'Website url check failed ' . $intent->id );
@@ -665,14 +694,19 @@ class Webhook {
 		if ( ! $order_id ) {
 			Helper::log( 'Could not find order via payment intent: ' . $intent->id );
 
-			
 			return;
 		}
 		Helper::clear_order_cache( $order_id );
 		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+			return;
+		}
 		do_action( 'fkwcs_webhook_event_intent_succeeded', $intent, $order );
 
-		if ( in_array( $order->get_payment_method(), [
+		if ( in_array(
+			$order->get_payment_method(),
+			array(
 				'fkwcs_stripe',
 				'fkwcs_stripe_apple_pay',
 				'fkwcs_stripe_google_pay',
@@ -682,18 +716,20 @@ class Webhook {
 				'fkwcs_stripe_klarna',
 				'fkwcs_stripe_multibanco',
 				'fkwcs_stripe_p24',
-				'fkwcs_stripe_eps'
-			], true ) && '' === Helper::get_meta( $order, '_fkwcs_maybe_check_for_auth' ) ) {
+				'fkwcs_stripe_eps',
+			),
+			true
+		) && '' === Helper::get_meta( $order, '_fkwcs_maybe_check_for_auth' ) ) {
 			return;
 		}
 
 		if ( 'manual' === $intent->capture_method && 0 === strpos( $order->get_payment_method(), 'fkwcs_' ) ) {
 			$this->make_charge( $intent, $order );
 		} else {
-			if ( ! $order->has_status( [ 'pending', 'failed', 'on-hold', 'wfocu-pri-order' ] ) ) {
+			if ( ! $order->has_status( array( 'pending', 'failed', 'on-hold', 'wfocu-pri-order', 'cancelled' ) ) ) {
 				return;
 			}
-			Helper::log( "Webhook Source Id: " . $intent->payment_method . " Customer: " . $intent->customer );
+			Helper::log( 'Webhook Source Id: ' . $intent->payment_method . ' Customer: ' . $intent->customer );
 
 			$order->update_meta_data( '_fkwcs_source_id', $intent->payment_method );
 			$order->update_meta_data( '_fkwcs_customer_id', $intent->customer );
@@ -709,7 +745,6 @@ class Webhook {
 		}
 	}
 
-
 	/**
 	 * Handles webhook call of event charge.succeeded
 	 *
@@ -718,7 +753,6 @@ class Webhook {
 	 * @return void
 	 */
 	public function charge_succeeded( $charge ) {
-
 
 		if ( ! $this->validate_site_url( $charge ) ) {
 			Helper::log( 'Website url check failed ' . $charge->id );
@@ -733,46 +767,49 @@ class Webhook {
 		}
 
 		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+			return;
+		}
 		$payment_method = $order->get_payment_method();
 
-		if ($payment_method === 'fkwcs_stripe_multibanco') {
-			if (!$order->has_status(['pending', 'failed', 'on-hold', 'wfocu-pri-order'])) {
+		if ( $payment_method === 'fkwcs_stripe_multibanco' ) {
+			if ( ! $order->has_status( array( 'pending', 'failed', 'on-hold', 'wfocu-pri-order' ) ) ) {
 				return;
 			}
 
-			Helper::log("Webhook Source Id: " . $charge->payment_method . " Customer: " . $charge->customer);
+			Helper::log( 'Webhook Source Id: ' . $charge->payment_method . ' Customer: ' . $charge->customer );
 
-			$order->update_meta_data('_fkwcs_source_id', $charge->payment_method);
-			$order->update_meta_data('_fkwcs_customer_id', $charge->customer);
+			$order->update_meta_data( '_fkwcs_source_id', $charge->payment_method );
+			$order->update_meta_data( '_fkwcs_customer_id', $charge->customer );
 
-			if (isset($charge->payment_method_details->multibanco)) {
+			if ( isset( $charge->payment_method_details->multibanco ) ) {
 				$multibanco_details = $charge->payment_method_details->multibanco;
-				$order->update_meta_data('_fkwcs_multibanco_entity', $multibanco_details->entity);
-				$order->update_meta_data('_fkwcs_multibanco_reference', $multibanco_details->reference);
+				$order->update_meta_data( '_fkwcs_multibanco_entity', $multibanco_details->entity );
+				$order->update_meta_data( '_fkwcs_multibanco_reference', $multibanco_details->reference );
 			}
 
 			$order->save_meta_data();
 
-			Helper::log("Webhook: Stripe PaymentIntent $charge->id succeeded for order $order_id");
-			$this->process_response($charge, $order);
+			Helper::log( "Webhook: Stripe PaymentIntent $charge->id succeeded for order $order_id" );
+			$this->process_response( $charge, $order );
 			return;
 		}
-		if ( ! in_array( $order->get_payment_method(), [ 'fkwcs_stripe_sepa', 'fkwcs_stripe_multibanco', 'fkwcs_stripe_ach' ], true ) ) {
+		if ( ! in_array( $order->get_payment_method(), array( 'fkwcs_stripe_sepa', 'fkwcs_stripe_multibanco', 'fkwcs_stripe_ach' ), true ) ) {
 			return;
 		}
 
 		if ( 'manual' === ( isset( $charge->capture_method ) ? $charge->capture_method : 'automatic' ) && 0 === strpos( $order->get_payment_method(), 'fkwcs_' ) ) {
 			$this->make_charge( $charge, $order );
 		} else {
-			if ( ! $order->has_status( [ 'pending', 'failed', 'on-hold', 'wfocu-pri-order' ] ) ) {
+			if ( ! $order->has_status( array( 'pending', 'failed', 'on-hold', 'wfocu-pri-order' ) ) ) {
 				return;
 			}
-			Helper::log( "Webhook Source Id: " . $charge->payment_method . " Customer: " . $charge->customer );
+			Helper::log( 'Webhook Source Id: ' . $charge->payment_method . ' Customer: ' . $charge->customer );
 
 			$order->update_meta_data( '_fkwcs_source_id', $charge->payment_method );
 			$order->update_meta_data( '_fkwcs_customer_id', $charge->customer );
 			$order->save_meta_data();
-
 
 			/* translators: transaction id, order id */
 			Helper::log( "Webhook: Stripe PaymentIntent $charge->id succeeded for order $order_id" );
@@ -801,7 +838,11 @@ class Webhook {
 
 			return;
 		}
-		$order   = wc_get_order( $order_id );
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+			return;
+		}
 		$gateway = $order->get_payment_method();
 
 		if ( function_exists( 'wcs_order_contains_renewal' ) && wcs_order_contains_renewal( $order ) ) {
@@ -814,7 +855,6 @@ class Webhook {
 			return;
 		}
 
-
 		if ( 'live' === $this->mode ) {
 			$client_secret = get_option( 'fkwcs_secret_key' );
 		} else {
@@ -825,21 +865,18 @@ class Webhook {
 			return;
 		}
 
-
 		$client   = Helper::get_new_client( $client_secret );
-		$response = $client->payment_intents( 'retrieve', [ $charge->payment_intent ] );
+		$response = $client->payment_intents( 'retrieve', array( $charge->payment_intent ) );
 		$intent   = $response['success'] ? $response['data'] : false;
 		if ( false === $intent ) {
 			return;
 		}
 
-
 		$error_message = '';
 
-		$error_message .= __( 'Intent ID', 'funnelkit-stripe-woo-payment-gateway' ) . ":" . $charge->payment_intent;
+		$error_message .= __( 'Intent ID', 'funnelkit-stripe-woo-payment-gateway' ) . ':' . $charge->payment_intent;
 
 		$localized_message = Helper::get_localized_error_message( $intent->last_payment_error );
-
 
 		$error_message .= "\n\n" . $localized_message;
 		$error_message .= ' [via Stripe Webhook]';
@@ -847,17 +884,15 @@ class Webhook {
 
 			if ( $order->has_status( 'failed' ) ) {
 
-				if ( in_array( $gateway, [ 'fkwcs_stripe_affirm', 'fkwcs_stripe_afterpay', 'fkwcs_stripe_klarna' ], true ) ) {
+				if ( in_array( $gateway, array( 'fkwcs_stripe_affirm', 'fkwcs_stripe_afterpay', 'fkwcs_stripe_klarna' ), true ) ) {
 					$order->add_order_note( $error_message );
 				}
-
 			} else {
 				$order->update_status( 'failed', $error_message );
 			}
 		}
 
 		do_action( 'fkwcs_webhook_payment_failed', $order );
-
 	}
 
 	/**
@@ -869,7 +904,7 @@ class Webhook {
 	 */
 	public function review_opened( $review ) {
 		Helper::log( 'Review opened' );
-		sleep(2);
+		sleep( 2 );
 		$payment_intent = sanitize_text_field( $review->payment_intent );
 		$order_id       = $this->get_order_id_from_intent_query( $payment_intent );
 		if ( ! $order_id ) {
@@ -879,9 +914,14 @@ class Webhook {
 		}
 
 		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+			return;
+		}
 		$order_status = $order->get_status();
 		$order->update_status( 'on-hold', __( 'This order is under review. Please respond via stripe dashboard.', 'funnelkit-stripe-woo-payment-gateway' ) );
-		$order->update_meta_data( 'fkwcs_status_before_review',$order_status );
+		$order->update_meta_data( 'fkwcs_status_before_review', $order_status );
+		$order->save();
 	}
 
 	/**
@@ -902,11 +942,15 @@ class Webhook {
 		}
 
 		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+			return;
+		}
 		/* translators: Review reason from Stripe */
 		$message = sprintf( __( 'Review for this order has been resolved. Reason: %s', 'funnelkit-stripe-woo-payment-gateway' ), $review->reason );
 		$order->update_status( Helper::get_meta( $order, 'fkwcs_status_before_review' ), $message );
+		$order->save();
 	}
-
 
 	/**
 	 * Fetch WooCommerce order id from payment intent
@@ -920,16 +964,13 @@ class Webhook {
 
 		if ( class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) && method_exists( '\Automattic\WooCommerce\Utilities\OrderUtil', 'custom_orders_table_usage_is_enabled' ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
 
-			$order_id = $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM " . $wpdb->prefix . "wc_orders_meta WHERE meta_key = %s AND meta_value LIKE %s LIMIT 1", $meta_key, '%' . $payment_intent . '%' ) );
+			$order_id = $wpdb->get_var( $wpdb->prepare( 'SELECT om.order_id FROM ' . $wpdb->prefix . 'wc_orders_meta AS om INNER JOIN ' . $wpdb->prefix . 'wc_orders AS o ON om.order_id = o.id WHERE o.type = %s AND om.meta_key = %s AND om.meta_value LIKE %s LIMIT 1', 'shop_order', $meta_key, '%' . $payment_intent . '%' ) );
 
 		} else {
 			$order_id = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM $wpdb->posts AS posts LEFT JOIN $wpdb->postmeta AS postmeta ON posts.ID = postmeta.post_id WHERE posts.post_type = %s AND postmeta.meta_key = %s AND postmeta.meta_value LIKE %s LIMIT 1", 'shop_order', $meta_key, '%' . $payment_intent . '%' ) );
 		}
 
-
 		return $order_id;
-
-
 	}
 
 	/**
@@ -949,7 +990,7 @@ class Webhook {
 	/**
 	 * Shows time difference as  - XX minutes ago.
 	 *
-	 * @param string $datetime time of last event.
+	 * @param string  $datetime time of last event.
 	 * @param boolean $full show full time difference.
 	 *
 	 * @return string
@@ -961,7 +1002,7 @@ class Webhook {
 			$diff    = $current->diff( $ago );
 
 			// Calculate weeks separately and store in a variable
-			$weeks   = floor( $diff->d / 7 );
+			$weeks    = floor( $diff->d / 7 );
 			$diff->d -= $weeks * 7;
 
 			$string = array(
@@ -994,11 +1035,10 @@ class Webhook {
 		}
 	}
 
-
 	/**
 	 * Process response for saved cards
 	 *
-	 * @param object $response intent response.
+	 * @param object    $response intent response.
 	 * @param \WC_Order $order order response.
 	 *
 	 * @return Object
@@ -1052,7 +1092,7 @@ class Webhook {
 		} else {
 			$order->set_transaction_id( $response->id );
 
-			if ( $order->has_status( [ 'pending', 'failed', 'on-hold' ] ) ) {
+			if ( $order->has_status( array( 'pending', 'failed', 'on-hold' ) ) ) {
 				wc_reduce_stock_levels( $order_id );
 			}
 
@@ -1064,7 +1104,7 @@ class Webhook {
 
 		}
 
-		if ( is_callable( [ $order, 'save' ] ) ) {
+		if ( is_callable( array( $order, 'save' ) ) ) {
 			$order->save();
 		}
 
@@ -1077,16 +1117,13 @@ class Webhook {
 
 		if ( isset( $charge->metadata->order_id ) && ! isset( $charge->metadata->fk_upsell ) ) {
 			$order = wc_get_order( $charge->metadata->order_id );
-			if ( $order ) {
+			if ( $order instanceof \WC_Order ) {
 				return $charge->metadata->order_id;
 			}
 		}
 
 		return $this->get_order_id_from_intent_query( $charge->payment_intent );
-
-
 	}
-
 
 	/**
 	 * Validate Site URL with the one received as metadata in the webhook
@@ -1109,10 +1146,7 @@ class Webhook {
 		}
 
 		return true;
-
-
 	}
-
 
 	public function require_action( $intent ) {
 		Helper::log( __FUNCTION__ );
@@ -1129,10 +1163,15 @@ class Webhook {
 			return;
 		}
 
-		$gateway = wc_get_order( $order_id )->get_payment_method();
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			Helper::log( 'Order is not a valid WC_Order instance: ' . $order_id );
+			return;
+		}
+		$gateway = $order->get_payment_method();
 
-		if ( in_array( $gateway, [ 'fkwcs_stripe_affirm', 'fkwcs_stripe_afterpay', 'fkwcs_stripe_klarna' ], true ) ) {
-			wc_get_order( $order_id )->add_order_note( wc_get_order( $order_id )->get_payment_method_title() . ' Incomplete Payment: The customer must complete an additional authentication step.' );
+		if ( in_array( $gateway, array( 'fkwcs_stripe_affirm', 'fkwcs_stripe_afterpay', 'fkwcs_stripe_klarna' ), true ) ) {
+			$order->add_order_note( $order->get_payment_method_title() . ' Incomplete Payment: The customer must complete an additional authentication step.' );
 		}
 	}
 
@@ -1147,15 +1186,13 @@ class Webhook {
 
 		if ( isset( $intent->metadata->order_id ) && ! isset( $intent->metadata->fk_upsell ) ) {
 			$order = wc_get_order( $intent->metadata->order_id );
-			if ( $order ) {
+			if ( $order instanceof \WC_Order ) {
 				return $intent->metadata->order_id;
 			}
 		}
 
 		return $this->get_order_id_from_intent_query( $intent->id );
-
 	}
-
 
 	/**
 	 * Method to get dynamic live mode from the payload data, local settings as fallback
@@ -1200,6 +1237,5 @@ class Webhook {
 		}
 
 		return false;
-
 	}
 }

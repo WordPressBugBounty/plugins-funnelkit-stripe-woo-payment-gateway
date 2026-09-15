@@ -1,11 +1,16 @@
 <?php
+
+namespace FKWCS\Gateway\Stripe;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Stripe Api Wrapper
  *
  * @package funnelkit-stripe-woo-payment-gateway
  */
-
-namespace FKWCS\Gateway\Stripe;
 
 use Stripe\StripeClient;
 
@@ -23,7 +28,7 @@ class Client {
 	/**
 	 * @var \Stripe\ErrorObject
 	 */
-	private $stripe_last_error = [];
+	private $stripe_last_error = array();
 
 	/**
 	 * @var \Stripe\ErrorObject
@@ -32,18 +37,17 @@ class Client {
 
 	/**
 	 * Constructor
-	 *
 	 */
 	public function __construct( $secret_key, $mode = 'test', $version = '1.0' ) {
 
-		$this->stripe = new StripeClient( array(
-			'api_key'        => $secret_key,
-			'stripe_version' => '2022-08-01',
-		) );
-
+		$this->stripe = new StripeClient(
+			array(
+				'api_key'        => $secret_key,
+				'stripe_version' => '2022-08-01',
+			)
+		);
 
 		\Stripe\Stripe::setAppInfo( 'FunnelKit Stripe Gateway', $version, 'https://wordpress.org/plugins/funnelkit-stripe-woo-payment-gateway', '995584862' );
-
 	}
 
 	/**
@@ -51,28 +55,28 @@ class Client {
 	 *
 	 * @param string $api Api.
 	 * @param string $method name of method.
-	 * @param array $args arguments.
+	 * @param array  $args arguments.
 	 *
 	 * @return array
 	 */
 	private function execute( $api, $method, $args ) {
-		$this->stripe_last_error = [];
+		$this->stripe_last_error = array();
 		if ( is_null( $this->stripe ) ) {
 			$error_message = __( 'Stripe not initialized', 'funnelkit-stripe-woo-payment-gateway' );
 
-			return [
+			return array(
 				'success' => false,
 				'message' => $error_message,
-			];
+			);
 		}
-		Helper::log( 'REQUEST ' . strtolower( $api ) . '::' . $method . '--' . wp_json_encode( $args ) ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+		Helper::log( 'REQUEST ' . strtolower( $api ) . '::' . $method . '--' . wp_json_encode( Helper::redact_for_log( $args ) ) ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 
 		$error_message = false;
 		$response      = false;
 		$error_type    = '';
 		try {
 			$response = $this->stripe->{$api}->{$method}( ...$args );
-			Helper::log( 'RESPONSE ' . strtolower( $api ) . '::' . $method . '--' . wp_json_encode( $response ) ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+			Helper::log( 'RESPONSE ' . strtolower( $api ) . '::' . $method . '--' . wp_json_encode( Helper::redact_for_log( $response ) ) ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 
 		} catch ( \Stripe\Exception\CardException $e ) {
 			$error_message = $e->getError()->message;
@@ -101,18 +105,16 @@ class Client {
 		}
 
 		if ( ! $error_message ) {
-			return [
+			return array(
 				'success' => true,
 				'data'    => $response,
 				'message' => '',
-			];
+			);
 		} else {
-
 
 			Helper::log( 'Error during API call. ' . $error_message );
 
 			$this->stripe_last_error = ( isset( $e ) && $e instanceof \Stripe\Exception\ApiErrorException ) ? $e->getError() : new \stdClass();
-
 			// Check if it's an object and has the property
 			if ( is_object( $this->stripe_last_error ) && isset( $this->stripe_last_error->request_log_url ) ) {
 				$this->request_log_url = $this->stripe_last_error->request_log_url;
@@ -121,13 +123,12 @@ class Client {
 				$this->request_log_url = $this->stripe_last_error['request_log_url'];
 			}
 
-
-			return [
+			return array(
 				'success' => false,
 				'message' => $error_message,
 				'type'    => $error_type,
 				'error'   => $this->stripe_last_error,
-			];
+			);
 		}
 	}
 
@@ -135,21 +136,19 @@ class Client {
 	 * Stripe wrapper for paymentIntents Api
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
 	public function payment_intents( $method, $args ) {
-
 		return $this->execute( 'paymentIntents', $method, $args );
 	}
-
 
 	/**
 	 * Stripe wrapper for paymentIntents Api
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
@@ -162,7 +161,7 @@ class Client {
 	 * Stripe wrapper for paymentMethods Api
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
@@ -174,22 +173,20 @@ class Client {
 	 * Executes stripe customers query
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
 	public function customers( $method, $args ) {
 
 		return $this->execute( 'customers', $method, $args );
-
 	}
-
 
 	/**
 	 * Executes Stripe refunds query
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
@@ -201,7 +198,7 @@ class Client {
 	 * Executes Stripe setupIntents query
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
@@ -210,10 +207,27 @@ class Client {
 	}
 
 	/**
+	 * Stripe wrapper for the Mandate API.
+	 *
+	 * Used to retrieve a Mandate so its bound PaymentMethod can be validated
+	 * against the card currently on a subscription (India RBI e-mandates).
+	 *
+	 * @since 1.14.1
+	 *
+	 * @param string $method Method to be used (e.g. 'retrieve').
+	 * @param array  $args   Parameters forwarded to the Stripe SDK.
+	 *
+	 * @return array Standard client response: ['success','data','message','error'].
+	 */
+	public function mandates( $method, $args ) {
+		return $this->execute( 'mandates', $method, $args );
+	}
+
+	/**
 	 * Executes Stripe accounts query
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
@@ -225,7 +239,7 @@ class Client {
 	 * Executes Stripe apple pay domains query
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
@@ -237,14 +251,13 @@ class Client {
 	 * Executes Stripe balance transactions query
 	 *
 	 * @param string $method method to be used.
-	 * @param array $args parameter.
+	 * @param array  $args parameter.
 	 *
 	 * @return array
 	 */
 	public function balance_transactions( $method, $args ) {
 		return $this->execute( 'balanceTransactions', $method, $args );
 	}
-
 
 	public function products( $method, $args ) {
 		return $this->execute( 'products', $method, $args );
@@ -253,7 +266,6 @@ class Client {
 	public function plans( $method, $args ) {
 		return $this->execute( 'plans', $method, $args );
 	}
-
 
 	public function prices( $method, $args ) {
 		return $this->execute( 'prices', $method, $args );
@@ -290,15 +302,13 @@ class Client {
 	 * Basic details of logged in user
 	 *
 	 * @return array current user data.
-	 *
 	 */
 	public function get_clients_details() {
-		return [
+		return array(
 			'ip'      => \WC_Geolocation::get_ip_address(),
 			'agent'   => wc_get_user_agent(),
 			'referer' => wc_get_raw_referer(),
-		];
-
+		);
 	}
 
 	public function get_last_error() {

@@ -2,8 +2,22 @@
 
 namespace FKWCS\Gateway\Stripe;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 trait Funnelkit_Stripe_Smart_Buttons {
 
+	/**
+	 * Machine reason code for the most recent shipping-address failure.
+	 *
+	 * Declared explicitly to avoid the PHP 8.2 dynamic-property deprecation
+	 * when set from the shipping-address handlers.
+	 *
+	 * @since 5.2.0
+	 * @var string
+	 */
+	protected $reason_code = '';
 
 	/**
 	 * Gets product data either form product page or page where shortcode is used
@@ -40,9 +54,12 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		}
 
 		$product = $this->get_product();
+		if ( empty( $product ) ) {
+			return false;
+		}
 		if ( 'variable' === $product->get_type() ) {
 			$variation_attributes = $product->get_variation_attributes();
-			$attributes           = [];
+			$attributes           = array();
 
 			foreach ( $variation_attributes as $attribute_name => $attribute_values ) {
 				$attribute_key = 'attribute_' . sanitize_title( $attribute_name );
@@ -60,51 +77,53 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			}
 		}
 
-		$data  = [];
-		$items = [];
+		$data  = array();
+		$items = array();
 
 		if ( 'subscription' === $product->get_type() && class_exists( '\WC_Subscriptions_Product' ) ) {
 
-			$items[] = $this->get_smart_button_line_item( $product->get_name(), $product->get_price() );
-			$items[] = $this->get_smart_button_line_item( __( 'Sign up Fee', 'funnelkit-stripe-woo-payment-gateway' ), \WC_Subscriptions_Product::get_sign_up_fee( $product ) );
+			$items[] = $this->get_smart_button_line_item( $product->get_name(), floatval( $product->get_price() ) );
+			$items[] = $this->get_smart_button_line_item( __( 'Sign up Fee', 'funnelkit-stripe-woo-payment-gateway' ), floatval( \WC_Subscriptions_Product::get_sign_up_fee( $product ) ) );
 
 		} else {
-			$items[] = $this->get_smart_button_line_item( $product->get_name(), $product->get_price() );
+			$items[] = $this->get_smart_button_line_item( $product->get_name(), floatval( $product->get_price() ) );
 		}
 
 		if ( wc_tax_enabled() ) {
-			$items[] = [
+			$items[] = array(
 				'label'   => __( 'Tax', 'funnelkit-stripe-woo-payment-gateway' ),
 				'amount'  => 0,
 				'type'    => 'tax',
 				'pending' => true,
-			];
+			);
 		}
 
 		if ( wc_shipping_enabled() && $product->needs_shipping() ) {
-			$items[] = [
+			$items[] = array(
 				'label'   => __( 'Shipping', 'funnelkit-stripe-woo-payment-gateway' ),
 				'amount'  => 0,
 				'pending' => true,
-			];
+			);
 
-			$data['shippingOptions'] = [
+			$data['shippingOptions'] = array(
 				'id'     => 'pending',
 				'label'  => __( 'Pending', 'funnelkit-stripe-woo-payment-gateway' ),
 				'detail' => '',
 				'amount' => 0,
-			];
+			);
 		}
 
 		$data['displayItems'] = $items;
 
-
 		$total_amount            = $this->get_product_price( $product );
-		$data['total']           = $this->get_smart_button_line_totals( [
-			'label'   => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
-			'amount'  => Helper::get_stripe_amount( $total_amount ),
-			'pending' => true,
-		], $total_amount );
+		$data['total']           = $this->get_smart_button_line_totals(
+			array(
+				'label'   => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
+				'amount'  => Helper::get_stripe_amount( $total_amount ),
+				'pending' => true,
+			),
+			$total_amount
+		);
 		$data['requestShipping'] = wc_bool_to_string( wc_shipping_enabled() && $product->needs_shipping() && 0 !== wc_get_shipping_method_count( true ) );
 
 		return apply_filters( 'fkwcs_payment_request_product_data', $data, $product );
@@ -116,16 +135,16 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			wc_maybe_define_constant( 'WOOCOMMERCE_CART', true );
 		}
 
-		$items     = [];
-		$lines     = [];
+		$items     = array();
+		$lines     = array();
 		$subtotal  = 0;
 		$discounts = 0;
 
 		foreach ( WC()->cart->get_cart() as $item ) {
-			$subtotal       += $item['line_subtotal'];
-			$amount         = $item['line_subtotal'];
-			$quantity_label = 1 < $item['quantity'] ? ' (' . $item['quantity'] . ')' : '';
-			$product_name   = $item['data']->get_name();
+			$amount         = $this->get_cart_item_subtotal( $item );
+			$subtotal      += $amount;
+			$quantity_label = isset( $item['quantity'] ) && 1 < $item['quantity'] ? ' (' . $item['quantity'] . ')' : '';
+			$product_name   = isset( $item['data'] ) && $item['data'] instanceof \WC_Product ? $item['data']->get_name() : '';
 			$items[]        = $this->get_smart_button_line_item( $product_name . $quantity_label, $amount );
 		}
 
@@ -165,25 +184,54 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			$items[] = $this->get_smart_button_line_item( $fee->name, $fee->amount );
 		}
 
+		$totals = $this->get_smart_button_line_totals(
+			array(
+				'label'   => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
+				'amount'  => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_stripe_amount( $order_total ), $order_total, WC()->cart ) ),
+				'pending' => false,
+			),
+			$order_total
+		);
 
-		$totals = $this->get_smart_button_line_totals( [
-			'label'   => __( 'Total', 'funnelkit-stripe-woo-payment-gateway' ),
-			'amount'  => max( 0, apply_filters( 'fkwcs_stripe_calculated_total', Helper::get_stripe_amount( $order_total ), $order_total, WC()->cart ) ),
-			'pending' => false,
-		], $order_total );
-
-		return [
+		return array(
 			'displayItems' => $items,
 			'total'        => $totals,
-		];
+		);
+	}
+
+	/**
+	 * Get the line subtotal of a cart item.
+	 *
+	 * `line_subtotal` is only stamped on a cart item by WC_Cart_Totals during
+	 * calculate_totals(). Items injected into the cart afterwards (order bumps,
+	 * product switchers, `woocommerce_cart_contents` filters, etc.) may not
+	 * carry it yet, so fall back to computing it from the product price.
+	 *
+	 * @param array $item Cart item.
+	 *
+	 * @return float
+	 */
+	protected function get_cart_item_subtotal( $item ) {
+		if ( isset( $item['line_subtotal'] ) && is_numeric( $item['line_subtotal'] ) ) {
+			return (float) $item['line_subtotal'];
+		}
+
+		$product = isset( $item['data'] ) ? $item['data'] : null;
+		if ( ! $product instanceof \WC_Product ) {
+			return 0.0;
+		}
+
+		$qty = isset( $item['quantity'] ) ? max( 1, (int) $item['quantity'] ) : 1;
+
+		return (float) wc_get_price_excluding_tax( $product, array( 'qty' => $qty ) );
 	}
 
 	protected function get_smart_button_line_item( $name, $amount, $type = 'LINE_ITEM' ) {
-		return [
+		return array(
 			'label'  => $name,
 			'type'   => $type,
 			'amount' => Helper::get_stripe_amount( $amount ),
-		];
+		);
 	}
 
 	protected function get_smart_button_line_totals( $data, $total_amount = 0 ) { //phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
@@ -199,10 +247,10 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 * @return string
 	 */
 	public function get_product_price( $product ) {
-		$product_price = $product->get_price();
+		$product_price = floatval( $product->get_price() );
 		/** Add subscription sign-up fees to product price */
 		if ( 'subscription' === $product->get_type() && class_exists( '\WC_Subscriptions_Product' ) ) {
-			$product_price = floatval( $product->get_price() ) + \WC_Subscriptions_Product::get_sign_up_fee( $product );
+			$product_price = floatval( $product->get_price() ) + floatval( \WC_Subscriptions_Product::get_sign_up_fee( $product ) );
 		}
 
 		return $product_price;
@@ -218,18 +266,18 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			check_ajax_referer( 'fkwcs_nonce', 'fkwcs_nonce' );
 
 		}
-		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', [] );
+		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', array() );
 		WC()->cart->calculate_totals();
 		$this->maybe_restore_recurring_chosen_shipping_methods( $chosen_shipping_methods );
 		$currency = get_woocommerce_currency();
 		/** Set mandatory payment details */
-		$data = [
+		$data = array(
 			'shipping_required' => wc_bool_to_string( WC()->cart->needs_shipping() ),
-			'order_data'        => [
+			'order_data'        => array(
 				'currency'     => strtolower( $currency ),
 				'country_code' => substr( get_option( 'woocommerce_default_country' ), 0, 2 ),
-			],
-		];
+			),
+		);
 
 		/**
 		 * disabled GPay button if stripe not need payments
@@ -239,7 +287,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			$data['is_fkwcs_need_payment'] = true;
 		}
 
-		$data['order_data']       += $this->build_display_items( true, $is_localized );
+		$data['order_data']      += $this->build_display_items( true, $is_localized );
 		$data['shipping_options'] = $this->get_formatted_shipping_methods();
 
 		if ( 'wc_ajax_fkwcs_get_cart_details' === current_action() ) {
@@ -248,7 +296,6 @@ trait Funnelkit_Stripe_Smart_Buttons {
 
 		return $data;
 	}
-
 
 	/**
 	 * Updates cart on product variant change
@@ -265,23 +312,29 @@ trait Funnelkit_Stripe_Smart_Buttons {
 
 		WC()->shipping->reset_shipping();
 
-		$product_id   = isset( $_POST['product_id'] ) ? absint( wc_clean( $_POST['product_id'] ) ) : 0;
-		$qty          = ! isset( $_POST['qty'] ) ? 1 : absint( wc_clean( $_POST['qty'] ) );
-		$product      = wc_get_product( $product_id );
+		$product_id = isset( $_POST['product_id'] ) ? absint( wc_clean( wp_unslash( $_POST['product_id'] ) ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		$qty        = ! isset( $_POST['qty'] ) ? 1 : absint( wc_clean( wp_unslash( $_POST['qty'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		$product    = wc_get_product( $product_id );
+
+		if ( ! $product instanceof \WC_Product ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid product.', 'funnelkit-stripe-woo-payment-gateway' ) ) );
+			return;
+		}
+
 		$product_type = $product->get_type();
 
 		/** First empty the cart to prevent wrong calculation */
 		WC()->cart->empty_cart();
-		$cart_item_data = [];
-		if ( isset( $_POST['sublium-option-plan'] ) && ! empty( $_POST['sublium-option-plan'] ) ) {
-			$plan_id = absint( wc_clean( $_POST['sublium-option-plan'] ) );
+		$cart_item_data = array();
+		if ( isset( $_POST['sublium-option-plan'] ) && ! empty( $_POST['sublium-option-plan'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			$plan_id = absint( wc_clean( wp_unslash( $_POST['sublium-option-plan'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 			if ( $plan_id > 0 ) {
-				$cart_item_data['sublium_plan'] = $plan_id;
+				$cart_item_data['sublium_plan']      = $plan_id;
 				$cart_item_data['subscription_plan'] = $plan_id;
 			}
 		}
-		if ( ( 'variable' === $product_type || 'variable-subscription' === $product_type ) && isset( $_POST['attributes'] ) ) {
-			$attributes = wc_clean( wp_unslash( $_POST['attributes'] ) );
+		if ( ( 'variable' === $product_type || 'variable-subscription' === $product_type ) && isset( $_POST['attributes'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			$attributes = wc_clean( wp_unslash( $_POST['attributes'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 			$data_store   = \WC_Data_Store::load( 'product' );
 			$variation_id = $data_store->find_matching_product_variation( $product, $attributes );
@@ -289,8 +342,27 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		}
 
 		if ( 'simple' === $product_type || 'subscription' === $product_type ) {
-			WC()->cart->add_to_cart( $product->get_id(), $qty, 0, [], $cart_item_data );
+			WC()->cart->add_to_cart( $product->get_id(), $qty, 0, array(), $cart_item_data );
 		}
+
+		/**
+		 * A fresh guest's page-render checkout nonce was minted before this request created
+		 * the WC session, so WC_Session_Handler::maybe_update_nonce_user_logged_out() makes
+		 * process_checkout() verify it against the session customer id instead — every express
+		 * wallet order from a product page then fails with "We were unable to process your
+		 * order" + refresh:true. Ship a nonce minted NOW (same session identity verification
+		 * will use) so the JS can swap it in before creating the order.
+		 */
+		add_filter(
+			'woocommerce_add_to_cart_fragments',
+			function ( $fragments ) {
+				$fragments['fkwcs_nonces'] = array(
+					'checkout_nonce' => wp_create_nonce( 'woocommerce-process_checkout' ),
+				);
+
+				return $fragments;
+			}
+		);
 		\WC_AJAX::get_refreshed_fragments();
 	}
 
@@ -304,9 +376,9 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		check_ajax_referer( 'fkwcs_nonce', 'fkwcs_nonce' );
 
 		try {
-			$product_id   = isset( $_POST['product_id'] ) ? absint( wc_clean( $_POST['product_id'] ) ) : 0;
-			$qty          = ! isset( $_POST['qty'] ) ? 1 : apply_filters( 'woocommerce_add_to_cart_quantity', absint( wc_clean( $_POST['qty'] ) ), $product_id );
-			$addon_value  = isset( $_POST['addon_value'] ) ? max( floatval( wc_clean( $_POST['addon_value'] ) ), 0 ) : 0;
+			$product_id   = isset( $_POST['product_id'] ) ? absint( wc_clean( wp_unslash( $_POST['product_id'] ) ) ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
+			$qty          = ! isset( $_POST['qty'] ) ? 1 : apply_filters( 'woocommerce_add_to_cart_quantity', absint( wc_clean( wp_unslash( $_POST['qty'] ) ) ), $product_id ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
+			$addon_value  = isset( $_POST['addon_value'] ) ? max( floatval( wc_clean( wp_unslash( $_POST['addon_value'] ) ) ), 0 ) : 0; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
 			$product      = wc_get_product( $product_id );
 			$variation_id = null;
 
@@ -316,8 +388,8 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			}
 
 			$product_type = $product->get_type();
-			if ( ( 'variable' === $product_type || 'variable-subscription' === $product_type ) && isset( $_POST['attributes'] ) ) {
-				$attributes = wc_clean( wp_unslash( $_POST['attributes'] ) );
+			if ( ( 'variable' === $product_type || 'variable-subscription' === $product_type ) && isset( $_POST['attributes'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
+				$attributes = wc_clean( wp_unslash( $_POST['attributes'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
 
 				$data_store   = \WC_Data_Store::load( 'product' );
 				$variation_id = $data_store->find_matching_product_variation( $product, $attributes );
@@ -339,43 +411,43 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			$total          = $qty * floatval( $this->get_product_price( $product ) ) + $addon_value;
 			$quantity_label = 1 < $qty ? ' (' . $qty . ')' : '';
 
-			$data  = [];
-			$items = [];
+			$data  = array();
+			$items = array();
 
-			$items[] = [
+			$items[] = array(
 				'label'  => $product->get_name() . $quantity_label,
 				'amount' => Helper::get_stripe_amount( $total ),
-			];
+			);
 
 			if ( wc_tax_enabled() ) {
-				$items[] = [
+				$items[] = array(
 					'label'   => __( 'Tax', 'funnelkit-stripe-woo-payment-gateway' ),
 					'amount'  => 0,
 					'pending' => true,
-				];
+				);
 			}
 
 			if ( wc_shipping_enabled() && $product->needs_shipping() ) {
-				$items[] = [
+				$items[] = array(
 					'label'   => __( 'Shipping', 'funnelkit-stripe-woo-payment-gateway' ),
 					'amount'  => 0,
 					'pending' => true,
-				];
+				);
 
-				$data['shippingOptions'] = [
+				$data['shippingOptions'] = array(
 					'id'     => 'pending',
 					'label'  => __( 'Pending', 'funnelkit-stripe-woo-payment-gateway' ),
 					'detail' => '',
 					'amount' => 0,
-				];
+				);
 			}
 
 			$data['displayItems'] = $items;
-			$data['total']        = [
+			$data['total']        = array(
 				'label'   => apply_filters( 'fkwcs_payment_request_total_label', $this->clean_statement_descriptor() ),
 				'amount'  => Helper::get_stripe_amount( $total ),
 				'pending' => true,
-			];
+			);
 
 			$data['requestShipping'] = wc_bool_to_string( wc_shipping_enabled() && $product->needs_shipping() );
 			$data['currency']        = strtolower( get_woocommerce_currency() );
@@ -383,7 +455,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 
 			wp_send_json( $data );
 		} catch ( \Exception $e ) {
-			wp_send_json( [ 'error' => wp_strip_all_tags( $e->getMessage() ) ] );
+			wp_send_json( array( 'error' => wp_strip_all_tags( $e->getMessage() ) ) );
 		}
 	}
 
@@ -395,28 +467,39 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	public function update_shipping_address() {
 		check_ajax_referer( 'fkwcs_nonce', 'fkwcs_nonce' );
 
-		$shipping_address = filter_input_array( INPUT_POST, [
-			'country'   => FILTER_UNSAFE_RAW,
-			'state'     => FILTER_UNSAFE_RAW,
-			'postcode'  => FILTER_UNSAFE_RAW,
-			'city'      => FILTER_UNSAFE_RAW,
-			'address'   => FILTER_UNSAFE_RAW,
-			'address_2' => FILTER_UNSAFE_RAW,
-		] );
+		/**
+		 * If post_data is sent (serialized form data from checkout page),
+		 * parse it and merge with $_POST to preserve checkout add-ons and other form fields
+		 */
+		if ( isset( $_POST['post_data'] ) && ! empty( $_POST['post_data'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			parse_str( wp_unslash( $_POST['post_data'] ), $parsed_post_data ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			// Merge parsed form data with existing $_POST, giving priority to direct POST values (like shipping address)
+			$_POST = array_merge( $parsed_post_data, $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		}
 
-		$request = wc_clean( $_POST );
+		$shipping_address = filter_input_array(
+			INPUT_POST,
+			array(
+				'country'   => FILTER_UNSAFE_RAW,
+				'state'     => FILTER_UNSAFE_RAW,
+				'postcode'  => FILTER_UNSAFE_RAW,
+				'city'      => FILTER_UNSAFE_RAW,
+				'address'   => FILTER_UNSAFE_RAW,
+				'address_2' => FILTER_UNSAFE_RAW,
+			)
+		);
+
+		$request = wc_clean( wp_unslash( $_POST ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 
 		wc_maybe_define_constant( 'WOOCOMMERCE_CART', true );
 
-		add_filter( 'woocommerce_cart_ready_to_calc_shipping', function () {
-			return true;
-		}, 1000 );
+		add_filter( 'woocommerce_cart_ready_to_calc_shipping', '__return_true', 1000 );
 		try {
 			$this->wc_stripe_update_customer_location( $shipping_address );
 			$this->wc_stripe_update_shipping_methods( $this->get_shipping_method_from_request( $request ) );
 
 			/** update the WC cart with the new shipping options */
-			$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', [] );
+			$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', array() );
 			WC()->cart->calculate_totals();
 			$this->maybe_restore_recurring_chosen_shipping_methods( $chosen_shipping_methods );
 			/** if shipping address is not serviceable, throw an error */
@@ -425,20 +508,27 @@ trait Funnelkit_Stripe_Smart_Buttons {
 				throw new \Exception( __( 'Your shipping address is not serviceable.', 'funnelkit-stripe-woo-payment-gateway' ) );
 			}
 
-			$data = apply_filters( 'wc_stripe_googlepay_paymentdata_response', array_merge( array(
-				'shipping_methods' => $this->get_formatted_shipping_methods(),
-				'address'          => $shipping_address,
-				'result'           => 'success'
-			), $this->build_display_items() ) );
+			$data = apply_filters(
+				'wc_stripe_googlepay_paymentdata_response',
+				array_merge(
+					array(
+						'shipping_methods' => $this->get_formatted_shipping_methods(),
+						'address'          => $shipping_address,
+						'result'           => 'success',
+					),
+					$this->build_display_items()
+				)
+			);
 		} catch ( \Exception $e ) {
+			// Log the reason only (never the address array — it holds postcode/city/state PII).
+			Helper::log( 'FKWCS express shipping address update failed:: ' . $e->getMessage(), 'error' );
 			$data = array(
-				'result' => 'fail'
+				'result' => 'fail',
 			);
 		}
 
 		wp_send_json( $data );
 	}
-
 
 	/**
 	 * Return whether or not the cart is displaying prices including tax, rather than excluding tax
@@ -486,15 +576,18 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		/**
 		 * Sort shipping methods so the selected method is first in the array.
 		 */
-		usort( $methods, function ( $method ) use ( $chosen_methods ) {
-			foreach ( $chosen_methods as $id ) {
-				if ( in_array( $id, $method, true ) ) {
-					return - 1;
+		usort(
+			$methods,
+			function ( $method ) use ( $chosen_methods ) {
+				foreach ( $chosen_methods as $id ) {
+					if ( in_array( $id, $method, true ) ) {
+						return - 1;
+					}
 				}
-			}
 
-			return 1;
-		} );
+				return 1;
+			}
+		);
 
 		/**
 		 * @param array $methods
@@ -528,17 +621,15 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			'id'     => $this->get_shipping_method_id( $rate->id ),
 			'label'  => $this->get_formatted_shipping_label( $price, $rate, $incl_tax ),
 			'detail' => '',
-			'amount' => Helper::get_stripe_amount( $price )
+			'amount' => Helper::get_stripe_amount( $price ),
 		);
 
 		if ( $incl_tax ) {
 			if ( $rate->get_shipping_tax() > 0 && ! wc_prices_include_tax() ) {
 				$method['detail'] = WC()->countries->inc_tax_or_vat();
 			}
-		} else {
-			if ( $rate->get_shipping_tax() > 0 && wc_prices_include_tax() ) {
+		} elseif ( $rate->get_shipping_tax() > 0 && wc_prices_include_tax() ) {
 				$method['detail'] = WC()->countries->ex_tax_or_vat();
-			}
 		}
 
 		return $method;
@@ -559,15 +650,12 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			if ( $rate->get_shipping_tax() > 0 && ! wc_prices_include_tax() ) {
 				$label .= ' ' . WC()->countries->inc_tax_or_vat();
 			}
-		} else {
-			if ( $rate->get_shipping_tax() > 0 && wc_prices_include_tax() ) {
+		} elseif ( $rate->get_shipping_tax() > 0 && wc_prices_include_tax() ) {
 				$label .= ' ' . WC()->countries->ex_tax_or_vat();
-			}
 		}
 
 		return $label;
 	}
-
 
 	protected function get_shipping_method_id( $id ) {
 		return $id;
@@ -601,8 +689,26 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 */
 	private function get_shipping_method_from_request( $request ) {
 		if ( isset( $request['shipping_method'] ) ) {
-			if ( ! preg_match( '/^(?P<index>[\w]+)\:(?P<id>.+)$/', $request['shipping_method'], $shipping_method ) ) {
-				throw new \Exception( __( 'Invalid shipping method format. Expected: index:id', 'funnelkit-stripe-woo-payment-gateway' ) ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			$shipping_method_raw = $request['shipping_method'];
+			if ( is_array( $shipping_method_raw ) ) {
+				$shipping_method_raw = '';
+				foreach ( $request['shipping_method'] as $value ) {
+					if ( is_string( $value ) && '' !== $value ) {
+						$shipping_method_raw = $value;
+						break;
+					}
+				}
+			}
+			if ( ! is_string( $shipping_method_raw ) || '' === $shipping_method_raw ) {
+				return array();
+			}
+			if ( ! preg_match( '/^(?P<index>[\w]+)\:(?P<id>.+)$/', $shipping_method_raw, $shipping_method ) ) {
+				// Shipping methods without an instance suffix (e.g. `advanced_free_shipping`
+				// from Advanced Free Shipping) have no colon, and the checkout form's selected
+				// radio reaches here via the post_data merge. Treat the whole value as the
+				// chosen method for the first package — same as update_shipping_option() —
+				// instead of failing the entire address update.
+				return array( $shipping_method_raw );
 			}
 
 			return array( $shipping_method['index'] => $shipping_method['id'] );
@@ -619,18 +725,31 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	public function update_shipping_option() {
 		check_ajax_referer( 'fkwcs_nonce', 'fkwcs_nonce' );
 
+		/**
+		 * If post_data is sent (serialized form data from checkout page),
+		 * parse it and merge with $_POST to preserve checkout add-ons and other form fields
+		 */
+		if ( isset( $_POST['post_data'] ) && ! empty( $_POST['post_data'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			parse_str( wp_unslash( $_POST['post_data'] ), $parsed_post_data ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			// Merge parsed form data with existing $_POST, giving priority to direct POST values (like shipping method)
+			$_POST = array_merge( $parsed_post_data, $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		}
+
 		wc_maybe_define_constant( 'WOOCOMMERCE_CART', true );
-		$shipping_methods = ! empty( $_POST['shipping_method'] ) ? wc_clean( $_POST['shipping_method'] ) : '';
+
+		add_filter( 'woocommerce_cart_ready_to_calc_shipping', '__return_true', 1000 );
+
+		$shipping_methods = ! empty( $_POST['shipping_method'] ) ? wc_clean( wp_unslash( $_POST['shipping_method'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
 		WC()->shipping->reset_shipping();
 
 		$this->update_shipping_method( $shipping_methods );
-		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', [] );
+		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', array() );
 		WC()->cart->calculate_totals();
 		$this->maybe_restore_recurring_chosen_shipping_methods( $chosen_shipping_methods );
-		$product_view_options      = filter_input_array( INPUT_POST, [ 'is_product_page' => FILTER_UNSAFE_RAW ] );
+		$product_view_options      = filter_input_array( INPUT_POST, array( 'is_product_page' => FILTER_UNSAFE_RAW ) );
 		$should_show_itemized_view = ! isset( $product_view_options['is_product_page'] ) ? true : filter_var( $product_view_options['is_product_page'], FILTER_VALIDATE_BOOLEAN );
-		$data                      = [];
-		$data                      += $this->build_display_items( $should_show_itemized_view );
+		$data                      = array();
+		$data                     += $this->build_display_items( $should_show_itemized_view );
 		$data['result']            = 'success';
 
 		wp_send_json( $data );
@@ -653,7 +772,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		// address validation for countries other than US is problematic when using responses from payment sources like
 		// Apple Pay.
 		if ( $address['postcode'] && $address['country'] === 'US' && ! \WC_Validation::is_postcode( $address['postcode'], $address['country'] ) ) {
-			throw new \Exception( __( 'Please enter a valid postcode / ZIP.', 'woocommerce' ) ); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			throw new \Exception( esc_html__( 'Please enter a valid postcode / ZIP.', 'woocommerce' ) ); //phpcs:ignore WordPress.WP.I18n.TextDomainMismatch	
 		} elseif ( $address['postcode'] ) {
 			$address['postcode'] = wc_format_postcode( $address['postcode'], $address['country'] );
 		}
@@ -685,7 +804,6 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		do_action( 'woocommerce_calculated_shipping' );
 	}
 
-
 	/**
 	 * Calculated shipping charges
 	 *
@@ -693,7 +811,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 *
 	 * @return void
 	 */
-	protected function calculate_shipping( $address = [] ) {
+	protected function calculate_shipping( $address = array() ) {
 		$country   = $address['country'];
 		$state     = $address['state'];
 		$postcode  = $address['postcode'];
@@ -718,7 +836,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		WC()->customer->set_calculated_shipping( true );
 		WC()->customer->save();
 
-		$packages = [];
+		$packages = array();
 
 		$packages[0]['contents']                 = WC()->cart->get_cart();
 		$packages[0]['contents_cost']            = 0;
@@ -799,7 +917,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 					foreach ( $recurring_cart->get_shipping_packages() as $base_package ) {
 						$packages[ $recurring_cart_key . '_' . $count ] = WC()->shipping->calculate_shipping_for_package( $base_package );
 					}
-					$count ++;
+					++$count;
 				}
 			}
 			\WC_Subscriptions_Cart::set_calculation_type( 'none' );
@@ -823,32 +941,32 @@ trait Funnelkit_Stripe_Smart_Buttons {
 
 		wc_maybe_define_constant( 'WOOCOMMERCE_CHECKOUT', true );
 
-		/** Setting the checkout nonce to avoid exception */
-		$_REQUEST['_wpnonce'] = wp_create_nonce( 'woocommerce-process_checkout' );
-		$_POST['_wpnonce']    = ! empty( $_REQUEST['_wpnonce'] ) ? sanitize_text_field( $_REQUEST['_wpnonce'] ) : '';
+		Helper::log( 'Payment request call received for ' . wc_clean( wp_unslash( $_REQUEST['payment_request_type'] ) ) . ' from page -' . wc_clean( wp_unslash( $_REQUEST['page_from'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotValidated, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Logging payment request data
 
-		Helper::log( 'Payment request call received for ' . wc_clean( $_REQUEST['payment_request_type'] ) . ' from page -' . wc_clean( $_REQUEST['page_from'] ) ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
-
-		$this->button_type = ! empty( $_REQUEST['payment_request_type'] ) ? wc_clean( $_REQUEST['payment_request_type'] ) : '';
+		$this->button_type = ! empty( $_REQUEST['payment_request_type'] ) ? wc_clean( wp_unslash( $_REQUEST['payment_request_type'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 		add_filter( 'woocommerce_cart_needs_payment', '__return_true', PHP_INT_MAX );
-		add_filter( 'woocommerce_checkout_fields', [ $this, 'un_required_billing_address' ], PHP_INT_MAX );
+		add_filter( 'woocommerce_checkout_fields', array( $this, 'un_required_billing_address' ), PHP_INT_MAX );
 		// Handle states for PRB
 		$this->normalize_state();
+
 		if ( current_action() === 'wc_ajax_fkwcs_gpay_button_payment_request' ) {
 			WC()->session->reload_checkout = true;
 		}
 		if ( class_exists( '\WC_Subscriptions_Cart' ) ) {
 			remove_action( 'woocommerce_after_checkout_validation', 'WC_Subscriptions_Cart::validate_recurring_shipping_methods' );
 		}
-		add_action( 'woocommerce_before_checkout_process', [ $this, 'remove_street_address_validation' ], 10 );
-
+		add_action( 'woocommerce_before_checkout_process', array( $this, 'remove_street_address_validation' ), 10 );
 
 		// Hook the custom function to the 'woocommerce_add_error' action
-		add_filter( 'woocommerce_add_error', function ( $message ) {
-			Helper::log( 'WooCommerce Error recorded during order creation:: ' . $message ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+		add_filter(
+			'woocommerce_add_error',
+			function ( $message ) {
+				Helper::log( 'WooCommerce Error recorded during order creation:: ' . $message ); //phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
 
-			return $message;
-		}, 10 );
+				return $message;
+			},
+			10
+		);
 
 		WC()->checkout()->process_checkout();
 		exit();
@@ -856,12 +974,13 @@ trait Funnelkit_Stripe_Smart_Buttons {
 
 	/**
 	 * Remove street validation(house number) for smart button checkout process
+	 *
 	 * @return void
 	 */
 	public function remove_street_address_validation() {
 		if ( class_exists( '\WFACP_Template_Common' ) && function_exists( 'wfacp_template' ) ) {
 			if ( wfacp_template() instanceof \WFACP_Template_Common ) {
-				remove_action( 'woocommerce_checkout_process', [ wfacp_template(), 'process_fields' ] );
+				remove_action( 'woocommerce_checkout_process', array( wfacp_template(), 'process_fields' ) );
 			}
 		}
 	}
@@ -879,13 +998,41 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			return $fields;
 		}
 
-		// List of billing fields
-		$required_fields = $this->get_wc_default_fields_fields();
+		// Fields that must stay required for the express flow to resolve a chargeable address.
+		// These are protected: the filter below can never un-require them.
+		$keep_required = array( 'billing_country', 'billing_postcode' );
+
+		// Default: un-require every billing field (default or custom) except the protected
+		// ones. The wallet flow POSTs from the cart/product page and never renders custom
+		// billing fields, so any store-added `required` billing field would otherwise fail
+		// server-side validation and silently block the order.
+		$default_unrequired = array();
+		foreach ( $fields['billing'] as $key => $field ) {
+			if ( isset( $field['required'] ) && ! in_array( $key, $keep_required, true ) ) {
+				$default_unrequired[] = $key;
+			}
+		}
+
+		/**
+		 * List of billing field keys to un-require during express (wallet) checkout.
+		 *
+		 * Remove a key from this list to keep that field required during express checkout
+		 * (its absence will then block wallet orders, surfaced as a visible error).
+		 * `billing_country` and `billing_postcode` always stay required regardless of this
+		 * filter, as the express flow needs them to resolve a chargeable address.
+		 *
+		 * @param string[] $unrequired_fields Billing field keys to un-require.
+		 * @param array    $fields            Full WooCommerce checkout fields array.
+		 */
+		$unrequired_fields = apply_filters( 'fkwcs_express_checkout_unrequired_fields', $default_unrequired, $fields );
 
 		// Loop through all billing fields
 		foreach ( $fields['billing'] as $key => $field ) {
-			// Un-require fields that are in the default required list
-			if ( in_array( $key, $required_fields, true ) && isset( $fields['billing'][ $key ] ) && isset( $fields['billing'][ $key ]['required'] ) ) {
+			if ( ! isset( $fields['billing'][ $key ]['required'] ) || in_array( $key, $keep_required, true ) ) {
+				continue;
+			}
+
+			if ( in_array( $key, $unrequired_fields, true ) ) {
 				$fields['billing'][ $key ]['required'] = false;
 			}
 		}
@@ -906,14 +1053,14 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 * @since 1.8.0
 	 */
 	public function normalize_state() {
-		$billing_country  = ! empty( $_POST['billing_country'] ) ? wc_clean( wp_unslash( $_POST['billing_country'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$shipping_country = ! empty( $_POST['shipping_country'] ) ? wc_clean( wp_unslash( $_POST['shipping_country'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$billing_state    = ! empty( $_POST['billing_state'] ) ? wc_clean( wp_unslash( $_POST['billing_state'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$shipping_state   = ! empty( $_POST['shipping_state'] ) ? wc_clean( wp_unslash( $_POST['shipping_state'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$billing_country  = ! empty( $_POST['billing_country'] ) ? wc_clean( wp_unslash( $_POST['billing_country'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		$shipping_country = ! empty( $_POST['shipping_country'] ) ? wc_clean( wp_unslash( $_POST['shipping_country'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		$billing_state    = ! empty( $_POST['billing_state'] ) ? wc_clean( wp_unslash( $_POST['billing_state'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		$shipping_state   = ! empty( $_POST['shipping_state'] ) ? wc_clean( wp_unslash( $_POST['shipping_state'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 		if ( 'HK' === $billing_country ) {
 			include_once FKWCS_DIR . '/gateways/helpers/class-wc-stripe-hong-kong-states.php';
 			if ( ! Helpers\WC_Stripe_Hong_Kong_States::is_valid_state( strtolower( $billing_state ) ) ) {
-				$billing_postcode = ! empty( $_POST['billing_postcode'] ) ? wc_clean( wp_unslash( $_POST['billing_postcode'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$billing_postcode = ! empty( $_POST['billing_postcode'] ) ? wc_clean( wp_unslash( $_POST['billing_postcode'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 				if ( Helpers\WC_Stripe_Hong_Kong_States::is_valid_state( strtolower( $billing_postcode ) ) ) {
 					$billing_state = $billing_postcode;
 				}
@@ -922,7 +1069,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		if ( 'HK' === $shipping_country ) {
 			include_once FKWCS_DIR . '/gateways/helpers/class-wc-stripe-hong-kong-states.php';
 			if ( ! Helpers\WC_Stripe_Hong_Kong_States::is_valid_state( strtolower( $shipping_state ) ) ) {
-				$shipping_postcode = ! empty( $_POST['shipping_postcode'] ) ? wc_clean( wp_unslash( $_POST['shipping_postcode'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$shipping_postcode = ! empty( $_POST['shipping_postcode'] ) ? wc_clean( wp_unslash( $_POST['shipping_postcode'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 				if ( Helpers\WC_Stripe_Hong_Kong_States::is_valid_state( strtolower( $shipping_postcode ) ) ) {
 					$shipping_state = $shipping_postcode;
 				}
@@ -930,10 +1077,10 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		}
 		// lets we resolve the state value we want to process.
 		if ( $billing_state && $billing_country ) {
-			$_POST['billing_state'] = $this->get_normalized_state( $billing_state, $billing_country ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$_POST['billing_state'] = $this->get_normalized_state( $billing_state, $billing_country ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 		}
 		if ( $shipping_state && $shipping_country ) {
-			$_POST['shipping_state'] = $this->get_normalized_state( $shipping_state, $shipping_country ); //phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$_POST['shipping_state'] = $this->get_normalized_state( $shipping_state, $shipping_country ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
 		}
 	}
 
@@ -955,6 +1102,12 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			return $state;
 		}
 
+		// Try city-to-region mapping (for when Apple Pay sends city names instead of region codes)
+		$state = $this->get_normalized_state_from_city_mapping( $state, $country );
+		if ( $this->is_normalized_state( $state, $country ) ) {
+			return $state;
+		}
+
 		return $this->get_normalized_state_from_wc_states( $state, $country );
 	}
 
@@ -966,7 +1119,6 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 *
 	 * @return bool Whether state is normalized or not.
 	 * @since 5.1.0
-	 *
 	 */
 	public function is_normalized_state( $state, $country ) {
 		$wc_states = WC()->countries->get_states( $country );
@@ -982,7 +1134,6 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 *
 	 * @return string Normalized state or original state input value.
 	 * @since 5.1.0
-	 *
 	 */
 	public function get_normalized_state_from_pr_states( $state, $country ) {
 		// Include Payment Request API State list for compatibility with WC countries/states.
@@ -1009,10 +1160,30 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 *
 	 * @return string The sanitized string.
 	 * @since 5.1.0
-	 *
 	 */
 	public function sanitize_string( $string ) {
 		return trim( wc_strtolower( remove_accents( $string ) ) );
+	}
+
+	/**
+	 * Get normalized state from city-to-region mapping.
+	 * Handles cases where Apple Pay sends city names instead of region codes.
+	 *
+	 * @param string $state City/state name.
+	 * @param string $country Two-letter country code.
+	 *
+	 * @return string Resolved state or original state input value.
+	 * @since 1.9.0
+	 */
+	public function get_normalized_state_from_city_mapping( $state, $country ) {
+		include_once FKWCS_DIR . '/gateways/helpers/class-wc-stripe-payment-request-button-states.php';
+
+		$region = Helpers\WC_Stripe_Payment_Request_Button_States::get_region_for_city( $state, $country );
+		if ( $region ) {
+			return $region;
+		}
+
+		return $state;
 	}
 
 	/**
@@ -1023,7 +1194,6 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 *
 	 * @return string Resolved state or original state input value.
 	 * @since 5.1.0
-	 *
 	 */
 	public function get_normalized_state_from_wc_states( $state, $country ) {
 		$wc_states = WC()->countries->get_states( $country );
@@ -1045,7 +1215,6 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 * @param string $country Country.
 	 *
 	 * @since 5.2.0
-	 *
 	 */
 	public function get_normalized_postal_code( $postcode, $country ) {
 		if ( 'GB' === $country ) {
@@ -1055,6 +1224,15 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		if ( 'CA' === $country ) {
 			// Replaces a redacted string with something like L4Y***.
 			return str_pad( preg_replace( '/\s+/', '', $postcode ), 6, '*' );
+		}
+		if ( 'US' === $country ) {
+			// Express Checkout fires intermediate address-change events with a partial ZIP
+			// (e.g. "941") while the shopper is still typing. Return the ZIP only when it is a
+			// complete, conforming US code; otherwise yield '' so the truthiness guard in
+			// wc_stripe_update_customer_location() short-circuits instead of throwing on partials.
+			$clean = preg_replace( '/\s+/', '', (string) $postcode );
+
+			return preg_match( '/^\d{5}(-\d{4})?$/', $clean ) ? $clean : '';
 		}
 
 		return $postcode;
@@ -1080,6 +1258,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		if ( ! $temp_shipping_method ) {
 			return current( $method_ids );
 		}
+		return $temp_shipping_method;
 	}
 
 	public function get_payment_response_data( $shipping_address ) {
@@ -1104,7 +1283,7 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		return array(
 			'shipping_methods'     => WC()->session->get( 'chosen_shipping_methods', array() ),
 			'paymentRequestUpdate' => $new_data,
-			'address'              => $shipping_address
+			'address'              => $shipping_address,
 		);
 	}
 
@@ -1117,26 +1296,32 @@ trait Funnelkit_Stripe_Smart_Buttons {
 
 		check_ajax_referer( 'fkwcs_nonce', 'fkwcs_nonce' );
 
-		if ( ! isset( $_POST['shipping_address'] ) || ! isset( $_POST['shipping_method'] ) ) {
+		/**
+		 * If post_data is sent (serialized form data from checkout page),
+		 * parse it and merge with $_POST to preserve checkout add-ons and other form fields
+		 */
+		if ( isset( $_POST['post_data'] ) && ! empty( $_POST['post_data'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			parse_str( wp_unslash( $_POST['post_data'] ), $parsed_post_data ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+			// Merge parsed form data with existing $_POST, giving priority to direct POST values (like shipping address)
+			$_POST = array_merge( $parsed_post_data, $_POST ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment processing
+		}
+
+		if ( ! isset( $_POST['shipping_address'] ) || ! isset( $_POST['shipping_method'] ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
 			$data = array(
-				'result' => 'fail'
+				'result' => 'fail',
 			);
 			wp_send_json( $data );
 		}
-		$shipping_address = wc_clean( $_POST['shipping_address'] );
-
+		$shipping_address = wc_clean( wp_unslash( $_POST['shipping_address'] ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
 
 		wc_maybe_define_constant( 'WOOCOMMERCE_CART', true );
-		add_filter( 'woocommerce_cart_ready_to_calc_shipping', function () {
-			return true;
-		}, 1000 );
+		add_filter( 'woocommerce_cart_ready_to_calc_shipping', '__return_true', 1000 );
 		try {
 			$this->wc_stripe_update_customer_location( $shipping_address );
-			$this->update_shipping_method( wc_clean( $_POST['shipping_method'] ) );
-
+			$this->update_shipping_method( wc_clean( wp_unslash( $_POST['shipping_method'] ) ) ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Nonce verified above with check_ajax_referer
 
 			/** update the WC cart with the new shipping options */
-			$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', [] );
+			$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', array() );
 			WC()->cart->calculate_totals();
 			$this->maybe_restore_recurring_chosen_shipping_methods( $chosen_shipping_methods );
 			/** if shipping address is not serviceable, throw an error */
@@ -1145,11 +1330,10 @@ trait Funnelkit_Stripe_Smart_Buttons {
 				throw new \Exception( __( 'Your shipping address is not serviceable.', 'funnelkit-stripe-woo-payment-gateway' ) );
 			}
 
-
 			$data = $this->get_payment_response_data( $shipping_address );
 		} catch ( \Exception $e ) {
 			$data = array(
-				'result' => 'fail'
+				'result' => 'fail',
 			);
 		}
 
@@ -1172,14 +1356,13 @@ trait Funnelkit_Stripe_Smart_Buttons {
 	 * @param array $previous_chosen_methods The previously chosen shipping methods.
 	 *
 	 * @since 8.3.0
-	 *
 	 */
-	function maybe_restore_recurring_chosen_shipping_methods( $previous_chosen_methods = [] ) {
+	function maybe_restore_recurring_chosen_shipping_methods( $previous_chosen_methods = array() ) {
 		if ( empty( WC()->cart->recurring_carts ) || ! method_exists( '\WC_Subscriptions_Cart', 'get_recurring_shipping_package_key' ) ) {
 			return;
 		}
 
-		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', [] );
+		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', array() );
 
 		foreach ( WC()->cart->recurring_carts as $recurring_cart_key => $recurring_cart ) {
 			foreach ( $recurring_cart->get_shipping_packages() as $recurring_cart_package_index => $recurring_cart_package ) {
@@ -1197,9 +1380,9 @@ trait Funnelkit_Stripe_Smart_Buttons {
 		WC()->session->set( 'chosen_shipping_methods', $chosen_shipping_methods );
 	}
 
-
 	/**
 	 * prepare list for all woocommerce fields list for un-require expect 'billing_country', 'billing_postcode'
+	 *
 	 * @return string[]
 	 */
 	public function get_wc_default_fields_fields() {
@@ -1226,6 +1409,4 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			'shipping_phone',
 		);
 	}
-
-
 }
