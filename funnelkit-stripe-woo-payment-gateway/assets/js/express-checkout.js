@@ -478,6 +478,22 @@
                 }
             }
 			document.addEventListener('DOMContentLoaded', () => {
+				/**
+				 * Align with the jQuery build WooCommerce is using.
+				 *
+				 * This file captures the jQuery that exists when it executes. If a theme or plugin loads a
+				 * second jQuery build later (a raw code.jquery.com tag is the usual case), WooCommerce's
+				 * footer scripts capture that later build instead. jQuery keeps event handlers per build,
+				 * so updated_checkout, checkout_place_order_* and our own submit triggers would never cross
+				 * between the two. By DOM ready every synchronous script has run, so the global is the build
+				 * WooCommerce has. Adopt it, but only when blockUI is attached to that build: WooCommerce's
+				 * frontend scripts cannot run without it, so its presence proves WooCommerce lives there. If
+				 * a rogue build loads after WooCommerce's scripts instead, blockUI is missing on it and we
+				 * stay put. On a normal page the condition is false and nothing changes.
+				 */
+				if (window.jQuery && window.jQuery !== $ && window.jQuery.fn && typeof window.jQuery.fn.on === 'function' && typeof window.jQuery.fn.block === 'function') {
+					$ = window.jQuery;
+				}
 				this.setupExpressCheckoutButton('init');
 				this.wcEvents();
 				this.warmupExpressElements();
@@ -2073,11 +2089,6 @@
                 }
             });
 
-            window.addEventListener('unload', function () {
-                if (fkwcs_data.is_checkout === 'yes') {
-                    $('.fkwcs_smart_button_trigger').removeClass('hide').show();
-                }
-            });
 
 
             $(document.body).on('updated_checkout', function (_e, v) {

@@ -4,7 +4,7 @@ Tags: stripe, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
 Tested up to: 7.1
 Requires PHP: 7.0
-Stable tag: 1.15.0
+Stable tag: 1.15.0.1
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -17,13 +17,14 @@ It delivers a simple, quick, secure payment gateway to your WooCommerce website.
 
 With this Stripe Payment Gateway for WooCommerce plugin, you can accept **credit and debit card** payments through Stripe, such as Visa, MasterCard, Diners Club, JCB, American Express, etc.
 
-Plus, it integrates with **one-click express payments**, such as Google Pay and Apple Pay.
+Plus, it integrates with **one-click express payments**, such as Apple Pay, Google Pay, Link, and Amazon Pay, each with its own dedicated settings for placement and style.
 
-It also supports **local payment or bank redirect-gateway** options such as SEPA, P24, iDEAL, BanContact, ACH Direct Debit, EPS, Pix, Multibanco, MobilePay, and more.
+It also supports **local payment or bank redirect-gateway** options such as SEPA, P24, iDEAL, BanContact, ACH Direct Debit, EPS, Pix, Multibanco, MobilePay, MB WAY, TWINT, BLIK, and more.
 
 In addition, this plugin extends its support to **Buy Now Pay Later** payment gateways such as Affirm, Klarna, and Afterpay, as well as **digital wallet** options like CashApp Pay and Alipay.
 
-This free WooCommerce Stripe plugin easily integrates with **FunnelKit’s Funnel Builder and One Click Upsells**, making the payment process simpler and more enjoyable.
+This free WooCommerce Stripe plugin easily integrates with **FunnelKit's Funnel Builder and One Click Upsells**, making the payment process simpler and more enjoyable.
+
 
 This leads to increased conversions and happy customers.
 
@@ -43,9 +44,9 @@ Here are some outstanding features of Stripe Payment Gateway for WooCommerce:
 
 Once you connect your Stripe account with Stripe Payment Gateway for WooCommerce, you don’t need to go back and forth to enter your API keys manually. All your details, including the live and test keys, will be fetched here.
 
-=== 2. Hassle-free Apple Pay and Google Pay Set-Up
+=== 2. Independent Settings for Apple Pay, Google Pay, Link, and Amazon Pay
 
-By [enabling one-click express payments](https://funnelkit.com/woocommerce-one-click-checkout/) in your store, you provide your customers with a smooth checkout and payment experience. Our one-click express payment options include Apple Pay, Google Pay, and more.
+Each [express payment option](https://funnelkit.com/woocommerce-express-checkout/) now comes with its own dedicated settings for placement and styling. Set up Apple Pay, Google Pay, Link, and Amazon Pay separately, so your checkout looks and behaves exactly the way you want.
 
 === 3. Automatic Webhook Creation
 
@@ -63,7 +64,6 @@ Offer your consumers the flexibility to make purchases instantly and pay for the
 
 https://www.youtube.com/watch?v=ciEzag828L0
 
-
 === 6. SCA-Ensured, 3D Secure Payments
 
 Ensure a secure two-way authentication with Strong Customer Authentication (SCA) in your WooCommerce store. It automatically detects and prevents spam transactions through its 3D secure payment gateway for both web and mobile.
@@ -76,7 +76,11 @@ With Stripe Payment Gateway for WooCommerce, you can collect one-time and recurr
 
 With Stripe Payment Gateway for WooCommerce, you can collect one-time and recurring subscription payments for subscription-based products on your WooCommerce website.
 
-=== 9. Deep Compatibility with FunnelKit
+=== 9. Test Mode for Administrators
+
+Enable test mode for admin accounts only, without affecting live transactions for your customers. This lets you verify your setup and troubleshoot safely while your store keeps processing real payments as usual.
+
+=== 10. Deep Compatibility with FunnelKit
 
 While FunnelKit works with popular gateways, it provides deeper integration with the full FunnelKit suite.
 
@@ -103,25 +107,34 @@ Customers can securely store their payment information on their devices and make
 
 Google Pay offers customers a convenient and secure way to store their payment information with just a few taps on their smartphones or other devices.
 
-=== 4. Affirm
+=== 4. Link
+
+Link is Stripe's one-click checkout wallet that securely saves a customer's payment details for faster checkout across any Link-enabled store. It comes with its own dedicated settings for placement and style.
+
+=== 5. Amazon Pay
+
+Amazon Pay lets customers check out using the payment and shipping details already saved in their Amazon account. It's available both as an express checkout button and as a standard payment method, with its own dedicated settings for placement and style.
+
+
+=== 6. Affirm
 
 [Affirm](https://funnelkit.com/woocommerce-affirm-payments/) is the U.S. and Canada's leading buy-now-pay-later payment provider, with over 17 million users and $20.2 billion+ GMV annually. It offers payment options such as 4-interest-free payments and monthly installment plans for 3, 6, and 12 months.
 
 This Stripe gateway plugin makes it easy to integrate this payment method into your WooCommerce store.
 
-=== 5. Klarna
+=== 7. Klarna
 
 [Klarna](https://funnelkit.com/woocommerce-klarna-payments/) is a Swedish fintech company that offers users the flexibility to buy now and pay later to more than 150 million active consumers across 500,000+ merchants in 45+ countries.
 
 It allows payment options of 30 days, three installments, or 6 to 36-month payment plans.
 
-=== 6. Afterpay or Clearpay
+=== 8. Afterpay or Clearpay
 
 [Afterpay or Clearpay](https://funnelkit.com/woocommerce-afterpay/) (also known as Clearpay in the United Kingdom) is an Australian fintech company that offers consumers in the USA, Australia, New Zealand, the United Kingdom, and Canada the flexibility to buy now and pay later.
 
 Integrate Afterpay into WooCommerce with this free Stripe payment plugin.
 
-=== 7. SEPA
+=== 9. SEPA
 
 The Single Euro Payments Area (SEPA) initiative simplifies cashless payments among European Union (EU) member and non-member countries.
 
@@ -129,59 +142,72 @@ The Single Euro Payments Area (SEPA) initiative simplifies cashless payments amo
 
 This local payment method is convenient and cost-effective for accepting recurring and one-time payments.
 
-=== 8. iDEAL
+=== 10. iDEAL
 
 [iDEAL](https://funnelkit.com/woocommerce-ideal/) is a popular payment method in the Netherlands that allows customers to make payments and buy their favorite products directly from their bank accounts.
 
 FunnelKit’s Stripe Payment Gateway for WooCommerce integrates with iDEAL, providing a secure and convenient way for Dutch customers to pay for goods and services online.
 
-=== 9. Bancontact
+=== 11. Bancontact
 
 Bancontact is a widely used payment option in Belgium, allowing customers to make online payments directly from their bank accounts.
 
 It is supported by most Belgian banks and is a popular choice for eCommerce transactions in the country.
 
-=== 10. Przelewy24 (P24)
+=== 12. Przelewy24 (P24)
 
 Przelewy24, commonly known as P24, is a popular bank redirect payment method in Poland. It is widely used for eCommerce transactions and provides Polish customers convenience when purchasing online.
 
-=== 11. ACH Direct Debit
+=== 13. ACH Direct Debit
 
 ACH (Automated Clearing House) Direct Debit is a popular payment method in the United States that allows customers to make payments directly from their bank accounts.
 
 This payment method is particularly useful for recurring payments, subscriptions, and high-value transactions, offering lower processing fees compared to credit card payments.
 
-=== 12. EPS
+=== 14. EPS
 
 EPS (Electronic Payment Standard) is a popular online payment method in Austria that allows customers to make secure payments directly from their bank accounts.
 
 It provides a convenient and trusted payment option for Austrian customers, ensuring secure transactions through direct bank integration.
 
-=== 13. Pix
+=== 15. MB WAY
+
+MB WAY is a mobile payment method widely used in Portugal, letting customers pay directly through their banking app.
+
+=== 16. TWINT
+
+TWINT is a mobile payment method used in Switzerland, letting customers confirm payment through the TWINT app or a QR code, in Swiss francs.
+
+=== 17. BLIK
+
+BLIK is a mobile payment method used in Poland, letting customers confirm payments with a one-time code generated in their banking app.
+
+
+=== 18. Pix
 
 Pix is Brazil's instant payment system that allows customers to make instant payments 24/7 using their mobile phones, internet banking, or ATMs.
 
 This payment method provides Brazilian customers with a fast, secure, and convenient way to pay for online purchases without the need for credit cards.
 
-=== 14. Multibanco
+=== 19. Multibanco
 
 Multibanco is a popular payment method in Portugal that allows customers to pay for online purchases using their bank accounts through ATMs, internet banking, or mobile banking.
 
 It provides Portuguese customers with a familiar and secure payment option that integrates seamlessly with their existing banking infrastructure.
 
-=== 15. CashApp Pay
+=== 20. CashApp Pay
 
 CashApp Pay is a digital payment method that allows customers to make payments using their Cash App account, providing a quick and convenient checkout experience.
 
 This payment option is particularly popular among younger demographics and offers a seamless mobile-first payment experience.
 
-=== 16. MobilePay
+=== 21. MobilePay
 
 MobilePay is a popular mobile payment solution in Denmark, Finland, and Norway that allows customers to make payments using their smartphones.
 
 It provides Nordic customers with a fast, secure, and convenient way to pay for online purchases using their mobile devices.
 
-=== 17. Alipay
+=== 22. Alipay
 
 Alipay is one of China's leading digital payment platforms that allows customers to make secure payments using their Alipay accounts.
 
@@ -244,7 +270,7 @@ If the express payment buttons are not showing up on your checkout page, please 
 Follow this [Troubleshooting document ](https://funnelkit.com/docs/stripe-gateway-for-woocommerce/troubleshooting/express-payment-buttons-not-showing/) to set up your payment providers.
 
 = What payment methods are supported by this WooCommerce Stripe gateway plugin? =
-Stripe Payment Gateway for WooCommerce is continuously evolving to add new features and new gateways to its system. Currently, it supports credit and debit cards, including Visa, MasterCard, American Express, Discover, etc., express payments (Apple Pay and Google Pay), local payments such as SEPA, P24, iDEAL, Bancontact, ACH Direct Debit, EPS, Pix, Multibanco, and MobilePay. Furthermore, it's compatible with Buy Now Pay Later methods like Affirm, Klarna and Afterpay, as well as digital wallets like CashApp Pay and Alipay.
+Stripe Payment Gateway for WooCommerce is continuously evolving to add new features and new gateways to its system. Currently, it supports credit and debit cards, including Visa, MasterCard, American Express, Discover, etc., express payments (Apple Pay, Google Pay, Link, and Amazon Pay), local payments such as SEPA, P24, iDEAL, Bancontact, ACH Direct Debit, EPS, MB WAY, TWINT, BLIK, Pix, Multibanco, and MobilePay. Furthermore, it's compatible with Buy Now Pay Later methods like Affirm, Klarna and Afterpay, as well as digital wallets like CashApp Pay and Alipay.
 
 = Is there any documentation to help me get started? =
 Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce](https://funnelkit.com/docs/stripe-gateway-for-woocommerce/) here.
@@ -258,6 +284,12 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+
+= 1.15.0.1 =
+* Improved: Express Checkout: Express buttons styling improved with the FK checkout. (#1464)
+* Improved: Payment element mounting on order page when the minimum amount 0.50 USD converts to lower stripe account currency. (#1466)
+* Fixed: Edge case of Payment fields were not getting mounted in case of inadvertently multiple jQuery on checkout page. (#1462)
+
 = 1.15.0 =
 * Added: Express Checkout: Apple Pay, Google Pay and Stripe Link now render through Stripe's modern Express Checkout Element — each wallet appears as soon as it is ready and is shown only where it is genuinely available to the shopper. (#780)
 * Added: Express Checkout: Wallet Gateways settings are reformed for better visibility and granular controls. (#1036)
@@ -671,3 +703,4 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 = 1.0.0 =
 * Public Release
+

@@ -3,6 +3,22 @@
  * global Stripe
  */
 jQuery(function ($) {
+    /**
+     * Align with the jQuery build WooCommerce is using.
+     *
+     * This file captures the jQuery that exists when it executes. If a theme or plugin loads a
+     * second jQuery build later (a raw code.jquery.com tag is the usual case), WooCommerce's
+     * footer scripts capture that later build instead. jQuery keeps event handlers per build,
+     * so updated_checkout, checkout_place_order_* and our own submit triggers would never cross
+     * between the two. By DOM ready every synchronous script has run, so the global is the build
+     * WooCommerce has. Adopt it, but only when blockUI is attached to that build: WooCommerce's
+     * frontend scripts cannot run without it, so its presence proves WooCommerce lives there. If
+     * a rogue build loads after WooCommerce's scripts instead, blockUI is missing on it and we
+     * stay put. On a normal page the condition is false and nothing changes.
+     */
+    if (window.jQuery && window.jQuery !== $ && window.jQuery.fn && typeof window.jQuery.fn.on === 'function' && typeof window.jQuery.fn.block === 'function') {
+        $ = window.jQuery;
+    }
 	const style = fkwcs_data.common_style;
     window.fkwcsIsDomLoaded = false;
     const available_gateways = {};
@@ -224,11 +240,11 @@ jQuery(function ($) {
         if (typeof offset === 'undefined') {
             offset = 0;
         }
-        if (jQuery(id).length === 0) {
+        if ($(id).length === 0) {
             return;
         }
-        jQuery('html, body').animate({
-            scrollTop: jQuery(id).offset().top - offset
+        $('html, body').animate({
+            scrollTop: $(id).offset().top - offset
         }, 500);
     }
 
@@ -1628,9 +1644,9 @@ jQuery(function ($) {
                 this.element_options.fields.billingDetails = {};
                 this.element_options.fields.billingDetails.address = 'never';
             }
-            this.element_options.fields.billingDetails.name = jQuery("#billing_first_name").length ? "never" : "auto";
-            this.element_options.fields.billingDetails.email = jQuery("#billing_email").length ? "never" : "auto";
-            this.element_options.fields.billingDetails.phone = jQuery("#billing_phone").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.name = $("#billing_first_name").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.email = $("#billing_email").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.phone = $("#billing_phone").length ? "never" : "auto";
 
 
             if (fkwcs_data.is_add_payment_page === 'yes') {
@@ -1645,9 +1661,9 @@ jQuery(function ($) {
             } else {
                 this.element_options.defaultValues = {
                     billingDetails: {
-                        name: jQuery("#billing_first_name").val() + " " + jQuery("#billing_last_name").val(),
-                        email: jQuery("#billing_email").val(),
-                        phone: jQuery("#billing_phone").val()
+                        name: $("#billing_first_name").val() + " " + $("#billing_last_name").val(),
+                        email: $("#billing_email").val(),
+                        phone: $("#billing_phone").val()
                     }
                 };
             }
@@ -2169,16 +2185,16 @@ jQuery(function ($) {
                 this.element_options.fields.billingDetails = {};
                 this.element_options.fields.billingDetails.address = 'never';
             }
-            this.element_options.fields.billingDetails.name = jQuery("#billing_first_name").length ? "never" : "auto";
-            this.element_options.fields.billingDetails.email = jQuery("#billing_email").length ? "never" : "auto";
-            this.element_options.fields.billingDetails.phone = jQuery("#billing_phone").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.name = $("#billing_first_name").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.email = $("#billing_email").length ? "never" : "auto";
+            this.element_options.fields.billingDetails.phone = $("#billing_phone").length ? "never" : "auto";
 
 
             this.element_options.defaultValues = {
                 billingDetails: {
-                    name: jQuery("#billing_first_name").length ? jQuery("#billing_first_name").val() + " " + jQuery("#billing_last_name").val() : '',
-                    email: jQuery("#billing_email").val(),
-                    phone: jQuery("#billing_phone").val()
+                    name: $("#billing_first_name").length ? $("#billing_first_name").val() + " " + $("#billing_last_name").val() : '',
+                    email: $("#billing_email").val(),
+                    phone: $("#billing_phone").val()
                 }
             };
 
@@ -2674,7 +2690,7 @@ jQuery(function ($) {
             this.mbway = this.elements.create('payment', {
                 fields: {
                     billingDetails: {
-                        phone: jQuery("#billing_phone").length ? "never" : "auto"
+                        phone: $("#billing_phone").length ? "never" : "auto"
                     }
                 }
             });
@@ -4885,16 +4901,16 @@ jQuery(function ($) {
                 fields: {
                     billingDetails: {
                         address: 'never',
-                        name: jQuery("#billing_first_name").length ? "never" : "auto",
-                        email: jQuery("#billing_email").length ? "never" : "auto",
-                        phone: jQuery("#billing_phone").length ? "never" : "auto"
+                        name: $("#billing_first_name").length ? "never" : "auto",
+                        email: $("#billing_email").length ? "never" : "auto",
+                        phone: $("#billing_phone").length ? "never" : "auto"
                     }
                 },
                 defaultValues: {
                     billingDetails: {
-                        name: jQuery("#billing_first_name").length ? jQuery("#billing_first_name").val() + " " + jQuery("#billing_last_name").val() : '',
-                        email: jQuery("#billing_email").val(),
-                        phone: jQuery("#billing_phone").val()
+                        name: $("#billing_first_name").length ? $("#billing_first_name").val() + " " + $("#billing_last_name").val() : '',
+                        email: $("#billing_email").val(),
+                        phone: $("#billing_phone").val()
                     }
                 }
             };
@@ -5479,12 +5495,12 @@ jQuery(function ($) {
             this.element_options = {
                 fields: {
                     billingDetails: {
-                        name: jQuery("#billing_first_name").length ? "never" : "auto",
+                        name: $("#billing_first_name").length ? "never" : "auto",
                     }
                 },
                 defaultValues: {
                     billingDetails: {
-                        name: jQuery("#billing_first_name").length ? jQuery("#billing_first_name").val() + " " + jQuery("#billing_last_name").val() : '',
+                        name: $("#billing_first_name").length ? $("#billing_first_name").val() + " " + $("#billing_last_name").val() : '',
                     }
                 }
             };
@@ -5612,12 +5628,12 @@ jQuery(function ($) {
             this.element_options = {
                 fields: {
                     billingDetails: {
-                        name: jQuery("#billing_first_name").length ? "never" : "auto",
+                        name: $("#billing_first_name").length ? "never" : "auto",
                     }
                 },
                 defaultValues: {
                     billingDetails: {
-                        name: jQuery("#billing_first_name").length ? jQuery("#billing_first_name").val() + " " + jQuery("#billing_last_name").val() : '',
+                        name: $("#billing_first_name").length ? $("#billing_first_name").val() + " " + $("#billing_last_name").val() : '',
                     }
                 }
             };

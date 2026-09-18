@@ -584,10 +584,26 @@ body #fkcart-modal .fkwcs_stripe_smart_button_wrapper.cart {
     min-height: 42px;
 }
 
-#wfacp_smart_buttons.wfacp_smart_buttons .wfacp_smart_button_container .fkwcs_smart_buttons iframe {
+#wfacp_smart_buttons.wfacp_smart_buttons .wfacp_smart_button_container:not(#wfacp_smart_button_wc_payment_gpay_apay) .fkwcs_smart_buttons iframe {
     max-height: 52px !important;
     margin: 0 !important;
     width: 100% !important;
+}
+
+/* Aero Checkout (WFACP) themes clamp every `.wfacp_smart_button_container iframe` to a
+ * single button height (42px) to keep single-wallet rows even, carving out only the
+ * WooPayments slot (`:not(#wfacp_smart_button_wc_payment_gpay_apay)`). The FKWCS wallet
+ * buttons are the same combined Stripe Express Checkout Element — Apple Pay, Google Pay,
+ * Link and Amazon Pay all render inside ONE iframe per slot — so Stripe must size those
+ * iframes itself, exactly as it does on the native checkout. Clamping them to 42px crops
+ * every row past the first and those wallets silently disappear here while the native
+ * checkout still shows them. */
+#wfacp_smart_buttons.wfacp_smart_buttons .wfacp_smart_button_container#wfacp_smart_button_fkwcs_apple_pay .fkwcs_express_smart_button_wrapper iframe,
+#wfacp_smart_buttons.wfacp_smart_buttons .wfacp_smart_button_container#wfacp_smart_button_fkwcs_stripe_google_pay .fkwcs_express_smart_button_wrapper iframe,
+#wfacp_smart_buttons.wfacp_smart_buttons .wfacp_smart_button_container#wfacp_smart_button_fkwcs_amazon_pay .fkwcs_express_smart_button_wrapper iframe,
+#wfacp_smart_buttons.wfacp_smart_buttons .wfacp_smart_button_container#wfacp_smart_button_fkwcs_link .fkwcs_express_smart_button_wrapper iframe {
+    height: 100% !important;
+    max-height: 52px !important;
 }
 
 .fkwcs_stripe_smart_express_button_wrapper {

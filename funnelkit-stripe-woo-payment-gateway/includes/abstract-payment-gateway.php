@@ -3294,10 +3294,27 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		 * the minimum, which was then multiplied again -- a 25.00 USD cart reported 5000.
 		 * Convert first, compare in the same unit, and do not format an already-converted value.
 		 */
-		$amount = Helper::get_minimum_amount();
+		global $wp;
 
-		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
-			$cart_amount = Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ) );
+		$charge_currency = $this->get_currency();
+		$amount          = Helper::get_minimum_amount( $charge_currency );
+
+		/*
+		 * On order-pay pages WC()->cart is empty (the checkout cart is not what is being
+		 * charged), so reading it here fell back to the currency minimum and sent undercharged
+		 * amounts to Stripe -- e.g. a $1.00 order reported 50 cents, which Stripe rejected as
+		 * amount_too_small against the account currency. Use the order total instead.
+		 */
+		if ( isset( $wp->query_vars['order-pay'] ) ) {
+			$order = wc_get_order( absint( $wp->query_vars['order-pay'] ) );
+			if ( $order instanceof \WC_Order ) {
+				$order_amount = Helper::get_formatted_amount( $order->get_total(), $charge_currency );
+				if ( $order_amount > $amount ) {
+					$amount = $order_amount;
+				}
+			}
+		} elseif ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
+			$cart_amount = Helper::get_formatted_amount( WC()->cart->get_total( 'edit' ), $charge_currency );
 			if ( $cart_amount > $amount ) {
 				$amount = $cart_amount;
 			}
@@ -3307,7 +3324,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			'locale'                => $this->convert_wc_locale_to_stripe_locale( get_locale() ),
 			'mode'                  => 'payment',
 			'paymentMethodCreation' => 'manual',
-			'currency'              => strtolower( $this->get_currency() ),
+			'currency'              => strtolower( $charge_currency ),
 			'amount'                => $amount,
 		);
 	}

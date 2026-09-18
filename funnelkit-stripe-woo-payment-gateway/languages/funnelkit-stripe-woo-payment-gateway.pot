@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-14T07:50:22+00:00\n"
+"POT-Creation-Date: 2026-09-18T16:00:51+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: funnelkit-stripe-woo-payment-gateway\n"
@@ -2022,37 +2022,37 @@ msgid "Accepts payments using selected cads. Please select atleast one card bran
 msgstr ""
 
 #: gateways/creditcard.php:241
-#: includes/helper.php:855
+#: includes/helper.php:860
 msgid "MasterCard"
 msgstr ""
 
 #: gateways/creditcard.php:242
-#: includes/helper.php:856
+#: includes/helper.php:861
 msgid "Visa"
 msgstr ""
 
 #: gateways/creditcard.php:243
-#: includes/helper.php:857
+#: includes/helper.php:862
 msgid "American Express"
 msgstr ""
 
 #: gateways/creditcard.php:244
-#: includes/helper.php:858
+#: includes/helper.php:863
 msgid "Discover"
 msgstr ""
 
 #: gateways/creditcard.php:245
-#: includes/helper.php:859
+#: includes/helper.php:864
 msgid "JCB"
 msgstr ""
 
 #: gateways/creditcard.php:246
-#: includes/helper.php:860
+#: includes/helper.php:865
 msgid "Diners Club"
 msgstr ""
 
 #: gateways/creditcard.php:247
-#: includes/helper.php:861
+#: includes/helper.php:866
 msgid "UnionPay"
 msgstr ""
 
@@ -2582,7 +2582,7 @@ msgid "TEST MODE ENABLED. In test mode, you can use IBAN number DE89370400440532
 msgstr ""
 
 #: gateways/smart-buttons.php:263
-#: includes/helper.php:890
+#: includes/helper.php:895
 msgid "Stripe enabled Payment Request is not available in this browser"
 msgstr ""
 
@@ -2763,18 +2763,18 @@ msgstr ""
 msgid "Stripe charge awaiting authentication by user: %s."
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:3363
-#: includes/abstract-payment-gateway.php:3442
+#: includes/abstract-payment-gateway.php:3380
+#: includes/abstract-payment-gateway.php:3459
 msgid "View this in Stripe dashboard"
 msgstr ""
 
 #. translators: %s: raw Stripe decline code
-#: includes/abstract-payment-gateway.php:3414
+#: includes/abstract-payment-gateway.php:3431
 #, php-format
 msgid "Stripe decline code: %s"
 msgstr ""
 
-#: includes/abstract-payment-gateway.php:3459
+#: includes/abstract-payment-gateway.php:3476
 msgid "<strong>Recommendation:</strong> Use \"Charge\" for immediate payment (recommended for most stores) or \"Authorize\" to hold funds and manually capture later. Note: Authorized orders will be placed on hold until manually captured."
 msgstr ""
 
@@ -2812,352 +2812,352 @@ msgid "Stripe not initialized"
 msgstr ""
 
 #. translators: %1$s payment intent ID
-#: includes/helper.php:279
+#: includes/helper.php:284
 #, php-format
 msgid "The customer has initiated and payment intent created with ID %1$s. The customer had not completed the payment yet."
 msgstr ""
 
-#: includes/helper.php:303
+#: includes/helper.php:308
 msgid "There was an error processing your credit card."
 msgstr ""
 
-#: includes/helper.php:304
+#: includes/helper.php:309
 msgid "Your card number is incomplete."
 msgstr ""
 
-#: includes/helper.php:305
+#: includes/helper.php:310
 msgid "Your card's expiration date is incomplete."
 msgstr ""
 
-#: includes/helper.php:306
+#: includes/helper.php:311
 msgid "Your card's security code is incomplete."
 msgstr ""
 
-#: includes/helper.php:307
+#: includes/helper.php:312
 msgid "Your card's zip code is incomplete."
 msgstr ""
 
-#: includes/helper.php:308
+#: includes/helper.php:313
 msgid "The card number is incorrect. Check the card's number or use a different card."
 msgstr ""
 
-#: includes/helper.php:309
+#: includes/helper.php:314
 msgid "The card's security code is incorrect. Check the card's security code or use a different card."
 msgstr ""
 
-#: includes/helper.php:310
+#: includes/helper.php:315
 msgid "The card's ZIP code is incorrect. Check the card's ZIP code or use a different card."
 msgstr ""
 
-#: includes/helper.php:311
+#: includes/helper.php:316
 msgid "The card number is invalid. Check the card details or use a different card."
 msgstr ""
 
-#: includes/helper.php:312
+#: includes/helper.php:317
 msgid "This value provided to the field contains characters that are unsupported by the field."
 msgstr ""
 
-#: includes/helper.php:313
+#: includes/helper.php:318
 msgid "The card's security code is invalid. Check the card's security code or use a different card."
 msgstr ""
 
-#: includes/helper.php:314
+#: includes/helper.php:319
 msgid "The card's expiration month is incorrect. Check the expiration date or use a different card."
 msgstr ""
 
-#: includes/helper.php:315
+#: includes/helper.php:320
 msgid "The card's expiration year is incorrect. Check the expiration date or use a different card."
 msgstr ""
 
-#: includes/helper.php:316
+#: includes/helper.php:321
 msgid "The card's address is incorrect. Check the card's address or use a different card."
 msgstr ""
 
-#: includes/helper.php:317
+#: includes/helper.php:322
 msgid "The card has expired. Check the expiration date or use a different card."
 msgstr ""
 
-#: includes/helper.php:318
+#: includes/helper.php:323
 msgid "The card has been declined."
 msgstr ""
 
-#: includes/helper.php:319
+#: includes/helper.php:324
 msgid "Your card's expiration year is in the past."
 msgstr ""
 
-#: includes/helper.php:320
+#: includes/helper.php:325
 msgid "The bank account number provided is invalid (e.g., missing digits). Bank account information varies from country to country. We recommend creating validations in your entry forms based on the bank account formats we provide."
 msgstr ""
 
-#: includes/helper.php:321
+#: includes/helper.php:326
 msgid "The specified amount is greater than the maximum amount allowed. Use a lower amount and try again."
 msgstr ""
 
-#: includes/helper.php:322
+#: includes/helper.php:327
 msgid "The specified amount is less than the minimum amount allowed. Use a higher amount and try again."
 msgstr ""
 
-#: includes/helper.php:323
+#: includes/helper.php:328
 msgid "The payment requires authentication to proceed. If your customer is off session, notify your customer to return to your application and complete the payment. If you provided the error_on_requires_action parameter, then your customer should try another card that does not require authentication."
 msgstr ""
 
-#: includes/helper.php:324
+#: includes/helper.php:329
 msgid "The transfer or payout could not be completed because the associated account does not have a sufficient balance available. Create a new transfer or payout using an amount less than or equal to the account's available balance."
 msgstr ""
 
-#: includes/helper.php:325
+#: includes/helper.php:330
 msgid "The bank account provided can not be used to charge, either because it is not verified yet or it is not supported."
 msgstr ""
 
-#: includes/helper.php:326
+#: includes/helper.php:331
 msgid "The bank account provided already exists on the specified Customer object. If the bank account should also be attached to a different customer, include the correct customer ID when making the request again."
 msgstr ""
 
-#: includes/helper.php:327
+#: includes/helper.php:332
 msgid "The bank account provided cannot be used for payouts. A different bank account must be used."
 msgstr ""
 
-#: includes/helper.php:328
+#: includes/helper.php:333
 msgid "Your Connect platform is attempting to share an unverified bank account with a connected account."
 msgstr ""
 
-#: includes/helper.php:329
+#: includes/helper.php:334
 msgid "The bank account cannot be verified, either because the microdeposit amounts provided do not match the actual amounts, or because verification has failed too many times."
 msgstr ""
 
-#: includes/helper.php:330
+#: includes/helper.php:335
 msgid "This card has been declined too many times. You can try to charge this card again after 24 hours. We suggest reaching out to your customer to make sure they have entered all of their information correctly and that there are no issues with their card."
 msgstr ""
 
-#: includes/helper.php:331
+#: includes/helper.php:336
 msgid "The charge you're attempting to capture has already been captured. Update the request with an uncaptured charge ID."
 msgstr ""
 
-#: includes/helper.php:332
+#: includes/helper.php:337
 msgid "The charge you're attempting to refund has already been refunded. Update the request to use the ID of a charge that has not been refunded."
 msgstr ""
 
-#: includes/helper.php:333
+#: includes/helper.php:338
 msgid "The charge you're attempting to refund has been charged back. Check the disputes documentation to learn how to respond to the dispute."
 msgstr ""
 
-#: includes/helper.php:334
+#: includes/helper.php:339
 msgid "This charge would cause you to exceed your rolling-window processing limit for this source type. Please retry the charge later, or contact us to request a higher processing limit."
 msgstr ""
 
-#: includes/helper.php:335
+#: includes/helper.php:340
 msgid "The charge cannot be captured as the authorization has expired. Auth and capture charges must be captured within seven days."
 msgstr ""
 
-#: includes/helper.php:336
+#: includes/helper.php:341
 msgid "One or more provided parameters was not allowed for the given operation on the Charge. Check our API reference or the returned error message to see which values were not correct for that Charge."
 msgstr ""
 
-#: includes/helper.php:337
+#: includes/helper.php:342
 msgid "The email address is invalid (e.g., not properly formatted). Check that the email address is properly formatted and only includes allowed characters."
 msgstr ""
 
-#: includes/helper.php:338
+#: includes/helper.php:343
 msgid "The idempotency key provided is currently being used in another request. This occurs if your integration is making duplicate requests simultaneously."
 msgstr ""
 
-#: includes/helper.php:339
+#: includes/helper.php:344
 msgid "The specified amount is invalid. The charge amount must be a positive integer in the smallest currency unit, and not exceed the minimum or maximum amount."
 msgstr ""
 
-#: includes/helper.php:340
+#: includes/helper.php:345
 msgid "The source cannot be used because it is not in the correct state (e.g., a charge request is trying to use a source with a pending, failed, or consumed source). Check the status of the source you are attempting to use."
 msgstr ""
 
-#: includes/helper.php:341
+#: includes/helper.php:346
 msgid "Both a customer and source ID have been provided, but the source has not been saved to the customer. To create a charge for a customer with a specified source, you must first save the card details."
 msgstr ""
 
-#: includes/helper.php:342
+#: includes/helper.php:347
 msgid "The ZIP code provided was incorrect."
 msgstr ""
 
-#: includes/helper.php:343
+#: includes/helper.php:348
 msgid "An error occurred while processing the card. Try again later or with a different payment method."
 msgstr ""
 
-#: includes/helper.php:344
+#: includes/helper.php:349
 msgid "The card does not support this type of purchase."
 msgstr ""
 
-#: includes/helper.php:345
+#: includes/helper.php:350
 msgid "The card has been declined for an unknown reason."
 msgstr ""
 
-#: includes/helper.php:346
+#: includes/helper.php:351
 msgid "The customer has exceeded the balance or credit limit available on their card."
 msgstr ""
 
-#: includes/helper.php:347
+#: includes/helper.php:352
 msgid "The card does not support the specified currency."
 msgstr ""
 
-#: includes/helper.php:348
+#: includes/helper.php:353
 msgid "The bank returned the decline code do_not_honor, and did not provide any other information. We recommend that your customer contact their card issuer for more information. <a href=\"https://docs.stripe.com/declines\">Learn more about declines</a> "
 msgstr ""
 
-#: includes/helper.php:349
+#: includes/helper.php:354
 msgid "The payment has been declined as Stripe suspects it is fraudulent."
 msgstr ""
 
-#: includes/helper.php:350
+#: includes/helper.php:355
 msgid "The bank returned the decline code generic_decline, and did not provide any other information. We recommend that your customer contact their card issuer for more information. <a href=\"https://docs.stripe.com/declines\">Learn more about declines</a> "
 msgstr ""
 
-#: includes/helper.php:351
+#: includes/helper.php:356
 msgid "The PIN entered is incorrect. "
 msgstr ""
 
-#: includes/helper.php:352
+#: includes/helper.php:357
 msgid "The card has insufficient funds to complete the purchase."
 msgstr ""
 
-#: includes/helper.php:353
+#: includes/helper.php:358
 msgid "Please select a payment method before proceeding."
 msgstr ""
 
-#: includes/helper.php:354
+#: includes/helper.php:359
 msgid "Please enter your IBAN before proceeding."
 msgstr ""
 
-#: includes/helper.php:355
+#: includes/helper.php:360
 msgid "Please select a bank before proceeding"
 msgstr ""
 
-#: includes/helper.php:356
+#: includes/helper.php:361
 msgid "The IBAN you entered is incomplete."
 msgstr ""
 
-#: includes/helper.php:357
+#: includes/helper.php:362
 msgid "Please enter a valid CPF / CNPJ"
 msgstr ""
 
-#: includes/helper.php:358
+#: includes/helper.php:363
 msgid "Your card was declined. Your request was in test mode, but you used a real credit card. Only test cards can be used in test mode."
 msgstr ""
 
-#: includes/helper.php:359
+#: includes/helper.php:364
 msgid "You do not have permission to use the PaymentElement card form. Please send a request to https://support.stripe.com/ and ask for the \"server_side_confirmation_beta\" to be added to your account."
 msgstr ""
 
-#: includes/helper.php:360
+#: includes/helper.php:365
 msgid "Please provide a billing phone number."
 msgstr ""
 
-#: includes/helper.php:361
+#: includes/helper.php:366
 msgid "Your payment could not be processed at this time because your bank account does not support instant verification."
 msgstr ""
 
-#: includes/helper.php:369
+#: includes/helper.php:374
 msgid "The payment can't be authorized. Attempt the payment again. If you still can't process it, the customer should contact their card issuer."
 msgstr ""
 
-#: includes/helper.php:370
-#: includes/helper.php:380
-#: includes/helper.php:388
-#: includes/helper.php:389
-#: includes/helper.php:391
+#: includes/helper.php:375
+#: includes/helper.php:385
 #: includes/helper.php:393
-#: includes/helper.php:395
+#: includes/helper.php:394
+#: includes/helper.php:396
+#: includes/helper.php:398
+#: includes/helper.php:400
 msgid "The card has been declined for an unknown reason. The customer should contact their card issuer for more information."
 msgstr ""
 
-#: includes/helper.php:371
+#: includes/helper.php:376
 msgid "A transaction with identical amount and credit card information was submitted very recently. Check to see if a recent payment already exists."
 msgstr ""
 
-#: includes/helper.php:372
+#: includes/helper.php:377
 msgid "The card has expired. The customer should use another card."
 msgstr ""
 
-#: includes/helper.php:373
+#: includes/helper.php:378
 msgid "The card, or account the card is connected to, is invalid. The customer should contact their card issuer to check that the card is working correctly."
 msgstr ""
 
-#: includes/helper.php:374
+#: includes/helper.php:379
 msgid "The payment amount is invalid, or exceeds the amount that's allowed. If the amount appears correct, the customer should contact their card issuer."
 msgstr ""
 
-#: includes/helper.php:375
+#: includes/helper.php:380
 msgid "The PIN entered is incorrect. This only applies to payments made with a card reader."
 msgstr ""
 
-#: includes/helper.php:376
+#: includes/helper.php:381
 msgid "The card issuer couldn't be reached, so the payment couldn't be authorized. Attempt the payment again. If you still can't process it, the customer should contact their card issuer."
 msgstr ""
 
-#: includes/helper.php:377
+#: includes/helper.php:382
 msgid "The payment has been declined because the card is reported lost."
 msgstr ""
 
-#: includes/helper.php:378
+#: includes/helper.php:383
 msgid "The payment has been declined because it matches a value on the Stripe user's block list."
 msgstr ""
 
-#: includes/helper.php:379
+#: includes/helper.php:384
 msgid "The card, or account the card is connected to, is invalid. The customer should contact their card issuer for more information."
 msgstr ""
 
-#: includes/helper.php:381
+#: includes/helper.php:386
 msgid "The payment isn't permitted. The customer should contact their card issuer for more information."
 msgstr ""
 
-#: includes/helper.php:382
-#: includes/helper.php:383
+#: includes/helper.php:387
+#: includes/helper.php:388
 msgid "The card has been declined as it requires a PIN. This only applies to payments made with a card reader."
 msgstr ""
 
-#: includes/helper.php:384
-#: includes/helper.php:387
+#: includes/helper.php:389
+#: includes/helper.php:392
 msgid "The card cannot be used to make this payment (it is possibly reported lost or stolen). The customer should contact their card issuer for more information."
 msgstr ""
 
-#: includes/helper.php:385
+#: includes/helper.php:390
 msgid "The allowable number of PIN tries has been exceeded. The customer should use another card or method of payment."
 msgstr ""
 
-#: includes/helper.php:386
+#: includes/helper.php:391
 msgid "The payment couldn't be processed by the issuer for an unknown reason. Attempt the payment again. If you still can't process it, the customer should contact their card issuer."
 msgstr ""
 
-#: includes/helper.php:390
+#: includes/helper.php:395
 msgid "The payment has been declined for security reasons. The customer should contact their card issuer for more information."
 msgstr ""
 
-#: includes/helper.php:392
+#: includes/helper.php:397
 msgid "The payment has been declined because the card is reported stolen."
 msgstr ""
 
-#: includes/helper.php:394
+#: includes/helper.php:399
 msgid "A Stripe test card number was used. A genuine card must be used to make a payment."
 msgstr ""
 
-#: includes/helper.php:396
+#: includes/helper.php:401
 msgid "The card has been declined for an unknown reason. Ask the customer to attempt the payment again. If you still can't process it, the customer should contact their card issuer."
 msgstr ""
 
-#: includes/helper.php:397
+#: includes/helper.php:402
 msgid "The customer has exceeded the balance or credit limit available on their card. The customer should use an alternative payment method."
 msgstr ""
 
-#: includes/helper.php:863
+#: includes/helper.php:868
 msgid "is not allowed"
 msgstr ""
 
-#: includes/helper.php:875
+#: includes/helper.php:880
 msgid "Please enter a IBAN number to proceed."
 msgstr ""
 
-#: includes/helper.php:876
+#: includes/helper.php:881
 msgid "Please select a bank to proceed."
 msgstr ""
 
-#: includes/helper.php:917
+#: includes/helper.php:922
 msgid "Shipping address is invalid or no shipping methods are available. Please update your address."
 msgstr ""
 

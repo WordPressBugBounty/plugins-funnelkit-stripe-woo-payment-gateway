@@ -153,10 +153,15 @@ abstract class Helper {
 
 	/**
 	 * Checks Stripe minimum order value authorized per currency
+	 *
+	 * @param string $currency Optional currency code; defaults to the store currency.
+	 *
+	 * @return int
 	 */
-	public static function get_minimum_amount() {
+	public static function get_minimum_amount( $currency = '' ) {
+		$currency = $currency ? $currency : get_woocommerce_currency();
 
-		switch ( get_woocommerce_currency() ) {
+		switch ( $currency ) {
 
 			case 'GBP':
 				$minimum_amount = 30;
