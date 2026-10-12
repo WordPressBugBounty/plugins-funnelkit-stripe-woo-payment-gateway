@@ -162,24 +162,7 @@ class GooglePay extends CreditCard {
 	protected function filter_hooks() {
 		add_filter( 'woocommerce_payment_successful_result', array( $this, 'modify_successful_payment_result' ), 999, 2 );
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
-		add_action( 'wp_head', array( $this, 'maybe_hide_regular_gateway_css' ) );
-	}
-
-	/**
-	 * Hides the Google Pay gateway row in the regular payment list unless show_as_regular is selected.
-	 *
-	 * Google Pay is always rendered by the Stripe Express Checkout Element (see FKWCS_GOOGLEPAY);
-	 * JS hides the row again if Google Pay turns out to be unavailable (mirrors Apple Pay).
-	 */
-	public function maybe_hide_regular_gateway_css() {
-		if ( ! is_checkout() || 'yes' !== $this->enabled ) {
-			return;
-		}
-		$display_locations = (array) $this->get_option( 'display_locations', array() );
-
-		if ( ! in_array( 'show_as_regular', $display_locations, true ) ) {
-			echo '<style>' . esc_html( 'li.payment_method_fkwcs_stripe_google_pay{display:none!important}' ) . '</style>';
-		}
+		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'maybe_hide_from_checkout_list' ) );
 	}
 
 	public function get_method_description() {
@@ -437,7 +420,7 @@ class GooglePay extends CreditCard {
 		}
 
 		if ( ! empty( $wp->query_vars['order-pay'] ) ) {
-			$order = wc_get_order( absint( $wp->query_vars['order-pay'] ) );
+			$order = $this->get_verified_order_pay_order();
 			if ( ! $order instanceof \WC_Order ) {
 				return $data;
 			}
@@ -636,6 +619,29 @@ class GooglePay extends CreditCard {
 			check_ajax_referer( 'fkwcs_nonce', 'fkwcs_nonce' );
 
 		}
+
+		/**
+		 * This method also runs at enqueue time ( $is_localized ) via the fkwcs_localized_data filter,
+		 * where WooCommerce may not have initialized the cart/session. Guard the WC()->session
+		 * dereference and return a safe default to avoid a fatal.
+		 */
+		if ( is_null( WC()->session ) || ! ( WC()->cart instanceof \WC_Cart ) ) {
+			$default = array(
+				'shipping_required'     => 'no',
+				'is_fkwcs_need_payment' => false,
+				'order_data'            => array(
+					'total'    => 0,
+					'currency' => strtolower( get_woocommerce_currency() ),
+				),
+				'shipping_options'      => array(),
+			);
+			if ( 'wc_ajax_fkwcs_get_cart_details' === current_action() ) {
+				wp_send_json_success( $default );
+			}
+
+			return $default;
+		}
+
 		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', array() );
 		if ( ! is_null( WC()->cart ) && WC()->cart instanceof \WC_Cart ) {
 			WC()->cart->calculate_totals();
@@ -880,4 +886,50 @@ class GooglePay extends CreditCard {
 		<?php
 		self::$mini_cart_wrapper_rendered = true;
 	}
+
+	/**
+	 * Keep the gateway out of the regular payment methods list unless the merchant asked for it.
+	 *
+	 * The row used to render for everyone and was hidden with a stylesheet rule, which any theme
+	 * styling `.payment_methods > li` overrides - the gateway then appears as a selectable payment
+	 * method on stores that only ever wanted the express button. Removing it server-side cannot be
+	 * overridden. The express buttons are unaffected: they are gated on the wallet's own settings,
+	 * not on this list (see SmartButtons::has_available_express_gateway()).
+	 *
+	 * @param array $gateways Available gateways.
+	 *
+	 * @return array
+	 */
+	public function maybe_hide_from_checkout_list( $gateways ) {
+		if ( ! isset( $gateways[ $this->id ] ) || is_admin() ) {
+			return $gateways;
+		}
+
+		// Keep the gateway available while a payment is actually being processed. The express flow
+		// can post this gateway id (Amazon Pay always does, Apple Pay does when its row is present)
+		// and WooCommerce rejects a payment_method that is not in this list.
+		//
+		// The test has to be woocommerce_before_checkout_process, which only fires inside
+		// WC_Checkout::process_checkout(). WOOCOMMERCE_CHECKOUT is not usable here: WC_AJAX
+		// ::update_order_review() defines it too, and that request re-renders the whole
+		// .woocommerce-checkout-payment fragment - so gating on the constant put the row back into
+		// the payment list on the first refresh after the page loaded.
+		if ( did_action( 'woocommerce_before_checkout_process' ) ) {
+			return $gateways;
+		}
+
+		$locations = $this->get_option( 'display_locations' );
+
+		// Never configured, or an unexpected shape: leave the current behaviour alone.
+		if ( ! is_array( $locations ) ) {
+			return $gateways;
+		}
+
+		if ( ! in_array( 'show_as_regular', $locations, true ) ) {
+			unset( $gateways[ $this->id ] );
+		}
+
+		return $gateways;
+	}
+
 }

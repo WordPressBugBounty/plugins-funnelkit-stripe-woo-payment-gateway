@@ -84,7 +84,10 @@ abstract class Helper {
 			$total_amt = wc_format_decimal( ( (float) $total * $multiplier ), wc_get_price_decimals() ); // In cents.
 		}
 
-		return ( $is_float ) ? floatval( $total_amt ) : absint( $total_amt );
+		// Round (not truncate) to the nearest smallest currency unit. absint() alone drops fractional
+		// cents (e.g. "2147.93" => 2147 instead of 2148), which makes itemized line-item sums fall short
+		// of the single-conversion PaymentIntent amount and triggers Stripe amount_details mismatches.
+		return ( $is_float ) ? floatval( $total_amt ) : absint( round( (float) $total_amt ) );
 	}
 
 	public static function get_gateway_settings( $gateway = 'fkwcs_stripe' ) {

@@ -667,10 +667,6 @@ class Sepa extends Abstract_Payment_Gateway {
 
 		$response = $stripe_api->payment_methods( 'attach', array( $source_id, array( 'customer' => $customer_id ) ) );
 		$response = $response['success'] ? $response['data'] : false;
-		$user     = wp_get_current_user();
-		$user_id  = ( $user->ID && $user->ID > 0 ) ? $user->ID : false;
-		$is_live  = ( 'live' === $this->test_mode ) ? true : false;
-		$this->create_payment_token_for_user( $user_id, $source_object, $is_live );
 
 		if ( ! $response || is_wp_error( $response ) || ! empty( $response->error ) ) {
 			$error_msg = __( 'Unable to attach payment method to customer', 'funnelkit-stripe-woo-payment-gateway' );
@@ -681,12 +677,18 @@ class Sepa extends Abstract_Payment_Gateway {
 			return;
 		}
 
+		// A token saved before the attach is confirmed fails on every later payment.
+		$user    = wp_get_current_user();
+		$user_id = ( $user->ID && $user->ID > 0 ) ? $user->ID : false;
+		$is_live = ( 'live' === $this->test_mode ) ? true : false;
+		$this->create_payment_token_for_user( $user_id, $source_object, $is_live );
+
 		do_action( 'fkwcs_add_payment_method_' . ( isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : '' ) . '_success', $source_id, $source_object ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment method addition
 		Helper::log( 'New payment method added successfully' );
 
 		return array(
 			'result'   => 'success',
-			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
+			'redirect' => apply_filters( 'fkwcs_add_payment_method_redirect_url', wc_get_endpoint_url( 'payment-methods' ), $this->id, $source_object ),
 		);
 	}
 

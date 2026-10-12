@@ -118,7 +118,8 @@ class Ideal extends Abstract_Payment_Gateway {
 	 * @since 1.14.0.4
 	 */
 	private function is_zero_initial_payment() {
-		$has_cart     = ! is_null( WC()->cart ) && ! WC()->cart->is_empty();
+		$cart_ready   = did_action( 'wp_loaded' ) && ( WC()->cart instanceof \WC_Cart );
+		$has_cart     = $cart_ready && ! WC()->cart->is_empty();
 		$is_order_pay = is_wc_endpoint_url( 'order-pay' );
 
 		if ( ! $has_cart && ! $is_order_pay ) {

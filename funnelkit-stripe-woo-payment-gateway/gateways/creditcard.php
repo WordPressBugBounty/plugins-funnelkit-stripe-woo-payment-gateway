@@ -907,13 +907,28 @@ class CreditCard extends Abstract_Payment_Gateway {
 		}
 		// Set wallet payment method title early so it shows correctly when order is in progress (authorized/on-hold)
 		if ( ( property_exists( $response->payment_method_details, 'card' ) || isset( $response->payment_method_details->card ) ) && ( property_exists( $response->payment_method_details->card, 'wallet' ) || isset( $response->payment_method_details->card->wallet ) ) ) {
-			if ( 'google_pay' === $response->payment_method_details->card->wallet->type ) {
-				$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_google_pay'];
-				$order->set_payment_method_title( $gateway->get_title() );
-				$order->save();
-			} elseif ( 'apple_pay' === $response->payment_method_details->card->wallet->type ) {
-				$gateway = WC()->payment_gateways()->payment_gateways()['fkwcs_stripe_apple_pay'];
-				$order->set_payment_method_title( $gateway->get_title() );
+			$wallet_gateway_ids = array(
+				'google_pay' => 'fkwcs_stripe_google_pay',
+				'apple_pay'  => 'fkwcs_stripe_apple_pay',
+			);
+			$wallet_type        = $response->payment_method_details->card->wallet->type;
+			$gateways           = WC()->payment_gateways()->payment_gateways();
+
+			if ( isset( $wallet_gateway_ids[ $wallet_type ], $gateways[ $wallet_gateway_ids[ $wallet_type ] ] ) ) {
+				$wallet_gateway_id = $wallet_gateway_ids[ $wallet_type ];
+
+				// The row the shopper picked is not necessarily the wallet that paid: the Express
+				// Checkout Element offers whatever the device supports, so the Apple Pay row can
+				// complete a Google Pay payment. When the order is stored against the wrong wallet
+				// gateway, correct it from Stripe as well - otherwise the order header, the payment
+				// method dropdown and the "paid via" line each name a different method.
+				// Orders placed through the card gateway are left alone: they are processed there
+				// on purpose and only the title describes the wallet.
+				if ( in_array( $order->get_payment_method(), $wallet_gateway_ids, true ) && $order->get_payment_method() !== $wallet_gateway_id ) {
+					$order->set_payment_method( $wallet_gateway_id );
+				}
+
+				$order->set_payment_method_title( $gateways[ $wallet_gateway_id ]->get_title() );
 				$order->save();
 			}
 		}
@@ -1093,7 +1108,7 @@ class CreditCard extends Abstract_Payment_Gateway {
 
 		return array(
 			'result'   => 'success',
-			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
+			'redirect' => apply_filters( 'fkwcs_add_payment_method_redirect_url', wc_get_endpoint_url( 'payment-methods' ), $this->id, $source_object ),
 		);
 	}
 

@@ -757,13 +757,15 @@ trait WC_Subscriptions_Trait {
 		$source_id = Helper::get_meta( $subscription, '_fkwcs_source_id' );
 
 		// For BW compat will remove in future.
-		if ( empty( $source_id ) ) {
+		if ( empty( $source_id ) && $subscription->get_id() ) {
 			$source_id = Helper::get_meta( $subscription, '_fkwcs_card_id' );
 
 			// Take this opportunity to update the key name.
-			$subscription->update_meta_data( '_fkwcs_source_id', $source_id );
-			$subscription->delete_meta_data( '_fkwcs_card_id' );
-			$subscription->save_meta_data();
+			if ( ! empty( $source_id ) ) {
+				$subscription->update_meta_data( '_fkwcs_source_id', $source_id );
+				$subscription->delete_meta_data( '_fkwcs_card_id' );
+				$subscription->save_meta_data();
+			}
 		}
 		$customer_key              = Helper::get_customer_key();
 		$payment_meta[ $this->id ] = array(

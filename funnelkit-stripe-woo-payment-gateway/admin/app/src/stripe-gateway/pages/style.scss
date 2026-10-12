@@ -1,0 +1,81 @@
+.bwf-page-title {
+  @include font(28, 40, 500, $mine-shaft);
+}
+
+.bwf-page-default-btn {
+  border: 1px solid $blue-base;
+  background: $white;
+  padding: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-style: normal;
+  @include font(16, 20, 500, $blue-base);
+  width: 240px;
+  height: 44px;
+}
+
+.bwf-highlight {
+  font-weight: 500;
+  color: $mine-shaft;
+}
+
+.bwf-success-container {
+  width: 690px;
+}
+
+.bwf-inactive-container {
+  width: 621px;
+}
+
+.bwf-failed-container {
+  width: 350px;
+}
+
+.bwf-dashboard-container {
+  width: 40vw;
+}
+
+.bwf-success-mode {
+  @include font(13, 20, 400, #353030);
+}
+
+.fkwcs_connect_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 54px;
+  text-decoration: none;
+  width: 240px;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 30px;
+  border-radius: 8px;
+  min-width: 280px;
+  &, &:hover, &:focus, &:active {
+    background: #635BFF;
+    color: $white;
+  }
+
+}
+.bwf-inactive-cross {
+  bottom: 38px;
+  right: 35px;
+}
+.bwf-stripe-mode-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.bwf-redirect-text {
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #F9F9FF;
+  padding: 6px 12px;
+  border-radius: 8px;
+  @include font(13, 20, 400);
+}

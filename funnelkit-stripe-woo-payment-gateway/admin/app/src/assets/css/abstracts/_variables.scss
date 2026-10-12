@@ -1,0 +1,92 @@
+@import 'node_modules/@automattic/color-studio/dist/color-variables.scss';
+
+// Import Gutenberg variables
+@import 'node_modules/@wordpress/base-styles/_colors';
+@import 'node_modules/@wordpress/base-styles/_variables';
+@import 'node_modules/@wordpress/base-styles/_mixins';
+@import 'node_modules/@wordpress/base-styles/_breakpoints';
+@import 'node_modules/@wordpress/base-styles/_animations';
+@import 'node_modules/@wordpress/base-styles/_z-index';
+
+@include wordpress-admin-schemes;
+
+$fallback-gutter: 24px;
+$fallback-gutter-large: 40px;
+$gutter: var(--main-gap);
+$gutter-large: var(--large-gap);
+
+$gap-largest: 40px;
+$gap-larger: 36px;
+$gap-large: 24px;
+$gap: 16px;
+$gap-small: 12px;
+$gap-smaller: 8px;
+$gap-smallest: 4px;
+
+$border-radius: 8px;
+
+// Header
+$header-height: 56px;
+
+// Sidebar
+$sidebar-width: 272px;
+
+// Stepper
+$step-width: 840px;
+
+// spacing variable
+$spacing: $gap;
+
+// Gutenberg variable overrides.
+$white: $studio-white;
+$black: $studio-black;
+$alert-red: $error-red;
+$alert-yellow: $notice-yellow;
+$alert-green: $valid-green;
+
+// WordPress defaults
+$adminbar-height: 32px;
+$adminbar-height-mobile: 46px;
+
+// wp-admin colors
+$wp-admin-background: #f1f1f1;
+$wp-admin-sidebar: #24292d;
+
+$l-blue: #f6fcff;
+$l-blue1: #fafdff;
+
+$l-blue2: #fafaff;
+$l-blue2: #eef7ff;
+$l-blue3: #dedfea;
+
+$grey-light: #f1f1f1;
+$grey-light1: #fbfbfb;
+$grey-light2: #efeeee;
+$grey-light3: #f8f8f8;
+$green-light: #6dbe45;
+$blue-base: #0073aa;
+$blue-base-dark: #135e96;
+$purple_light: #eaecfb;
+$purple_light: $l-blue2;
+
+$grey-bg: #dedfea;
+
+$text-color-1: #000;
+$text-color-2: #353030;
+$text-color-3: #82838e;
+
+$menu-height: 55px;
+$color-green: #6dbe45;
+$color-green-hover: #6dbe45;
+$blue-light: #f6fcff;
+$delete-red: #d72d1d;
+
+// Muriel
+$muriel-box-shadow-1dp: 0 2px 1px -1px rgba(0, 0, 0, 0.2),
+0 1px 1px 0 rgba(0, 0, 0, 0.14), 0 1px 3px 0 rgba(0, 0, 0, 0.12);
+$muriel-box-shadow-6dp: 0 3px 5px rgba(0, 0, 0, 0.2),
+0 1px 18px rgba(0, 0, 0, 0.12), 0 6px 10px rgba(0, 0, 0, 0.14);
+$muriel-box-shadow-8dp: 0 5px 5px -3px rgba(0, 0, 0, 0.2),
+0 8px 10px 1px rgba(0, 0, 0, 0.14), 0 3px 14px 2px rgba(0, 0, 0, 0.12);
+$select-box-shadow: 0px 1px 16px rgb(0 0 0 / 15%);
+$dashboard-box-shadow: 0px 2px 12px rgba(45, 62, 215, 0.1);

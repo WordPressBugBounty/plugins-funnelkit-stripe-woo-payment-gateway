@@ -1,0 +1,157 @@
+.bwf-webhook-title {
+  @include font(15, 24, 500, $black);
+}
+
+.bwf-webhook-description {
+  @include font(13, 26, 400, $gray);
+  display: grid;
+  grid-template-columns: 370px 1fr;
+}
+
+.bwf-manually-title {
+  @include font(12, 16, 500, $black);
+  margin-top: 8px;
+}
+
+.bwf-webhook-points {
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 26px;
+}
+
+.bwf-manual-option {
+  display: grid;
+  grid-template-columns: 20px 130px 1fr;
+  grid-gap: 16px;
+}
+
+.bwf-hint {
+  @include font(12, 16, 400, $gray);
+}
+
+.bwf-save-btn {
+  @include font(14, 20, 500, $white);
+  padding: 8px 16px;
+  background: $blue-base;
+  border-radius: 4px;
+  height: 36px;
+  border: 1px solid $blue-base;
+  cursor: pointer;
+}
+
+.bwf-code-copy input[readonly] {
+  @include font(14, 16, 400, $mine-shaft);
+  width: 100%;
+  border: 1px solid $gray-10;
+  background: #F6F6F6;
+  height: 36px;
+  padding: 0 16px;
+}
+
+.bwf-copy {
+  position: relative;
+}
+
+.bwf-code-copy-icon {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+}
+
+.bwf-number-list {
+  background: #EBF2F6;
+  width: 28px;
+  height: 24px;
+  border-radius: 50%;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  color: #0073AA;
+  justify-content: center;
+  margin-right: 16px;
+  margin-top: 4px;
+}
+
+.bwf-webhook-container {
+  width: 638px;
+}
+
+.bwf-validation {
+  p {
+    color: red !important;
+    margin-bottom: 0px !important;
+    margin-top: 8px !important;
+  }
+
+  input {
+    border-color: red !important;
+    border-radius: 3px !important;
+  }
+
+  .components-base-control__field {
+    margin-bottom: 0px !important;
+  }
+}
+
+.bwf-webhook-container {
+  .bwf-retry-container {
+    border: 1px solid $milano-red;
+    border-radius: 6px;
+    min-height: 40px;
+    width: 638px;
+
+    .bwf-retry-btn {
+      background: $milano-red;
+      border: 1px solid $milano-red;
+      border-radius: 3px;
+      width: 55px;
+      height: 24px;
+      @include font(13, 20, 500, $white);
+      font-style: normal;
+      cursor: pointer;
+      padding: 2px 12px;
+
+      &.isBusy {
+        background-size: 100px 100%;
+        background-image: linear-gradient(
+                        -45deg, $red 33%, $milano-red 33%, $milano-red 70%, $red 70%);
+        border-color: $red;
+      }
+    }
+
+    .bwf-manually-btn {
+      background: $white;
+      border: 1px solid $milano-red;
+      border-radius: 3px;
+      padding: 2px 12px;
+      height: 24px;
+      @include font(13, 20, 500, $milano-red);
+      font-style: normal;
+      cursor: pointer;
+    }
+
+    .bwf-retry-text {
+      @include font(13, 20, 400, $milano-red);
+      word-wrap: break-word;
+    }
+  }
+}
+
+.bwf-webhook-container {
+  .bwf-spinner-btn {
+
+  }
+}
+
+.bwf-skip-webhook {
+  width: 638px;
+  justify-content: center;
+  padding-top: 26px !important;
+}
+
+.bwf-error-msg-container {
+  max-width: 365px;
+}

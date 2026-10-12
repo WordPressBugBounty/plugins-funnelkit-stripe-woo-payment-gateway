@@ -1,0 +1,52 @@
+@import 'node_modules/@automattic/color-studio/dist/color-variables.scss';
+@import 'node_modules/@wordpress/base-styles/colors';
+
+$gray-700: #757575; // Meets 4.6:1 text contrast against white.
+$gray-100: #f0f0f0;
+$gray: #82838e;
+$gray-10: #dedfea;
+$black: #000000;
+$white: #ffffff;
+$dark-blue: #2d3ed7;
+$royal-blue: #2962ff;
+$mine-shaft: #353030;
+$dark-green: #037401;
+$light-green: #b6e0b5;
+$green-10: #f1fff0;
+$blue: #007cba;
+$red: #d72d1d;
+$comet: #5f6381;
+$salego: #eaecfb;
+$fuel-yellow: #eca717;
+$milano-red: #E15334;
+$ghost-white: #f4f5fb;
+$chromaphobic-black: #292929;
+
+$transparent: rgba(255, 255, 255, 0);
+
+$gray-text: $gray-700;
+$gray-text-hover: $gray-900;
+
+// Gutenberg
+$button-hover: #fafafa;
+$button-hover-border: #999;
+$button-disabled: #a0a5aa;
+$button-disabled-border: #ddd;
+$button-focus-inner: #00435d;
+$button-focus-outer: #bfe7f3;
+$input-active-border: #00a0d2;
+$input-active-inner: $button-focus-inner;
+$input-active-outer: $button-focus-outer;
+
+// Bright colors
+$valid-green: #4ab866;
+$notice-yellow: #ffb900;
+$error-red: #d94f4f;
+$box-shadow-blue: #5b9dd9;
+$core-orange: #ca4a1f;
+
+$button: #f0f2f4;
+$button-border: darken($button, 20%);
+
+// Blues
+$core-blue-dark-900: #0071a1;

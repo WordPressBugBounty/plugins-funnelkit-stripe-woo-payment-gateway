@@ -352,13 +352,16 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 		 * @return mixed|null
 		 */
 		protected function get_upe_elements( $order ) {
-			$stripe  = $this->get_wc_gateway();
-			$data    = array(
+			$stripe      = $this->get_wc_gateway();
+			$get_package = WFOCU_Core()->data->get( '_upsell_package' );
+			$currency     = strtolower( $order->get_currency() );
+			$amount       = ! empty( $get_package['total'] ) ? (float) $get_package['total'] : 0;
+			$data         = array(
 				'locale'                => $stripe->convert_wc_locale_to_stripe_locale( get_locale() ),
 				'mode'                  => 'payment',
 				'paymentMethodCreation' => 'manual',
-				'currency'              => 'usd', // this is only to allow opening of the payment element
-				'amount'                => Helper::get_formatted_amount( 1, 'usd' ), // keeping it as sample
+				'currency'              => $currency,
+				'amount'                => Helper::get_formatted_amount( $amount, $currency ),
 			);
 			$methods = array( 'card', 'link' );
 
@@ -1044,9 +1047,6 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 							this.element_data = this.payment_data.element_data;
 							this.element_options = this.payment_data.element_options;
 							this.billing_details = this.payment_data.billing_details;
-							this.elements =  wfocuStripe.elements(this.element_data);
-							this.payment = this.elements.create('payment', this.element_options);
-							this.setup();
 							this.events();
 							this.resolve = () => {
 							};
@@ -1093,6 +1093,7 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 						showCreditCard(bucket, failedCase = false) {
 							const self = this;
 							this.bucket = bucket;
+							this.initializeUpeElements(bucket);
 							$('body').addClass('wfocu_credit_card_open');
 							bucket.swal.show({
 								'html': `<div class="wfocu_fkwcs_wrapper">
@@ -1215,6 +1216,21 @@ if ( ! class_exists( 'WFOCU_Plugin_Integration_Fkwcs_Stripe' ) && class_exists( 
 							});
 
 
+						}
+
+						initializeUpeElements(bucket) {
+							const total = Number(bucket.getBucketSendData()?.totals?.total || 0);
+							const currency = String(this.element_data.currency || '').toLowerCase();
+							const multiplier = Number(this.element_data.currency_multiplier || 100);
+
+							if ( total <= 0 || ! currency ) {
+								return;
+							}
+
+							this.element_data.amount = Math.round(total * multiplier);
+							this.elements = wfocuStripe.elements(this.element_data);
+							this.payment = this.elements.create('payment', this.element_options);
+							this.setup();
 						}
 
 						processPayment() {

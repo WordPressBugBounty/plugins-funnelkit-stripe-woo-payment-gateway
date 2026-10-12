@@ -247,6 +247,11 @@ class SmartButtons extends CreditCard {
 			'apple_pay_disable_shipping'  => ( isset( $apple_pay['disable_shipping_info'] ) && 'yes' === $apple_pay['disable_shipping_info'] ) ? 'yes' : 'no',
 			'google_pay_disable_shipping' => ( isset( $google_pay['disable_shipping_info'] ) && 'yes' === $google_pay['disable_shipping_info'] ) ? 'yes' : 'no',
 			'is_product'                  => $this->is_product() ? 'yes' : 'no',
+			// Distinguishes "on a product page" from "product is a selected express location".
+			// The express bundle can be forced onto product pages (e.g. FK Cart slide-cart buttons)
+			// even when product is not a selected express location, so product-page event binding
+			// must gate on this flag, not on is_product alone.
+			'product_express_enabled'     => ( $this->is_product() && $this->is_selected_location() ) ? 'yes' : 'no',
 			'is_cart'                     => $this->is_cart() ? 'yes' : 'no',
 			'wc_endpoints'                => self::get_public_endpoints(),
 			'currency'                    => strtolower( $currency ),
@@ -383,10 +388,20 @@ class SmartButtons extends CreditCard {
 	protected function has_available_express_gateway() {
 		$gateways = WC()->payment_gateways->get_available_payment_gateways();
 
-		if ( isset( $gateways['fkwcs_stripe'] )
-			|| isset( $gateways['fkwcs_stripe_apple_pay'] )
-			|| isset( $gateways['fkwcs_stripe_google_pay'] ) ) {
+		if ( isset( $gateways['fkwcs_stripe'] ) ) {
 			return true;
+		}
+
+		// Read the wallet settings rather than the available-gateways list. A wallet that is
+		// express-only removes itself from that list so its row is never rendered in the regular
+		// payment methods (see AplePay/GooglePay::maybe_hide_from_checkout_list), and it still has
+		// to power the express buttons - same reasoning as the Link branch below.
+		foreach ( array( 'fkwcs_stripe_apple_pay', 'fkwcs_stripe_google_pay' ) as $wallet ) {
+			$wallet_settings = Helper::get_gateway_settings( $wallet );
+
+			if ( isset( $wallet_settings['enabled'] ) && 'yes' === $wallet_settings['enabled'] ) {
+				return true;
+			}
 		}
 
 		// Link is not registered via woocommerce_payment_gateways, so it can never be a key in

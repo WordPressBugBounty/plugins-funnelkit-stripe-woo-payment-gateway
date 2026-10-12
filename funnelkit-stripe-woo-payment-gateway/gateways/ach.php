@@ -536,10 +536,6 @@ class ACH extends LocalGateway {
 
 		$response = $stripe_api->payment_methods( 'attach', array( $source_id, array( 'customer' => $customer_id ) ) );
 		$response = $response['success'] ? $response['data'] : false;
-		$user     = wp_get_current_user();
-		$user_id  = ( $user->ID && $user->ID > 0 ) ? $user->ID : false;
-		$is_live  = ( 'live' === $this->test_mode ) ? true : false;
-		$this->create_payment_token_for_user( $user_id, $source_object, $is_live );
 
 		if ( ! $response || is_wp_error( $response ) || ! empty( $response->error ) ) {
 			$error_msg = __( 'Unable to attach payment method to customer', 'funnelkit-stripe-woo-payment-gateway' );
@@ -550,12 +546,19 @@ class ACH extends LocalGateway {
 			return;
 		}
 
+		// Stripe refuses to attach a bank account it has not verified. Saving a token before the
+		// attach is confirmed leaves a saved method that fails on every later payment.
+		$user    = wp_get_current_user();
+		$user_id = ( $user->ID && $user->ID > 0 ) ? $user->ID : false;
+		$is_live = ( 'live' === $this->test_mode ) ? true : false;
+		$this->create_payment_token_for_user( $user_id, $source_object, $is_live );
+
 		do_action( 'fkwcs_add_payment_method_' . ( isset( $_POST['payment_method'] ) ? wc_clean( wp_unslash( $_POST['payment_method'] ) ) : '' ) . '_success', $source_id, $source_object ); //phpcs:ignore WordPress.Security.NonceVerification.Missing, FKWCS.CodeAnalysis.FKWCSSpecific.MissingCapabilityCheck, FKWCS.CodeAnalysis.FunnelBuilderSpecific.MissingCapabilityCheck -- Processing checkout form data during payment method addition
 		Helper::log( 'New payment method added successfully' );
 
 		return array(
 			'result'   => 'success',
-			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
+			'redirect' => apply_filters( 'fkwcs_add_payment_method_redirect_url', wc_get_endpoint_url( 'payment-methods' ), $this->id, $source_object ),
 		);
 	}
 
@@ -723,19 +726,24 @@ class ACH extends LocalGateway {
 		$response       = $stripe_api->payment_methods( 'retrieve', array( $payment_method ) );
 		$payment_method = $response['success'] ? $response['data'] : false;
 
+		// Stripe will not attach a bank account it has not verified yet. Tokenising one anyway
+		// leaves a saved method that fails at the attach step on every later payment, and the
+		// shopper cannot clear it themselves.
+		$is_attached = true;
 		if ( $payment_method && empty( $payment_method->customer ) ) {
 			$customer_id = $this->get_customer_id( $order );
 			if ( ! empty( $customer_id ) ) {
 				$attach_response = $stripe_api->payment_methods( 'attach', array( $payment_method->id, array( 'customer' => $customer_id ) ) );
 				if ( ! $attach_response['success'] ) {
 					Helper::log( sprintf( 'Failed to attach payment method %1$s to customer %2$s: %3$s', $payment_method->id, $customer_id, $attach_response['message'] ?? 'Unknown error' ), 'warning' );
+					$is_attached = false;
 				}
 			}
 		}
 
 		$token = null;
 		$user  = $order->get_id() ? $order->get_user() : wp_get_current_user();
-		if ( $user instanceof \WP_User ) {
+		if ( $is_attached && $user instanceof \WP_User ) {
 			$user_id = $user->ID;
 			$token   = $this->create_payment_token_for_user( $user_id, $payment_method, $intent->livemode );
 

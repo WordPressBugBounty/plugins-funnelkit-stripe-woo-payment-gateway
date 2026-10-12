@@ -4,7 +4,7 @@ Tags: stripe, apple pay, google pay, WooCommerce Stripe
 Requires at least: 5.4.0
 Tested up to: 7.1
 Requires PHP: 7.0
-Stable tag: 1.15.0.1
+Stable tag: 1.16.0
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -284,6 +284,23 @@ Yes, visit our complete documentation on [Stripe Payment Gateway for WooCommerce
 
 
 == Change log ==
+
+= 1.16.0 =
+* Improved: Express wallets (Apple Pay, Google Pay, Amazon Pay) no longer appear as a regular payment method on checkout, order pay and change payment pages unless "Show as Regular Payment Gateway" is selected. (#1479)
+* Improved: Hardened code on order pay pages. (#1497)
+* Improved: Subscriptions: Stripe payment meta is now preserved during subscription REST API updates with WooCommerce Subscriptions 9.1+. (#1477)
+* Improved: Sublium free-trial and zero-due subscription checkouts now mount correctly for a few currencies. (#1491)
+* Improved: ACH, SEPA and Cash App no longer save a payment method token when Stripe refuses to attach it to the customer. (#1495)
+* Improved: Line items sent to Stripe now reconcile exactly with the payment amount on VAT-inclusive orders, fixing declined payments caused by a 1 cent mismatch. (#1475)
+* Improved: Added filter `fkwcs_add_payment_method_redirect_url` to customise the redirect after adding a payment method from My Account. (#1485)
+* Improved: Express checkout buttons now refresh reliably after cart total changes, and optimized the cart calculations on page load. (#1493)
+* Fixed: One-click upsell Payment Element now shows the correct amount during wallet payments. (#1456)
+* Fixed: PHP error when express checkout scripts load on background requests without a WooCommerce cart. (#1481)
+
+
+
+
+
 
 = 1.15.0.1 =
 * Improved: Express Checkout: Express buttons styling improved with the FK checkout. (#1464)

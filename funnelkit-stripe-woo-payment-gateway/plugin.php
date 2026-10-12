@@ -86,6 +86,64 @@ class Stripe {
 		$this->hooks();
 		$this->webhook();
 		$this->include_gateways();
+
+		if ( $this->is_rest_api_request() ) {
+			add_filter( 'woocommerce_subscription_payment_meta', array( $this, 'maybe_declare_subscription_payment_meta' ), 20, 2 );
+		}
+	}
+
+	/**
+	 * Declare our subscription payment meta fields for gateways that are not instantiated yet.
+	 *
+	 * Since WooCommerce Subscriptions 9.1.0 the subscriptions REST API keeps only the payment meta fields a gateway
+	 * declares through this filter, and it applies the filter before WooCommerce loads the payment gateways.
+	 * Our gateways declare their fields from their instances, so without this the requested payment_details are dropped.
+	 * Loaded gateway instances still own the declaration, this only fills in the ones that are missing.
+	 *
+	 * @param array            $payment_meta Payment meta declared by gateways.
+	 * @param \WC_Subscription $subscription Subscription being updated.
+	 *
+	 * @return array
+	 */
+	public function maybe_declare_subscription_payment_meta( $payment_meta, $subscription ) {
+		if ( ! is_array( $payment_meta ) || ! $subscription instanceof \WC_Subscription ) {
+			return $payment_meta;
+		}
+
+		// Gateways that call maybe_init_subscriptions(), keep in sync with get_gateways().
+		$gateway_ids = array(
+			'fkwcs_stripe',
+			'fkwcs_stripe_sepa',
+			'fkwcs_stripe_ach',
+			'fkwcs_stripe_ideal',
+			'fkwcs_stripe_bancontact',
+			'fkwcs_stripe_apple_pay',
+			'fkwcs_stripe_google_pay',
+			'fkwcs_stripe_cashapp',
+			'fkwcs_stripe_amazon_pay',
+		);
+
+		$customer_key = Stripe\Helper::get_customer_key();
+		foreach ( $gateway_ids as $gateway_id ) {
+			if ( isset( $payment_meta[ $gateway_id ] ) ) {
+				continue;
+			}
+
+			$payment_meta[ $gateway_id ] = array(
+				'post_meta' => array(
+					$customer_key      => array(
+						'value' => Stripe\Helper::get_meta( $subscription, $customer_key ),
+						'label' => 'Stripe Customer ID',
+					),
+					'_fkwcs_source_id' => array(
+						'value' => Stripe\Helper::get_meta( $subscription, '_fkwcs_source_id' ),
+						'label' => 'Stripe Source ID',
+					),
+				),
+			);
+		}
+
+		return $payment_meta;
 	}
 
 	/**
@@ -335,8 +393,15 @@ class Stripe {
 				'currency' => strtolower( get_woocommerce_currency() ),
 			),
 		);
-		if ( $cart_source instanceof \FKWCS\Gateway\Stripe\Abstract_Payment_Gateway && method_exists( $cart_source, 'ajax_get_cart_details' ) ) {
-			$localize_data['cart_data'] = $cart_source->ajax_get_cart_details( true );
+		// Only invoke the AJAX-shaped cart details method when WooCommerce has actually initialized the
+		// cart/session for this request; otherwise keep the safe default above. Wrapped in try/catch per
+		// the plugin's silent-failure guideline so a missing cart/session can never fatal the page load.
+		if ( $cart_source instanceof \FKWCS\Gateway\Stripe\Abstract_Payment_Gateway && method_exists( $cart_source, 'ajax_get_cart_details' ) && ! is_null( WC()->cart ) && ! is_null( WC()->session ) ) {
+			try {
+				$localize_data['cart_data'] = $cart_source->ajax_get_cart_details( true );
+			} catch ( \Throwable $e ) {
+				Stripe\Helper::log( 'localize_data cart details failed: ' . $e->getMessage() );
+			}
 		}
 
 		return $localize_data;

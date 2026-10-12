@@ -1,0 +1,90 @@
+$loading_size: 24px;
+.bwf-loading-ring {
+  position: relative;
+  width: $loading_size;
+  height: $loading_size;
+  margin: auto;
+
+  &.bwf-loading-s {
+    $loading_size: 1.5em;
+    width: $loading_size;
+    height: $loading_size;
+
+    div {
+      width: calc(#{$loading_size} - 4px);
+      height: calc(#{$loading_size} - 4px);
+    }
+  }
+
+  &.bwf-loading-l {
+    $loading_size: 4em;
+    width: $loading_size;
+    height: $loading_size;
+
+    div {
+      width: calc(#{$loading_size} - 4px);
+      height: calc(#{$loading_size} - 4px);
+    }
+  }
+
+  &.bwf-loading-xl {
+    $loading_size: 6em;
+    width: $loading_size;
+    height: $loading_size;
+
+    div {
+      width: calc(#{$loading_size} - 4px);
+      height: calc(#{$loading_size} - 4px);
+    }
+  }
+
+  &.bwf-loading-xxl {
+    $loading_size: 8em;
+    width: $loading_size;
+    height: $loading_size;
+
+    div {
+      width: calc(#{$loading_size} - 4px);
+      height: calc(#{$loading_size} - 4px);
+    }
+  }
+
+  div {
+    box-sizing: border-box;
+    display: block;
+    position: absolute;
+    width: calc(#{$loading_size} - 4px);
+    height: calc(#{$loading_size} - 4px);
+    margin: 2px;
+    border: 2px solid $blue-base;
+    border-radius: 50%;
+    animation: bwf-loading-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    border-color: $blue-base transparent transparent transparent;
+
+    &:nth-child(1) {
+      animation-delay: -0.45s;
+    }
+
+    &:nth-child(2) {
+      animation-delay: -0.3s;
+    }
+
+    &:nth-child(3) {
+      animation-delay: -0.15s;
+    }
+
+    &.color-white {
+      border: 2px solid #fff;
+      border-color: #fff transparent transparent transparent;
+    }
+  }
+}
+
+@keyframes bwf-loading-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}

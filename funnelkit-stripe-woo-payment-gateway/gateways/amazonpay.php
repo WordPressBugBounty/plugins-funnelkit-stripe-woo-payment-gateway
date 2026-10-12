@@ -140,6 +140,36 @@ class AmazonPay extends CreditCard {
 		// page, but is unsupported on the "Add payment method" page (no order to authorize against).
 		if ( is_add_payment_method_page() && isset( $gateways[ $this->id ] ) ) {
 			unset( $gateways[ $this->id ] );
+
+			return $gateways;
+		}
+
+		if ( ! isset( $gateways[ $this->id ] ) || is_admin() ) {
+			return $gateways;
+		}
+
+		// Keep the gateway available while a payment is actually being processed. The express flow
+		// can post this gateway id (Amazon Pay always does, Apple Pay does when its row is present)
+		// and WooCommerce rejects a payment_method that is not in this list.
+		//
+		// The test has to be woocommerce_before_checkout_process, which only fires inside
+		// WC_Checkout::process_checkout(). WOOCOMMERCE_CHECKOUT is not usable here: WC_AJAX
+		// ::update_order_review() defines it too, and that request re-renders the whole
+		// .woocommerce-checkout-payment fragment - so gating on the constant put the row back into
+		// the payment list on the first refresh after the page loaded.
+		if ( did_action( 'woocommerce_before_checkout_process' ) ) {
+			return $gateways;
+		}
+
+		$locations = $this->get_option( 'display_locations' );
+
+		// Never configured, or an unexpected shape: leave the current behaviour alone.
+		if ( ! is_array( $locations ) ) {
+			return $gateways;
+		}
+
+		if ( ! in_array( 'show_as_regular', $locations, true ) ) {
+			unset( $gateways[ $this->id ] );
 		}
 
 		return $gateways;
@@ -188,7 +218,7 @@ class AmazonPay extends CreditCard {
 	 * @return array
 	 */
 	public function localize_element_data( $localize_data ) {
-		$localize_data['amazon_pay_positions'] = $this->settings['display_locations'];
+		$localize_data['amazon_pay_positions'] = (array) $this->get_option( 'display_locations', array( 'product', 'cart', 'checkout', 'show_as_regular' ) );
 
 		// The regular-gateway Express Checkout Element arms its amount from the
 		// fkwcs_cart_details fragment, which is never emitted on the order-pay page

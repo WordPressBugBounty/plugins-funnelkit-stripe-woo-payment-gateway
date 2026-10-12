@@ -367,14 +367,7 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			return array();
 		}
 
-		global $wp;
-		$order_id = $wp->query_vars['order-pay'];
-
-		if ( empty( $order_id ) ) {
-			return array();
-		}
-
-		$order = wc_get_order( $order_id );
+		$order = $this->get_verified_order_pay_order();
 		if ( ! $order instanceof \WC_Order ) {
 			return array();
 		}
@@ -392,6 +385,45 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		);
 
 		return apply_filters( 'fkwcs_current_user_billing_details_order', $details, $order );
+	}
+
+	/**
+	 * Get the order on the order-pay endpoint only if the request is authorized to pay for it.
+	 *
+	 * The order key from the URL must always match. Additionally, an order belonging to a
+	 * registered customer is only returned when that exact customer is logged in.
+	 * Prevents leaking order data (billing PII, line items) via sequential order IDs.
+	 *
+	 * @return \WC_Order|false
+	 */
+	public function get_verified_order_pay_order() {
+		global $wp;
+
+		$order_id = isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
+		if ( empty( $order_id ) ) {
+			return false;
+		}
+
+		$order_key = isset( $_GET['key'] ) ? wc_clean( wp_unslash( $_GET['key'] ) ) : ''; //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( empty( $order_key ) || ! is_string( $order_key ) ) {
+			return false;
+		}
+
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order || ! hash_equals( $order->get_order_key(), $order_key ) ) {
+			return false;
+		}
+
+		/**
+		 * Orders owned by a registered customer are only exposed to that same logged-in customer.
+		 * A valid order key alone must not bypass this (e.g. a leaked pay link while logged out).
+		 */
+		$order_user_id = absint( $order->get_user_id() );
+		if ( $order_user_id > 0 && ( ! is_user_logged_in() || get_current_user_id() !== $order_user_id ) ) {
+			return false;
+		}
+
+		return $order;
 	}
 
 	/**
@@ -607,7 +639,10 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		$intent_data = array();
 		if ( apply_filters( 'fkwcs_execute_payment_intent', true, $order, $prepared_source, $data ) ) {
 			$idempotency_key = $prepared_source->source . '_' . $order->get_order_key();
-			$intent_data     = $this->get_payment_intent( $order, $idempotency_key, $data );
+			if ( ! empty( $this->is_recursion ) ) {
+				$idempotency_key .= '_nosave';
+			}
+			$intent_data = $this->get_payment_intent( $order, $idempotency_key, $data );
 
 		}
 
@@ -3338,6 +3373,10 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 			return true;
 		}
 		if ( WC()->cart instanceof \WC_Cart ) {
+			if ( is_checkout() && ! is_checkout_pay_page() && WC()->cart->total == 0 && $this->cart_contains_sublium_free_trial() ) { //phpcs:ignore WordPress.PHP.StrictComparisons.LooseComparison,Universal.Operators.StrictComparisons.LooseEqual
+				return true;
+			}
+
 			return is_checkout() && ! is_checkout_pay_page() && class_exists( 'WC_Subscriptions_Cart' ) && method_exists( 'WC_Subscriptions_Cart', 'cart_contains_free_trial' ) && \WC_Subscriptions_Cart::cart_contains_free_trial() && WC()->cart->total == 0; //phpcs:ignore WordPress.PHP.StrictComparisons.LooseComparison,Universal.Operators.StrictComparisons.LooseEqual
 		}
 
@@ -3349,6 +3388,31 @@ abstract class Abstract_Payment_Gateway extends WC_Payment_Gateway {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Whether the cart holds a Sublium subscription on which every item starts with a free trial.
+	 *
+	 * Sublium ships its own cart API and never defines WC_Subscriptions_Cart, so the check above
+	 * could not see a Sublium trial. The Payment Element therefore stayed in payment mode for a
+	 * cart with nothing due today and fell back to the currency minimum (50), which Stripe rejects
+	 * as amount_too_small whenever the account settles in a currency with a higher floor -- AED,
+	 * for example, requires 200 fils.
+	 *
+	 * @return bool
+	 */
+	protected function cart_contains_sublium_free_trial() {
+		if ( ! class_exists( '\Sublium_WCS\Includes\Main\Cart' ) ) {
+			return false;
+		}
+
+		$sublium_cart = \Sublium_WCS\Includes\Main\Cart::get_instance();
+
+		if ( ! is_callable( array( $sublium_cart, 'cart_contains_plan' ) ) || ! is_callable( array( $sublium_cart, 'all_cart_items_have_free_trial' ) ) ) {
+			return false;
+		}
+
+		return $sublium_cart->cart_contains_plan() && $sublium_cart->all_cart_items_have_free_trial();
 	}
 
 	/**

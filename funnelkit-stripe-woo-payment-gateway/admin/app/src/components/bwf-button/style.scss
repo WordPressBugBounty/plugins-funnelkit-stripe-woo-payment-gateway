@@ -1,0 +1,33 @@
+.components-button {
+	position: relative;
+	&.is-primary,
+	&.is-secondary {
+		&.is-busy {
+			background-image: unset !important;
+			span {
+				visibility: hidden;
+			}
+		}
+	}
+	.bwf-loading-ring {
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		transform: translate(-50%, -50%);
+	}
+	> span {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		svg {
+			vertical-align: middle;
+		}
+	}
+	&.is-secondary.is-busy:disabled {
+		animation: unset;
+		background-image: unset;
+		background-size: unset;
+		background: $white;
+	}
+}

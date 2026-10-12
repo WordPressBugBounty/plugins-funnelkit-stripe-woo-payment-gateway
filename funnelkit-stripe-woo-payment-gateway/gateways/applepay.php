@@ -42,6 +42,7 @@ class ApplePay extends CreditCard {
 		}
 		add_action( 'wc_ajax_fkwcs_gpay_update_shipping_address', array( $this, 'gpay_update_shipping_address' ) );
 		add_filter( 'woocommerce_update_order_review_fragments', array( $this, 'add_apple_pay_data' ), 100 );
+		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'maybe_hide_from_checkout_list' ) );
 		add_action( 'woocommerce_review_order_after_submit', array( $this, 'render_wrapper' ) );
 		add_action( 'wfacp_woocommerce_review_order_after_submit', array( $this, 'render_wrapper' ) );
 
@@ -349,7 +350,7 @@ class ApplePay extends CreditCard {
 	public function localize_element_data( $localize_data ) {
 		$localize_data['apple_pay_button_type']  = $this->button_type;
 		$localize_data['apple_pay_button_theme'] = $this->button_theme;
-		$localize_data['apple_pay_positions']    = $this->settings['display_locations'];
+		$localize_data['apple_pay_positions']    = (array) $this->get_option( 'display_locations', array( 'product', 'cart', 'checkout' ) );
 
 		// The regular-gateway Express Checkout Element arms its amount from the
 		// fkwcs_cart_details fragment, which is never emitted on the order-pay page
@@ -372,4 +373,50 @@ class ApplePay extends CreditCard {
 
 		return $localize_data;
 	}
+
+	/**
+	 * Keep the gateway out of the regular payment methods list unless the merchant asked for it.
+	 *
+	 * The row used to render for everyone and was hidden with a stylesheet rule, which any theme
+	 * styling `.payment_methods > li` overrides - the gateway then appears as a selectable payment
+	 * method on stores that only ever wanted the express button. Removing it server-side is not
+	 * overridable. The express buttons are unaffected: they are gated on the wallet's own settings,
+	 * not on this list (see SmartButtons::has_available_express_gateway()).
+	 *
+	 * @param array $gateways Available gateways.
+	 *
+	 * @return array
+	 */
+	public function maybe_hide_from_checkout_list( $gateways ) {
+		if ( ! isset( $gateways[ $this->id ] ) || is_admin() ) {
+			return $gateways;
+		}
+
+		// Keep the gateway available while a payment is actually being processed. The express flow
+		// can post this gateway id (Amazon Pay always does, Apple Pay does when its row is present)
+		// and WooCommerce rejects a payment_method that is not in this list.
+		//
+		// The test has to be woocommerce_before_checkout_process, which only fires inside
+		// WC_Checkout::process_checkout(). WOOCOMMERCE_CHECKOUT is not usable here: WC_AJAX
+		// ::update_order_review() defines it too, and that request re-renders the whole
+		// .woocommerce-checkout-payment fragment - so gating on the constant put the row back into
+		// the payment list on the first refresh after the page loaded.
+		if ( did_action( 'woocommerce_before_checkout_process' ) ) {
+			return $gateways;
+		}
+
+		$locations = $this->get_option( 'display_locations' );
+
+		// Never configured, or an unexpected shape: leave the current behaviour alone.
+		if ( ! is_array( $locations ) ) {
+			return $gateways;
+		}
+
+		if ( ! in_array( 'show_as_regular', $locations, true ) ) {
+			unset( $gateways[ $this->id ] );
+		}
+
+		return $gateways;
+	}
+
 }

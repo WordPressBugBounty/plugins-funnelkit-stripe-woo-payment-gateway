@@ -266,6 +266,29 @@ trait Funnelkit_Stripe_Smart_Buttons {
 			check_ajax_referer( 'fkwcs_nonce', 'fkwcs_nonce' );
 
 		}
+
+		/**
+		 * On the enqueue-time ( $is_localized ) path this method runs during wp_enqueue_scripts,
+		 * where WooCommerce does not guarantee an initialized cart/session. Guard against the null
+		 * dereference and return a safe default that mirrors the seed in plugin.php localize_data().
+		 */
+		if ( is_null( WC()->session ) || ! ( WC()->cart instanceof \WC_Cart ) ) {
+			$default = array(
+				'shipping_required'     => 'no',
+				'is_fkwcs_need_payment' => false,
+				'order_data'            => array(
+					'total'    => 0,
+					'currency' => strtolower( get_woocommerce_currency() ),
+				),
+				'shipping_options'      => array(),
+			);
+			if ( 'wc_ajax_fkwcs_get_cart_details' === current_action() ) {
+				wp_send_json_success( $default );
+			}
+
+			return $default;
+		}
+
 		$chosen_shipping_methods = WC()->session->get( 'chosen_shipping_methods', array() );
 		WC()->cart->calculate_totals();
 		$this->maybe_restore_recurring_chosen_shipping_methods( $chosen_shipping_methods );

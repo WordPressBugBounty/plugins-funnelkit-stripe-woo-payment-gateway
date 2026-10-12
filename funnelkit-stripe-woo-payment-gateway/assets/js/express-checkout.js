@@ -1057,7 +1057,11 @@
                     }
                 }
 
-                if ('yes' === fkwcs_data.is_product) {
+                // Only bind product-page variation/qty handlers when the product is genuinely a
+                // selected express location. The bundle can be loaded on product pages for other
+                // reasons (e.g. FK Cart slide-cart buttons); binding productEvents() there would
+                // fire fkwcs_selected_product_data POSTs on every configurator interaction.
+                if ('yes' === fkwcs_data.is_product && 'yes' === fkwcs_data.product_express_enabled) {
                     this.productEvents(fkCartElements);
                 }
             }
@@ -1160,23 +1164,31 @@
         }
 
         updateSelectedProductsData(expressCheckoutElement) {
-            $.when(this.prepareSelectedProductData()).then((response) => {
-                /**
-                 * Trigger error here
-                 */
-                if (response.error) {
-                    this.showErrorMessage(response.error);
-                } else {
+            // Debounce: variation/quantity changes fire woocommerce_variation_has_changed many
+            // times per interaction. Coalesce them so at most one request is issued per burst,
+            // preventing a flood of ~3s fkwcs_selected_product_data POSTs from exhausting PHP workers.
+            clearTimeout(this._updateSelectedProductTimer);
+            this._updateSelectedProductTimer = setTimeout(() => {
+                $.when(this.prepareSelectedProductData()).then((response) => {
                     /**
-                     * update the payment request
+                     * Trigger error here
                      */
-                    $.when(expressCheckoutElement.update({
-                        total: response.total,
-                        displayItems: response.displayItems || [],
-                    })).then(function () {
-                    });
-                }
-            });
+                    if (!response || response.error) {
+                        if (response && response.error) {
+                            this.showErrorMessage(response.error);
+                        }
+                    } else {
+                        /**
+                         * update the payment request
+                         */
+                        $.when(expressCheckoutElement.update({
+                            total: response.total,
+                            displayItems: response.displayItems || [],
+                        })).then(function () {
+                        });
+                    }
+                });
+            }, 300);
         }
 
         parseJSONFromResponse(response) {
@@ -1463,11 +1475,17 @@
                 addon_value: addon_price_value,
                 attributes: $('.variations_form').length ? this.getVariationAttributes().attributes : [],
             };
-            return $.ajax({
+            // Abort any still-in-flight request before starting a new one so at most one
+            // fkwcs_selected_product_data POST is pending at a time.
+            if (this._selectedProductXHR && 'function' === typeof this._selectedProductXHR.abort) {
+                this._selectedProductXHR.abort();
+            }
+            this._selectedProductXHR = $.ajax({
                 type: 'POST',
                 data: data,
                 url: this.ajaxEndpoint('fkwcs_selected_product_data'),
             });
+            return this._selectedProductXHR;
         }
 
         logError(error, failed = false) {

@@ -88,7 +88,7 @@ class Line_Items_Builder {
 			}
 		}
 
-		$this->validate_total( $line_items );
+		$line_items = $this->validate_total( $line_items );
 
 		return $line_items;
 	}
@@ -281,27 +281,92 @@ class Line_Items_Builder {
 		return $filtered;
 	}
 
-	private function validate_total( $line_items ) {
+	/**
+	 * Ensure the itemized line-item sum exactly matches the PaymentIntent amount.
+	 *
+	 * Stripe rejects the PaymentIntent when sum( amount_details.line_items ) differs from `amount`
+	 * (even by 1 cent). Because each line derives its unit_cost/tax/discount from independent
+	 * roundings, the reconstructed sum can drift from the single-conversion PI amount on
+	 * VAT-inclusive, mixed-tax or qty>1 orders. This actively reconciles any residual difference so
+	 * the invariant holds on every checkout flow (not just upsell packages).
+	 *
+	 * @param array $line_items
+	 * @return array Reconciled line items.
+	 */
+	private function validate_total( array $line_items ) {
 		if ( is_null( $this->expected_total ) ) {
-			return;
+			return $line_items;
 		}
 
-		$currency       = $this->order->get_currency();
-		$expected_total = Formatter::format_amount( $this->expected_total, $currency );
-		$line_items_sum = 0;
+		$currency        = $this->order->get_currency();
+		$expected_stripe = (int) Formatter::format_amount( $this->expected_total, $currency );
+		$line_items_sum  = $this->sum_line_items( $line_items );
 
+		if ( $line_items_sum === $expected_stripe ) {
+			return $line_items;
+		}
+
+		Helper::log( sprintf( 'Line items total mismatch. Line items: %d, Expected total: %d, Order: %d. Reconciling.', $line_items_sum, $expected_stripe, $this->order->get_id() ) );
+		do_action( 'fkwcs_line_items_total_mismatch', $this->order, $line_items_sum, $expected_stripe, $line_items );
+
+		return $this->reconcile_line_items( $line_items, $expected_stripe );
+	}
+
+	/**
+	 * Absorb a rounding-sized difference between the line-item sum and the expected Stripe total.
+	 *
+	 * Tax amounts are never changed. A gap no larger than the per-line rounding can produce
+	 * (one minor unit per line plus one per unit of quantity) goes into the price of a quantity-1
+	 * line or into a line's discount. A larger or unabsorbable gap is not a rounding issue, so
+	 * amount_details is omitted and the PaymentIntent is sent with only `amount`.
+	 *
+	 * @param array $line_items
+	 * @param int   $expected_stripe Expected total in Stripe smallest unit.
+	 * @return array Reconciled line items, or an empty array to omit amount_details.
+	 */
+	private function reconcile_line_items( array $line_items, $expected_stripe ) {
+		$expected_stripe = (int) $expected_stripe;
+		$diff            = $expected_stripe - $this->sum_line_items( $line_items );
+
+		if ( 0 === $diff ) {
+			return $line_items;
+		}
+
+		$tolerance = 0;
 		foreach ( $line_items as $line_item ) {
-			$quantity = isset( $line_item['quantity'] ) ? (int) $line_item['quantity'] : 1;
-			$unit     = isset( $line_item['unit_cost'] ) ? (int) $line_item['unit_cost'] : 0;
-			$tax      = isset( $line_item['tax']['total_tax_amount'] ) ? (int) $line_item['tax']['total_tax_amount'] : 0;
-			$discount = isset( $line_item['discount_amount'] ) ? (int) $line_item['discount_amount'] : 0;
-
-			$line_items_sum += ( $unit * $quantity ) + $tax - $discount;
+			$tolerance += 1 + max( 1, isset( $line_item['quantity'] ) ? (int) $line_item['quantity'] : 1 );
 		}
 
-		if ( abs( $line_items_sum - $expected_total ) > 1 ) {
-			Helper::log( sprintf( 'Line items total mismatch. Line items: %d, Expected total: %d, Order: %d', $line_items_sum, $expected_total, $this->order->get_id() ) );
-			do_action( 'fkwcs_line_items_total_mismatch', $this->order, $line_items_sum, $expected_total, $line_items );
+		if ( ! empty( $line_items ) && abs( $diff ) <= $tolerance ) {
+			// Price first: a priced quantity-1 line takes the difference 1:1 in unit_cost (free lines such as free shipping stay free).
+			for ( $i = count( $line_items ) - 1; $i >= 0; $i-- ) {
+				$unit_cost = isset( $line_items[ $i ]['unit_cost'] ) ? (int) $line_items[ $i ]['unit_cost'] : 0;
+				$discount  = isset( $line_items[ $i ]['discount_amount'] ) ? (int) $line_items[ $i ]['discount_amount'] : 0;
+				if ( $unit_cost > 0 && 1 === ( isset( $line_items[ $i ]['quantity'] ) ? (int) $line_items[ $i ]['quantity'] : 1 ) && $unit_cost + $diff >= $discount ) {
+					$line_items[ $i ]['unit_cost'] = $unit_cost + $diff;
+
+					return $line_items;
+				}
+			}
+
+			// Otherwise the discount: a shortfall reduces it, an overage adds to it.
+			for ( $i = count( $line_items ) - 1; $i >= 0; $i-- ) {
+				$discount = isset( $line_items[ $i ]['discount_amount'] ) ? (int) $line_items[ $i ]['discount_amount'] : 0;
+				$gross    = ( isset( $line_items[ $i ]['unit_cost'] ) ? (int) $line_items[ $i ]['unit_cost'] : 0 ) * ( isset( $line_items[ $i ]['quantity'] ) ? (int) $line_items[ $i ]['quantity'] : 1 );
+				$new      = $discount - $diff;
+				if ( $new >= 0 && $new <= $gross ) {
+					$line_items[ $i ]['discount_amount'] = $new;
+					if ( 0 === $new ) {
+						unset( $line_items[ $i ]['discount_amount'] );
+					}
+
+					return $line_items;
+				}
+			}
 		}
+
+		Helper::log( sprintf( 'Line items differ from the payment amount by %d (tolerance %d), order %d. Sending the PaymentIntent without amount_details.', $diff, $tolerance, $this->order ? $this->order->get_id() : 0 ) );
+
+		return array();
 	}
 }
